@@ -1,0 +1,4 @@
+# nyasm
+`make build arch=64`
+`make run target=nyasm`
+`./nyasm`
