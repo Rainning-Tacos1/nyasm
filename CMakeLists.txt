@@ -7,6 +7,7 @@ project(assembler C)
 # Create an object file target (this will produce one .o file)
 add_library(assembler STATIC 
 "src/main.c"
+"src/argparse/argparse.c"
 )
 
 target_compile_options(assembler PRIVATE -Wall)
