@@ -12,6 +12,11 @@
 #include <errno.h>
 #include "argparse.h"
 
+// Additional
+#include "strtoXX/strtonum.h"
+#include "strtoXX/strtonunum.h"
+#include "../types.h"
+
 #define OPT_UNSET 1
 #define OPT_LONG  (1 << 1)
 
@@ -114,6 +119,56 @@ argparse_getvalue(struct argparse *self, const struct argparse_option *opt,
         if (s[0] != '\0') // no digits or contains invalid characters
             argparse_error(self, opt, "expects a numerical value", flags);
         break;
+    /* Additional */
+    case ARGPARSE_OPT_UINTEGER:
+        errno = 0;
+        if (self->optvalue) {
+            *(unsigned int *)opt->value = strtoul(self->optvalue, (char **)&s, 0);
+            self->optvalue     = NULL;
+        } else if (self->argc > 1) {
+            self->argc--;
+            *(unsigned int *)opt->value = strtoul(*++self->argv, (char **)&s, 0);
+        } else {
+            argparse_error(self, opt, "requires a value", flags);
+        }
+        if (errno == ERANGE)
+            argparse_error(self, opt, "numerical result out of range", flags);
+        if (s[0] != '\0') // no digits or contains invalid characters
+            argparse_error(self, opt, "expects an unsigned integer value", flags);
+        break;
+    case ARGPARSE_OPT_NINTEGER:
+        errno = 0;
+        if (self->optvalue) {
+            *(nint *)opt->value = strtonum(self->optvalue, (char **)&s, 0);
+            self->optvalue     = NULL;
+        } else if (self->argc > 1) {
+            self->argc--;
+            *(nint *)opt->value = strtonum(*++self->argv, (char **)&s, 0);
+        } else {
+            argparse_error(self, opt, "requires a value", flags);
+        }
+        if (errno == ERANGE)
+            argparse_error(self, opt, "numerical result out of range", flags);
+        if (s[0] != '\0') // no digits or contains invalid characters
+            argparse_error(self, opt, "expects an native integer value", flags);
+        break;
+    case ARGPARSE_OPT_NUINTEGER:
+        errno = 0;
+        if (self->optvalue) {
+            *(nuint *)opt->value = strtonunum(self->optvalue, (char **)&s, 0);
+            self->optvalue     = NULL;
+        } else if (self->argc > 1) {
+            self->argc--;
+            *(nuint *)opt->value = strtonunum(*++self->argv, (char **)&s, 0);
+        } else {
+            argparse_error(self, opt, "requires a value", flags);
+        }
+        if (errno == ERANGE)
+            argparse_error(self, opt, "numerical result out of range", flags);
+        if (s[0] != '\0') // no digits or contains invalid characters
+            argparse_error(self, opt, "expects an native unsigned integer value", flags);
+        break;
+    /* End Additional*/
     default:
         assert(0);
     }
@@ -137,6 +192,11 @@ argparse_options_check(const struct argparse_option *options)
         case ARGPARSE_OPT_FLOAT:
         case ARGPARSE_OPT_STRING:
         case ARGPARSE_OPT_GROUP:
+        /* Additional */
+        case ARGPARSE_OPT_UINTEGER:
+        case ARGPARSE_OPT_NINTEGER:
+        case ARGPARSE_OPT_NUINTEGER:
+        /* End Additional*/
             continue;
         default:
             fprintf(stderr, "wrong option type: %d", options->type);
@@ -324,6 +384,17 @@ argparse_usage(struct argparse *self)
         if (options->type == ARGPARSE_OPT_INTEGER) {
             len += strlen("=<int>");
         }
+        /* Additional */
+        if (options->type == ARGPARSE_OPT_UINTEGER) {
+            len += strlen("=<uint>");
+        }
+        if (options->type == ARGPARSE_OPT_NINTEGER) {
+            len += strlen("=<nint>");
+        }
+        if (options->type == ARGPARSE_OPT_NUINTEGER) {
+            len += strlen("=<nuint>");
+        }
+        /* End Additional*/
         if (options->type == ARGPARSE_OPT_FLOAT) {
             len += strlen("=<flt>");
         } else if (options->type == ARGPARSE_OPT_STRING) {
@@ -358,7 +429,19 @@ argparse_usage(struct argparse *self)
         }
         if (options->type == ARGPARSE_OPT_INTEGER) {
             pos += fprintf(stdout, "=<int>");
-        } else if (options->type == ARGPARSE_OPT_FLOAT) {
+        } 
+        /* Additional */
+        else if (options->type == ARGPARSE_OPT_UINTEGER) {
+            pos += fprintf(stdout, "=<uint>");
+        } 
+        else if (options->type == ARGPARSE_OPT_NINTEGER) {
+            pos += fprintf(stdout, "=<nint>");
+        } 
+        else if (options->type == ARGPARSE_OPT_NUINTEGER) {
+            pos += fprintf(stdout, "=<nuint>");
+        } 
+        /* End Additional*/
+        else if (options->type == ARGPARSE_OPT_FLOAT) {
             pos += fprintf(stdout, "=<flt>");
         } else if (options->type == ARGPARSE_OPT_STRING) {
             pos += fprintf(stdout, "=<str>");

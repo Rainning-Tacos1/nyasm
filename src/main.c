@@ -18,12 +18,12 @@ static const char *const usages[] = {
 
 
 int main(int argc, const char** argv) {
-	nint memory = 0;
+	nuint memory = 0;
 
 	struct argparse_option options[] = {
 		OPT_HELP(),
 		OPT_GROUP("Assembler parameters:"),
-		OPT_INTEGER('m', "memory", &memory, "Assembler's memory size in Kb", NULL, 0, 0),
+		OPT_NUINTEGER('m', "memory", &memory, "Assembler's memory size in Kb", NULL, 0, 0),
 		OPT_END(),
 	};
 
@@ -33,7 +33,7 @@ int main(int argc, const char** argv) {
 	argparse_describe(&argparse, NULL, "\nNyasm v"TOSTR(VERSION)" "TOSTR(ARCH) " bit");
 	argc = argparse_parse(&argparse, argc, argv);
 
-	printf("Memory: %lld\n", (long long int)((int)memory));
+	printf("Memory: %llu\n", (uint64_t)(memory));
 
 	for(nint i=0; i<argc; ++i) {
 		printf("Argv[%lld]: %s\n", (long long int)i, argv[i]);
