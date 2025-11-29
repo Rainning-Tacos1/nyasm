@@ -10,7 +10,7 @@
 
 #ifndef ARCH
 // Default architecture
-#define ARCH 64 
+#define ARCH 32
 #endif
 
 #if ARCH == 32

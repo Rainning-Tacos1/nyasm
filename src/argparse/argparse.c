@@ -13,7 +13,7 @@
 #include "argparse.h"
 
 // Additional
-#include "strtoXX/strtonum.h"
+#include "strtoXX/strtonnum.h"
 #include "strtoXX/strtonunum.h"
 #include "../types.h"
 
@@ -131,7 +131,7 @@ argparse_getvalue(struct argparse *self, const struct argparse_option *opt,
         } else {
             argparse_error(self, opt, "requires a value", flags);
         }
-        if (errno == ERANGE)
+        if (errno == ERANGE || *(int*)opt->value < (int)0)
             argparse_error(self, opt, "numerical result out of range", flags);
         if (s[0] != '\0') // no digits or contains invalid characters
             argparse_error(self, opt, "expects an unsigned integer value", flags);
@@ -139,18 +139,18 @@ argparse_getvalue(struct argparse *self, const struct argparse_option *opt,
     case ARGPARSE_OPT_NINTEGER:
         errno = 0;
         if (self->optvalue) {
-            *(nint *)opt->value = strtonum(self->optvalue, (char **)&s, 0);
+            *(nint *)opt->value = strtonnum(self->optvalue, (char **)&s, 0);
             self->optvalue     = NULL;
         } else if (self->argc > 1) {
             self->argc--;
-            *(nint *)opt->value = strtonum(*++self->argv, (char **)&s, 0);
+            *(nint *)opt->value = strtonnum(*++self->argv, (char **)&s, 0);
         } else {
             argparse_error(self, opt, "requires a value", flags);
         }
         if (errno == ERANGE)
             argparse_error(self, opt, "numerical result out of range", flags);
         if (s[0] != '\0') // no digits or contains invalid characters
-            argparse_error(self, opt, "expects an native integer value", flags);
+            argparse_error(self, opt, "expects a native integer value", flags);
         break;
     case ARGPARSE_OPT_NUINTEGER:
         errno = 0;
@@ -163,10 +163,10 @@ argparse_getvalue(struct argparse *self, const struct argparse_option *opt,
         } else {
             argparse_error(self, opt, "requires a value", flags);
         }
-        if (errno == ERANGE)
+        if (errno == ERANGE || *(nint*)opt->value < (nint)0)
             argparse_error(self, opt, "numerical result out of range", flags);
         if (s[0] != '\0') // no digits or contains invalid characters
-            argparse_error(self, opt, "expects an native unsigned integer value", flags);
+            argparse_error(self, opt, "expects a native unsigned integer value", flags);
         break;
     /* End Additional*/
     default:

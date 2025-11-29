@@ -33,7 +33,7 @@ int main(int argc, const char** argv) {
 	argparse_describe(&argparse, NULL, "\nNyasm v"TOSTR(VERSION)" "TOSTR(ARCH) " bit");
 	argc = argparse_parse(&argparse, argc, argv);
 
-	printf("Memory: %llu\n", (uint64_t)(memory));
+	printf("Memory: %llu\n", (uint64_t)(nuint)(memory));
 
 	for(nint i=0; i<argc; ++i) {
 		printf("Argv[%lld]: %s\n", (long long int)i, argv[i]);

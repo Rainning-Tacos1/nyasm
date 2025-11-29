@@ -8,7 +8,7 @@ project(assembler C)
 add_library(assembler STATIC 
 "src/main.c"
 "src/argparse/argparse.c"
-"src/argparse/strtoXX/strtonum.c"
+"src/argparse/strtoXX/strtonnum.c"
 "src/argparse/strtoXX/strtonunum.c"
 "src/argparse/strtoXX/safe-ctype.c"
 )
