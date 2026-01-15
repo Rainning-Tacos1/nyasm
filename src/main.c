@@ -20,12 +20,16 @@ int main(int argc, const char** argv) {
 	unint memory = 0;
 	// change to nint
 	int lang = 0;
+	char* input = NULL;
+	char* output = NULL;
 
 	struct argparse_option options[] = {
 		OPT_HELP(),
 		OPT_GROUP("Assembler parameters:"),
 		OPT_BOOLEAN('l', "lang", &lang, "print a list of installed languages", NULL, 0, 0),
 		OPT_UNINTEGER('m', "memory", &memory, "Assembler's memory size in Kb", NULL, 0, 0),
+		OPT_STRING(0, "input", &input, "input file path", NULL, 0, OPT_POSITIONAL),
+		OPT_STRING(0, "output", &output, "output file path", NULL, 0, OPT_POSITIONAL),
 		OPT_END(),
 	};
 
@@ -37,6 +41,8 @@ int main(int argc, const char** argv) {
 
 	printf("Memory: %llu\n", (uint64_t)(unint)(memory));
 	printf("Lang: %llu\n", (uint64_t)(unint)(lang));
+	printf("input file: %s\n", input);
+	printf("output file: %s\n", output);
 
 	if(lang) {
 		unint c = langs_count();
