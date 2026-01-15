@@ -1,9 +1,9 @@
 #ifndef CONF_H
 #define CONF_H
 
-#include "../../types.h"
+#include "types.h"
 
 typedef nint snum;
-typedef nuint unum;
+typedef unint unum;
 
 #endif

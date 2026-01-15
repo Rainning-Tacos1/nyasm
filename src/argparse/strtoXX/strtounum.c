@@ -58,7 +58,7 @@ extern int errno;
  * alphabets and digits are each contiguous.
  */
 unum
-strtonunum(const char *nptr, char **endptr, register int base)
+strtounum(const char *nptr, char **endptr, register int base)
 {
 	register const char *s = nptr;
 	register unum acc;
@@ -72,10 +72,11 @@ strtonunum(const char *nptr, char **endptr, register int base)
 	do {
 		c = *s++;
 	} while (ISSPACE(c));
-	if (c == '-') {
+	// Additional: Dont allow unsigned native to have a negative value
+	/* if (c == '-') {
 		neg = 1;
 		c = *s++;
-	} else if (c == '+')
+	} else */if (c == '+')
 		c = *s++;
 	if ((base == 0 || base == 16) &&
 	    c == '0' && (*s == 'x' || *s == 'X')) {

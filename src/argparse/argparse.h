@@ -40,7 +40,7 @@ enum argparse_option_type {
     /* Additional */
     ARGPARSE_OPT_UINTEGER,
     ARGPARSE_OPT_NINTEGER,
-    ARGPARSE_OPT_NUINTEGER
+    ARGPARSE_OPT_UNINTEGER
     /* End Additional */
 };
 
@@ -120,7 +120,7 @@ int argparse_help_cb_no_exit(struct argparse *self,
 /* Additional */
 #define OPT_UINTEGER(...) { ARGPARSE_OPT_UINTEGER, __VA_ARGS__ }
 #define OPT_NINTEGER(...) { ARGPARSE_OPT_NINTEGER, __VA_ARGS__ }
-#define OPT_NUINTEGER(...) { ARGPARSE_OPT_NUINTEGER, __VA_ARGS__ }
+#define OPT_UNINTEGER(...) { ARGPARSE_OPT_UNINTEGER, __VA_ARGS__ }
 /* End Additional */
 #define OPT_FLOAT(...)   { ARGPARSE_OPT_FLOAT, __VA_ARGS__ }
 #define OPT_STRING(...)  { ARGPARSE_OPT_STRING, __VA_ARGS__ }

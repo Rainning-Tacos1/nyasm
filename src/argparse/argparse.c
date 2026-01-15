@@ -13,9 +13,9 @@
 #include "argparse.h"
 
 // Additional
-#include "strtoXX/strtonnum.h"
-#include "strtoXX/strtonunum.h"
-#include "../types.h"
+#include "strtoXX/strtonum.h"
+#include "strtoXX/strtounum.h"
+#include "types.h"
 
 #define OPT_UNSET 1
 #define OPT_LONG  (1 << 1)
@@ -139,11 +139,11 @@ argparse_getvalue(struct argparse *self, const struct argparse_option *opt,
     case ARGPARSE_OPT_NINTEGER:
         errno = 0;
         if (self->optvalue) {
-            *(nint *)opt->value = strtonnum(self->optvalue, (char **)&s, 0);
+            *(nint *)opt->value = strtonum(self->optvalue, (char **)&s, 0);
             self->optvalue     = NULL;
         } else if (self->argc > 1) {
             self->argc--;
-            *(nint *)opt->value = strtonnum(*++self->argv, (char **)&s, 0);
+            *(nint *)opt->value = strtonum(*++self->argv, (char **)&s, 0);
         } else {
             argparse_error(self, opt, "requires a value", flags);
         }
@@ -152,18 +152,18 @@ argparse_getvalue(struct argparse *self, const struct argparse_option *opt,
         if (s[0] != '\0') // no digits or contains invalid characters
             argparse_error(self, opt, "expects a native integer value", flags);
         break;
-    case ARGPARSE_OPT_NUINTEGER:
+    case ARGPARSE_OPT_UNINTEGER:
         errno = 0;
         if (self->optvalue) {
-            *(nuint *)opt->value = strtonunum(self->optvalue, (char **)&s, 0);
+            *(unint *)opt->value = strtounum(self->optvalue, (char **)&s, 0);
             self->optvalue     = NULL;
         } else if (self->argc > 1) {
             self->argc--;
-            *(nuint *)opt->value = strtonunum(*++self->argv, (char **)&s, 0);
+            *(unint *)opt->value = strtounum(*++self->argv, (char **)&s, 0);
         } else {
             argparse_error(self, opt, "requires a value", flags);
         }
-        if (errno == ERANGE || *(nint*)opt->value < (nint)0)
+        if (errno == ERANGE)
             argparse_error(self, opt, "numerical result out of range", flags);
         if (s[0] != '\0') // no digits or contains invalid characters
             argparse_error(self, opt, "expects a native unsigned integer value", flags);
@@ -195,7 +195,7 @@ argparse_options_check(const struct argparse_option *options)
         /* Additional */
         case ARGPARSE_OPT_UINTEGER:
         case ARGPARSE_OPT_NINTEGER:
-        case ARGPARSE_OPT_NUINTEGER:
+        case ARGPARSE_OPT_UNINTEGER:
         /* End Additional*/
             continue;
         default:
@@ -391,8 +391,8 @@ argparse_usage(struct argparse *self)
         if (options->type == ARGPARSE_OPT_NINTEGER) {
             len += strlen("=<nint>");
         }
-        if (options->type == ARGPARSE_OPT_NUINTEGER) {
-            len += strlen("=<nuint>");
+        if (options->type == ARGPARSE_OPT_UNINTEGER) {
+            len += strlen("=<unint>");
         }
         /* End Additional*/
         if (options->type == ARGPARSE_OPT_FLOAT) {
@@ -437,8 +437,8 @@ argparse_usage(struct argparse *self)
         else if (options->type == ARGPARSE_OPT_NINTEGER) {
             pos += fprintf(stdout, "=<nint>");
         } 
-        else if (options->type == ARGPARSE_OPT_NUINTEGER) {
-            pos += fprintf(stdout, "=<nuint>");
+        else if (options->type == ARGPARSE_OPT_UNINTEGER) {
+            pos += fprintf(stdout, "=<unint>");
         } 
         /* End Additional*/
         else if (options->type == ARGPARSE_OPT_FLOAT) {

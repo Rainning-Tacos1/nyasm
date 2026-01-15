@@ -16,24 +16,41 @@ static const char *const usages[] = {
 	NULL,
 };
 
-
 int main(int argc, const char** argv) {
-	nuint memory = 0;
+	unint memory = 0;
+	// change to nint
+	int lang = 0;
 
 	struct argparse_option options[] = {
 		OPT_HELP(),
 		OPT_GROUP("Assembler parameters:"),
-		OPT_NUINTEGER('m', "memory", &memory, "Assembler's memory size in Kb", NULL, 0, 0),
+		OPT_BOOLEAN('l', "lang", &lang, "print a list of installed languages", NULL, 0, 0),
+		OPT_UNINTEGER('m', "memory", &memory, "Assembler's memory size in Kb", NULL, 0, 0),
 		OPT_END(),
 	};
 
 	struct argparse argparse;
 	argparse_init(&argparse, options, usages, 0);
 	
-	argparse_describe(&argparse, NULL, "\nNyasm v"TOSTR(VERSION)" "TOSTR(ARCH) " bit");
+	argparse_describe(&argparse, NULL, "\nnyasm v"TOSTR(VERSION)" - "TOSTR(ARCH) " bit");
 	argc = argparse_parse(&argparse, argc, argv);
 
-	printf("Memory: %llu\n", (uint64_t)(nuint)(memory));
+	printf("Memory: %llu\n", (uint64_t)(unint)(memory));
+	printf("Lang: %llu\n", (uint64_t)(unint)(lang));
+
+	if(lang) {
+		unint c = langs_count();
+		if(!c) printf("No languages found.\n");
+		else {
+
+			printf("Found %d language%c:\n", c, c != 1);
+			for(nint i=0; i<c; ++i) {
+				struct asm_lang_t* l = &asm_langs[i];
+				printf("  (%s): %s\n",l->code_name, l->lang_name);
+			}
+		}
+
+	}
 
 	for(nint i=0; i<argc; ++i) {
 		printf("Argv[%lld]: %s\n", (long long int)i, argv[i]);

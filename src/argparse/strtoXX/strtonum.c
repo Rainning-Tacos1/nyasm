@@ -81,7 +81,7 @@ extern int errno;
  * alphabets and digits are each contiguous.
  */
 snum
-strtonnum(const char *nptr, char **endptr, register int base)
+strtonum(const char *nptr, char **endptr, register int base)
 {
 	register const char *s = nptr;
 	register unum acc;

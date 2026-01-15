@@ -8,11 +8,12 @@ project(assembler C)
 add_library(assembler STATIC 
 "src/main.c"
 "src/argparse/argparse.c"
-"src/argparse/strtoXX/strtonnum.c"
-"src/argparse/strtoXX/strtonunum.c"
+"src/argparse/strtoXX/strtonum.c"
+"src/argparse/strtoXX/strtounum.c"
 "src/argparse/strtoXX/safe-ctype.c"
 )
 
+include_directories(${CMAKE_SOURCE_DIR}/include)
 target_compile_options(assembler PRIVATE -Wall)
 
 # Executable
@@ -35,14 +36,16 @@ else()
 endif()
 
 
-# Add languages here (don't forget to link)
-add_subdirectory(src/x86)
+# Add languages to build individually or with the assembler
+add_subdirectory(langs/x86)
 
-# Add links here
+
+# Link the language to include it in the assembler
 target_link_libraries(nyasm PRIVATE assembler x86)
 
-target_link_options(nyasm PRIVATE -T ${CMAKE_SOURCE_DIR}/src/linker.ld)
+target_link_options(nyasm PRIVATE -T ${CMAKE_SOURCE_DIR}/src/linker.ld -Wl,--undefined=__asm_lang_anchor)
 
 set_target_properties(nyasm PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out"
 	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/"
 )
