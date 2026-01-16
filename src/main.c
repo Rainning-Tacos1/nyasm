@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stddef.h>
 
 #include "types.h"
@@ -17,16 +18,17 @@ static const char *const usages[] = {
 };
 
 int main(int argc, const char** argv) {
-	unint memory = 0;
-	// change to nint
-	int lang = 0;
+	// Argument variabler
+	unint memory = 0; // Default memory size
+	nint lang = 0;
+
 	char* input = NULL;
 	char* output = NULL;
 
 	struct argparse_option options[] = {
 		OPT_HELP(),
 		OPT_GROUP("Assembler parameters:"),
-		OPT_BOOLEAN('l', "lang", &lang, "print a list of installed languages", NULL, 0, 0),
+		OPT_NBOOLEAN('l', "lang", &lang, "print a list of installed languages", NULL, 0, 0),
 		OPT_UNINTEGER('m', "memory", &memory, "Assembler's memory size in Kb", NULL, 0, 0),
 		OPT_STRING(0, "input", &input, "input file path", NULL, 0, OPT_POSITIONAL),
 		OPT_STRING(0, "output", &output, "output file path", NULL, 0, OPT_POSITIONAL),
@@ -36,8 +38,11 @@ int main(int argc, const char** argv) {
 	struct argparse argparse;
 	argparse_init(&argparse, options, usages, 0);
 	
-	argparse_describe(&argparse, NULL, "\nnyasm v"TOSTR(VERSION)" - "TOSTR(ARCH) " bit");
+	argparse_describe(&argparse, NULL, "\nnyasm v"TOSTR(VERSION)" - "TOSTR(ARCH)" bit - built on: "__DATE__" "__TIME__);
 	argc = argparse_parse(&argparse, argc, argv);
+
+	if(!input) { printf("Required argument: `input` is missing\n"); exit(EXIT_FAILURE); }
+	if(!output) { printf("Required argument: `output` is missing\n"); exit(EXIT_FAILURE); }
 
 	printf("Memory: %llu\n", (uint64_t)(unint)(memory));
 	printf("Lang: %llu\n", (uint64_t)(unint)(lang));

@@ -123,6 +123,23 @@ argparse_getvalue(struct argparse *self, const struct argparse_option *opt,
             argparse_error(self, opt, "expects a numerical value", flags);
         break;
     /* Additional */
+    case ARGPARSE_OPT_NBOOLEAN:
+        if (flags & OPT_UNSET) {
+            *(nint *)opt->value = *(nint *)opt->value - (nint)1;
+        } else {
+            *(nint *)opt->value = *(nint *)opt->value + (nint)1;
+        }
+        if (*(nint *)opt->value < 0) {
+            *(nint *)opt->value = 0;
+        }
+        break;
+    case ARGPARSE_OPT_NBIT:
+        if (flags & OPT_UNSET) {
+            *(nint *)opt->value &= ~opt->data;
+        } else {
+            *(nint *)opt->value |= opt->data;
+        }
+        break;
     case ARGPARSE_OPT_UINTEGER:
         errno = 0;
         if (self->optvalue) {
@@ -196,6 +213,8 @@ argparse_options_check(const struct argparse_option *options)
         case ARGPARSE_OPT_STRING:
         case ARGPARSE_OPT_GROUP:
         /* Additional */
+        case ARGPARSE_OPT_NBOOLEAN:
+        case ARGPARSE_OPT_NBIT:
         case ARGPARSE_OPT_UINTEGER:
         case ARGPARSE_OPT_NINTEGER:
         case ARGPARSE_OPT_UNINTEGER:
@@ -261,6 +280,11 @@ argparse_long_opt(struct argparse *self, const struct argparse_option *options)
             // only OPT_BOOLEAN/OPT_BIT supports negation
             if (options->type != ARGPARSE_OPT_BOOLEAN && options->type !=
                 ARGPARSE_OPT_BIT) {
+                continue;
+            }
+            // only OPT_NBOOLEAN/OPT_NBIT supports negation
+            if (options->type != ARGPARSE_OPT_NBOOLEAN && options->type !=
+                ARGPARSE_OPT_NBIT) {
                 continue;
             }
 
