@@ -16,6 +16,7 @@
 #if ARCH == 32
 typedef int32_t nint;
 typedef uint32_t unint;
+typedef unint nbool;
 
 // General Purpose
 #define NINT_MAX INT32_MAX
@@ -24,6 +25,7 @@ typedef uint32_t unint;
 #else
 typedef int64_t nint;
 typedef uint64_t unint;
+typedef unint nbool;
 
 // General Purpose
 #define NINT_MAX INT64_MAX

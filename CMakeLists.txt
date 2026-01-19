@@ -38,12 +38,15 @@ endif()
 
 # Add languages to build individually or with the assembler
 add_subdirectory(langs/x86)
-
+add_subdirectory(langs/6502)
 
 # Link the language to include it in the assembler
-target_link_libraries(nyasm PRIVATE assembler x86)
+target_link_libraries(nyasm PRIVATE
+    assembler
+    "-Wl,--whole-archive" x86 _6502 "-Wl,--no-whole-archive"
+)
 
-target_link_options(nyasm PRIVATE -T ${CMAKE_SOURCE_DIR}/src/linker.ld -Wl,--undefined=__asm_lang_anchor)
+target_link_options(nyasm PRIVATE -T ${CMAKE_SOURCE_DIR}/src/linker.ld)
 
 set_target_properties(nyasm PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out"
