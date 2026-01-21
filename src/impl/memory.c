@@ -2,30 +2,63 @@
 #include "types.h"
 #include <stdlib.h>
 
-#define PRE_ALLOCATE_MEMORY 0
-#define ALLOCATE_AS_NEEDED 1
+#define DEBUG 1
 
-#define DEBUG
+struct memory_t {
+    void* start; // Points to the start of the allocated pool of memory
+    void* curr;  // Points to free memory
+    unint size;  // Size of the allocated pool
+};
 
-// define memory management strat
-#define MEMORY_MANAGEMENT PRE_ALLOCATE_MEMORY
+#if DEBUG
+struct memory_dbg_t {
+    void* chunk;
+    unint size;
+    struct memory_dbg_t* next;
+};
+struct memory_dbg_t* last_dbg_trace = NULL;
+#endif
 
-nbool nyasm_memory_init(nint memory_size) {
-    #if (MEMORY_MANAGEMENT == PRE_ALLOCATE_MEMORY)
+#if DEBUG
+    #define MEM_CHUNK_SIZE(size1) ((size1) + (sizeof(struct memory_dbg_t)))
+#else
+    #define MEM_CHUNK_SIZE(size1) (size1)
+#endif
+
+struct memory_t memory;
+
+nbool nyasm_memory_init(nint size) {
+    memory.size = 0;
+    memory.curr = memory.start = malloc(size);
+    if(memory.start != NULL) { 
+        memory.size = size;
         return SUCCESS;
-    #elif (MEMORY_MANAGEMENT == ALLOCATE_AS_NEEDED)
-        return SUCCESS;
-    #else
-        #error "No memory management method selected"
-    #endif
+    }
+    return FAIL;
 }
 
 void* nyasm_memory_alloc(nint size) {
-    #if (MEMORY_MANAGEMENT == PRE_ALLOCATE_MEMORY)
-        return NULL;
-    #elif (MEMORY_MANAGEMENT == ALLOCATE_AS_NEEDED)
-        return NULL;
-    #else
-        #error "No memory management method selected"
+    if(memory.curr - memory.start >= MEM_CHUNK_SIZE(size)) return NULL; // Cant allocate more memory
+
+    #if DEBUG
+        // Update the last mem dbg trace
+        if(last_dbg_trace) last_dbg_trace->next = memory.curr;
+        else last_dbg_trace = memory.curr;
+
+        // Set the debug info
+        struct memory_dbg_t* last = memory.curr;
+        last->size = size;
+        last->chunk = memory.curr + sizeof(struct memory_dbg_t);
+        last->next = NULL;
     #endif
+
+    void* tmp = memory.curr;
+    memory.curr += MEM_CHUNK_SIZE(size);
+    return tmp;
+}
+
+// Maybe change to a bool for better compatiblity
+void nyasm_memory_destroy() {
+    free(memory.start);
+    return;
 }

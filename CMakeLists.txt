@@ -7,6 +7,8 @@ project(assembler C)
 # Create an object file target (this will produce one .o file)
 add_library(assembler STATIC 
 "src/main.c"
+"src/memory.c"
+"src/impl/memory.c"
 "src/argparse/argparse.c"
 "src/argparse/strtoXX/strtonum.c"
 "src/argparse/strtoXX/strtounum.c"

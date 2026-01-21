@@ -21,7 +21,7 @@ static const char *const usages[] = {
 
 int main(int argc, const char** argv) {
 	// Argument variabler
-	unint memory = 0; // Default memory size
+	unint memory = 1048576; // Default memory size
 	nint lang = 0;
 	nint version = 0;
 
@@ -57,7 +57,7 @@ int main(int argc, const char** argv) {
 		if(!c) printf("No languages found.\n");
 		else {
 
-			printf("Found %d language%s:\n", c, c != 1 ? "s" : "");
+			printf("Found %u language%s:\n", c, c != 1 ? "s" : "");
 			for(nint i=0; i<c; ++i) {
 				struct asm_lang_t* l = &asm_langs[i];
 				printf("  (%s): %s\n",l->code_name, l->lang_name);
@@ -66,9 +66,13 @@ int main(int argc, const char** argv) {
 		exit(EXIT_SUCCESS);
 	}
 
+	// Ensure memory is not 0
+	if(!memory) { printf("Memory size cannot be 0\n"); exit(EXIT_FAILURE); }
+
 	// Ensure required parameters
 	if(!input) { printf("Required argument: `input` is missing\n"); exit(EXIT_FAILURE); }
 	if(!output) { printf("Required argument: `output` is missing\n"); exit(EXIT_FAILURE); }
+
 
 	// Reject extra args
 	if(argc) {
@@ -78,7 +82,10 @@ int main(int argc, const char** argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	nyasm_memory_init(memory);
+	if(!nyasm_memory.init(memory)) {
+		printf("Failed to allocate %u bytes of memory\n", memory);
+		exit(EXIT_FAILURE);
+	}
 
 	return 0;
 }
