@@ -6,6 +6,7 @@
 
 struct memory_t {
     void* start; // Points to the start of the allocated pool of memory
+    void* end;
     void* curr;  // Points to free memory
     unint size;  // Size of the allocated pool
 };
@@ -27,38 +28,57 @@ struct memory_dbg_t* last_dbg_trace = NULL;
 
 struct memory_t memory;
 
-nbool nyasm_memory_init(nint size) {
+nbool memory_init(nint size) {
     memory.size = 0;
     memory.curr = memory.start = malloc(size);
     if(memory.start != NULL) { 
         memory.size = size;
+        memory.end = memory.start + size;
         return SUCCESS;
     }
     return FAIL;
 }
 
-void* nyasm_memory_alloc(nint size) {
-    if(memory.curr - memory.start >= MEM_CHUNK_SIZE(size)) return NULL; // Cant allocate more memory
+void* memory_alloc(nint size) {
+    if(memory.end - memory.curr <= MEM_CHUNK_SIZE(size)) return NULL; // Cant allocate more memory
 
+    void* curr = memory.curr;
     #if DEBUG
         // Update the last mem dbg trace
-        if(last_dbg_trace) last_dbg_trace->next = memory.curr;
-        else last_dbg_trace = memory.curr;
+        if(last_dbg_trace) last_dbg_trace->next = curr;
+        else last_dbg_trace = curr;
 
         // Set the debug info
-        struct memory_dbg_t* last = memory.curr;
+        struct memory_dbg_t* last = curr;
         last->size = size;
-        last->chunk = memory.curr + sizeof(struct memory_dbg_t);
         last->next = NULL;
+
+        // Update the last dbg trace
+        last_dbg_trace = last;
+
+        // Update the current position to the start of the data
+        curr += sizeof(struct memory_dbg_t);
+        last->chunk = curr;
+
     #endif
 
-    void* tmp = memory.curr;
-    memory.curr += MEM_CHUNK_SIZE(size);
-    return tmp;
+    memory.curr += size;
+    return curr;
 }
 
 // Maybe change to a bool for better compatiblity
-void nyasm_memory_destroy() {
+void memory_destroy() {
     free(memory.start);
     return;
+}
+
+void memory_dbg() {
+    struct memory_dbg_t* curr = memory.start;
+    nbool exit = false; 
+    if(!last_dbg_trace) return; // No memory allocated yet
+    do {
+        exit = (curr->next == NULL); 
+        printf("[Allocated]: size: %d, data: %p next: %p\n", curr->size, curr->chunk, curr->next);
+        curr = curr->next;
+    } while(!exit);
 }
