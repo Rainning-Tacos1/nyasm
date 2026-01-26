@@ -7,8 +7,8 @@
 #include "langs/asm_lang.h"
 #include "argparse/argparse.h"
 
-// Implementation API
-#include "memory/memory.h"
+// Public API
+#include "core/memory.h"
 
 #define VERSION "v0.0.0"
 
@@ -84,13 +84,17 @@ int main(int argc, const char** argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	/*
-	Removed for now
-	if(!nyasm_memory.init(memory)) {
+	if(!MEM_INIT(memory)) {
 		printf("Failed to allocate %u bytes of memory\n", memory);
 		exit(EXIT_FAILURE);
-	}
-	*/
+		}
+
+	MEM_ALLOC(10, "Test");
+	MEM_ALLOC(10, "Test2");
+	MEM_ALLOC(10, "Test3");
+	MEM_ALLOC(10, "Test4");
+
+	MEM_DBG();
 
 	return 0;
 }

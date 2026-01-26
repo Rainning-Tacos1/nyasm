@@ -43,12 +43,17 @@ void* mem_alloc(
         last->size = size;
         last->next = NULL;
 
+        // Store the tag
+        last->tag = tag;
+
         // Update the last dbg trace
         last_dbg_trace = last;
 
         // Update the current position to the start of the data
         curr += sizeof(struct memory_dbg_t);
         last->chunk = curr;
+
+
 
     #endif
 
@@ -62,13 +67,15 @@ void mem_deinit() {
     return;
 }
 
+#ifdef DEBUG
 void mem_dbg() {
     struct memory_dbg_t* curr = memory.start;
     nbool exit = false; 
     if(!last_dbg_trace) return; // No memory allocated yet
     do {
         exit = (curr->next == NULL); 
-        printf("[Allocated]: size: %d, data: %p next: %p\n", curr->size, curr->chunk, curr->next);
+        printf("[MEM_ALLOC]: tag: %s size: %d, data: %p next: %p\n", curr->tag, curr->size, curr->chunk, curr->next);
         curr = curr->next;
     } while(!exit);
 }
+#endif

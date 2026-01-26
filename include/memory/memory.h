@@ -2,7 +2,7 @@
 #define NYASM_MEMORY
 
 #include "types.h"
-#include "config.h"
+#include "core/config.h"
 
 // Memory allocation
 void* mem_alloc(
