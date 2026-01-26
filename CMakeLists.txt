@@ -4,22 +4,34 @@ cmake_minimum_required(VERSION 3.10)
 project(assembler C)
 
 
-# Create an object file target (this will produce one .o file)
-add_library(assembler STATIC 
+# Create an object file target
+add_library(assembler STATIC
+"src/core/.c"
+"src/memory/memory.c"
+)
+
+# Include dirs
+include_directories(${CMAKE_SOURCE_DIR}/include)
+
+# Compile flags
+target_compile_options(assembler PRIVATE -Wall)
+
+# Output the assembler core to ./out
+set_target_properties(assembler PROPERTIES
+	ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out"
+)
+
+# Executable
+add_executable(nyasm 
 "src/main.c"
-"src/memory.c"
-"src/impl/memory.c"
 "src/argparse/argparse.c"
 "src/argparse/strtoXX/strtonum.c"
 "src/argparse/strtoXX/strtounum.c"
 "src/argparse/strtoXX/safe-ctype.c"
 )
 
-include_directories(${CMAKE_SOURCE_DIR}/include)
-target_compile_options(assembler PRIVATE -Wall)
-
-# Executable
-add_executable(nyasm "src/.c")
+# Compile flags
+target_compile_options(nyasm PRIVATE -Wall)
 
 if(ARCH STREQUAL "32")
 	message(STATUS "Building ${PROJECT_NAME} for 32-bit")
@@ -37,7 +49,6 @@ else()
 	message(FATAL_ERROR "Unknown architecture for ${PROJECT_NAME}: ${ARCH} (expected 32 or 64)")
 endif()
 
-
 # Add languages to build individually or with the assembler
 add_subdirectory(langs/x86)
 add_subdirectory(langs/6502)
@@ -50,6 +61,7 @@ target_link_libraries(nyasm PRIVATE
 
 target_link_options(nyasm PRIVATE -T ${CMAKE_SOURCE_DIR}/src/linker.ld)
 
+# Output the final executable to ./out & ./
 set_target_properties(nyasm PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out"
 	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/"

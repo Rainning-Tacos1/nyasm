@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "asm_lang.h"
+#include "langs/asm_lang.h"
 #include "types.h"
 
 ASM_LANG _6502 = {

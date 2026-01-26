@@ -3,10 +3,12 @@
 #include <stddef.h>
 
 #include "types.h"
-#include "asm_lang.h"
+
+#include "langs/asm_lang.h"
 #include "argparse/argparse.h"
 
-#include "nyasm/memory.h"
+// Implementation API
+#include "memory/memory.h"
 
 #define VERSION "v0.0.0"
 
@@ -82,10 +84,13 @@ int main(int argc, const char** argv) {
 		exit(EXIT_FAILURE);
 	}
 
+	/*
+	Removed for now
 	if(!nyasm_memory.init(memory)) {
 		printf("Failed to allocate %u bytes of memory\n", memory);
 		exit(EXIT_FAILURE);
 	}
+	*/
 
 	return 0;
 }
