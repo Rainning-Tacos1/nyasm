@@ -24,5 +24,12 @@ void mem_deinit();
 // Memory debug
 void mem_dbg();
 
+// Amount of free memory
+inline unint mem_free();
+
+// Size of the memory
+inline unint mem_size();
+
+void mem_stats();
 
 #endif

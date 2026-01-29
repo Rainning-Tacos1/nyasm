@@ -9,6 +9,7 @@
 
 // Public API
 #include "core/memory.h"
+#include "core/debug.h"
 
 #define VERSION "v0.0.0"
 
@@ -87,14 +88,18 @@ int main(int argc, const char** argv) {
 	if(!MEM_INIT(memory)) {
 		printf("Failed to allocate %u bytes of memory\n", memory);
 		exit(EXIT_FAILURE);
-		}
+	}
 
-	MEM_ALLOC(10, "Test");
-	MEM_ALLOC(10, "Test2");
-	MEM_ALLOC(10, "Test3");
-	MEM_ALLOC(10, "Test4");
+	MEM_ALLOC(10, "ABCDEFGHIJKLMNOPKRSTUV");
+	MEM_ALLOC(1000);
+	MEM_ALLOC(1000, "Test3");
+	MEM_ALLOC(1000, "Test4");
 
 	MEM_DBG();
+	DBG("-------------------------\n");
+	MEM_STATS();
+
+	MEM_DEINIT();
 
 	return 0;
 }
