@@ -36,7 +36,7 @@ void* mem_alloc(
 ){
     if(memory.end - memory.curr <= MEM_CHUNK_SIZE(size)) return NULL; // Can't allocate more memory
 
-    void* curr = memory.curr;
+    char* curr = memory.curr;
     #ifdef DEBUG
         // Update the last mem dbg trace
         if(last_dbg_trace) last_dbg_trace->next = curr;
@@ -94,11 +94,11 @@ unint mem_size() {
 #ifdef DEBUG
 void mem_stats() {
     unint total = mem_size();
-    float free = (float)mem_free();
-    float used = total - free;
+    unint free = mem_free();
+    unint used = (total - free);
 
-    float p_used = used*100.0f / (float)total;
-    float p_free = free*100.0f / (float)total;
+    float p_used = (float)used*100.0f / (float)total;
+    float p_free = (float)free*100.0f / (float)total;
 
     // Stats
     DBG("[MEM_STAT]:          Total: %10d (bytes) |            Used: %10d (bytes) | Free: %10d (bytes)\n", total, used, free);
