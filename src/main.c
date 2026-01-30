@@ -91,9 +91,9 @@ int main(int argc, const char** argv) {
 	}
 
 	MEM_ALLOC(10, "ABCDEFGHIJKLMNOPKRSTUV");
-	MEM_ALLOC(1000);
-	MEM_ALLOC(1000, "Test3");
-	MEM_ALLOC(1000, "Test4");
+	MEM_ALLOC(8);
+	MEM_ALLOC(8, "Test3");
+	MEM_ALLOC(8, "Test4");
 
 	MEM_DBG();
 	DBG("-------------------------\n");

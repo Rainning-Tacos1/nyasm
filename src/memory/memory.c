@@ -34,33 +34,43 @@ void* mem_alloc(
     unint size
 #endif 
 ){
-    if(memory.end - memory.curr <= MEM_CHUNK_SIZE(size)) return NULL; // Can't allocate more memory
+    // Align the address
+    char* header = (char*)NEXT_ALIGNED(memory.curr, MEM_ALIGN);
 
-    char* curr = memory.curr;
     #ifdef DEBUG
-        // Update the last mem dbg trace
-        if(last_dbg_trace) last_dbg_trace->next = curr;
-        else last_dbg_trace = curr;
-
-        // Set the debug info
-        struct memory_dbg_t* last = curr;
-        last->size = size;
-        last->next = NULL;
-
-        // Store the tag
-        last->tag = tag;
-
-        // Update the last dbg trace
-        last_dbg_trace = last;
-
-        // Update the current position to the start of the data
-        curr += sizeof(struct memory_dbg_t);
-        last->chunk = curr;
-
+        char* data_start = (uintptr_t)header + sizeof(struct memory_dbg_t);
+        char* data = (char*)NEXT_ALIGNED(data_start, MEM_ALIGN);
+        unint talign = (header - memory.curr) + (data - data_start); // Calculate the total alignement done
+    #else
+        char* data = header;
     #endif
 
-    memory.curr += MEM_CHUNK_SIZE(size);
-    return curr;
+    if(memory.end <= data + size) return NULL; // Can't allocate more memory
+    
+    #ifdef DEBUG
+        // Set the debug info
+        struct memory_dbg_t* this = header;
+    
+        // Update the last mem dbg trace
+        if(last_dbg_trace) last_dbg_trace->next = this;
+
+        this->size = size;
+        this->next = NULL;
+        this->talign = talign;
+
+        // Store the tag
+        this->tag = tag;
+
+        // Update the last dbg trace
+        last_dbg_trace = this;
+
+        // Update the current position to the start of the data
+        this->chunk = data;
+    #endif
+
+    // set the data
+    memory.curr = (uintptr_t)data + size;
+    return data;
 }
 
 // Memory deinitialization implementation
@@ -77,7 +87,7 @@ void mem_dbg() {
     nbool exit = false; 
     if(!last_dbg_trace) return; // No memory allocated yet
     while (curr) {
-        DBG("[MEM_ALLOC]: tag: %-20.20s | size: %-10d | data: %p\n", curr->tag, curr->size, curr->chunk);
+        DBG("[MEM_ALLOC]: tag: %-20.20s | size: %-10d | data: %p | curr: %p | next: %p | talign: %d\n", curr->tag, curr->size, curr->chunk, curr, curr->next, curr->talign);
         curr = curr->next;
     }
 }
@@ -101,8 +111,8 @@ void mem_stats() {
     float p_free = (float)free*100.0f / (float)total;
 
     // Stats
-    DBG("[MEM_STAT]:          Total: %10d (bytes) |            Used: %10d (bytes) | Free: %10d (bytes)\n", total, used, free);
-    DBG("[MEM_STAT]:          Total: %10d (%%)     |            Used: %10.6f (%%)     | Free: %10.6f (%%)\n", 100, p_used, p_free);
+    DBG("[MEM_STAT]:           Total: %10d (bytes) |           Used: %10d (bytes) |            Free: %10d (bytes) |\n", total, used, free);
+    DBG("[MEM_STAT]:           Total: %10d (%%)     |           Used: %10.6f (%%)     |            Free: %10.6f (%%)     |\n", 100, p_used, p_free);
 
     unint overhead = 0;
     
@@ -119,7 +129,7 @@ void mem_stats() {
     float oh_alloc = (float)overhead * 100.0f / used;
     
     // Debug stats
-    DBG("[MEM_STAT]: Overhead(full): %10.6f (%%)     | Overhead(alloc): %10.6f (%%)     |\n", oh_full, oh_alloc);
+    DBG("[MEM_STAT]: Overhead(total): %10d (bytes) | Overhead(full): %10.6f (%%)     | Overhead(alloc): %10.6f (%%)     |\n", overhead, oh_full, oh_alloc);
 
 }
 #endif
