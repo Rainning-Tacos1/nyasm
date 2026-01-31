@@ -28,7 +28,8 @@ REQUIRE_POWER_OF_2(MEM_ALIGN);
 
 // Memory
 struct memory_t {
-    char* start; // Points to the start of the allocated pool of memory
+    char* malloc; // Points to the start of the allocated pool
+    char* start; // Points to the start of the first aligned pool of memory
     char* end;
     char* curr;  // Points to free memory
     unint size;  // Size of the allocated pool

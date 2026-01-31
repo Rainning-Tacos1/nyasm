@@ -90,10 +90,10 @@ int main(int argc, const char** argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	MEM_ALLOC(10, "ABCDEFGHIJKLMNOPKRSTUV");
-	MEM_ALLOC(8);
-	MEM_ALLOC(8, "Test3");
-	MEM_ALLOC(8, "Test4");
+	MEM_ALLOC(100, "ABCDEFGHIJKLMNOPKRSTUV");
+	MEM_ALLOC(8100);
+	MEM_ALLOC(8100, "Test3");
+	MEM_ALLOC(8100, "Test4");
 
 	MEM_DBG();
 	DBG("-------------------------\n");
