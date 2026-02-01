@@ -3,12 +3,13 @@
 
 #include <stdio.h>
 #include "config.h"
+#include "log.h"
 
 // Choose your debug function or create an implementation
 #ifdef DEBUG
-#define DBG(__format, ...) printf(__format, ##__VA_ARGS__)
+#define DBG(__format, ...) LOG(__format, ##__VA_ARGS__)
 #else
-#define DBG()
+#define DBG(...)
 #endif
 
 #endif
