@@ -5,6 +5,8 @@
 #include "config.h"
 #include "log.h"
 
+// Public Debug API
+
 // Choose your debug function or create an implementation
 #ifdef DEBUG
 #define DBG(__format, ...) LOG(__format, ##__VA_ARGS__)

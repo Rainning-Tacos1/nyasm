@@ -13,6 +13,7 @@
 #include "core/memory.h"
 #include "core/debug.h"
 #include "core/log.h"
+#include "core/file.h"
 
 #define VERSION "v0.0.0"
 #define _1KB 1000
@@ -22,9 +23,13 @@
 
 #define EXIT_FAIL() \
     do { exit(EXIT_FAILURE); } while(0)
+#define ERROR(msg, ...) \
+    do { \
+        fprintf(stderr, msg, ##__VA_ARGS__); \
+    } while(0)
 #define FATAL(msg, ...) \
     do { \
-        fprintf(stderr, "Error: "msg, ##__VA_ARGS__); \
+        ERROR("Error: "msg, ##__VA_ARGS__); \
         EXIT_FAIL(); \
     } while(0)
 
@@ -37,21 +42,21 @@ static const char *const usages[] = {
 // Errno to message
 const char* stat_error_message(nint errnum) {
     switch (errnum) {
-        case ENOENT:    return "File does not exist.";
-        case EACCES:    return "Permission denied.";
-        case ENOTDIR:   return "A component of the path is not a directory.";
-        case ELOOP:     return "Too many symbolic links.";
-        case ENAMETOOLONG: return "File path is too long.";
-        case EFAULT:    return "Bad address.";
-        case EMFILE:    return "Too many files open in the process.";
-        case ENFILE:    return "Too many files open in the system.";
-        default:        return "An unknown error occurred.";
+        case ENOENT:    return "File does not exist";
+        case EACCES:    return "Permission denied";
+        case ENOTDIR:   return "A component of the path is not a directory";
+        case ELOOP:     return "Too many symbolic links";
+        case ENAMETOOLONG: return "File path is too long";
+        case EFAULT:    return "Bad address";
+        case EMFILE:    return "Too many files open in the process";
+        case ENFILE:    return "Too many files open in the system";
+        default:        return "An unknown error occurred";
     }
 }
 
 int main(int argc, const char** argv) {
-    // Argument variabler
-    unint memory = 1048576; // Default memory size
+    // Argument variables
+    unint memory = 1048; // Default memory size
     nint lang = 0;
     nint version = 0;
 
@@ -120,9 +125,9 @@ int main(int argc, const char** argv) {
 
     // Reject extra args
     if(argc) {
-        FATAL("Unknown parameters: ");
-        for(nint i=0; i<argc; ++i) printf("`%s` ", argv[i]);
-        fprintf(stderr, "\n");
+        ERROR("Unknown parameters: ");
+        for(nint i=0; i<argc; ++i) ERROR("`%s` ", argv[i]);
+        ERROR("\n");
         EXIT_FAIL();
     }
 
@@ -142,12 +147,13 @@ int main(int argc, const char** argv) {
     if((sinput.st_dev == soutput.st_dev) && (sinput.st_ino == soutput.st_ino)) 
         FATAL("The input and output paths point to the same file\n");
 
-
       ///////////////////////////
      // Memory initialization //
     ///////////////////////////
 
     if(!MEM_INIT(memory)) FATAL("Failed to allocate %u bytes of memory\n", memory);
+
+    LOAD_FILE(input);
 
 
       /////////////

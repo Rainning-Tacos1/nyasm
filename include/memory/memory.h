@@ -4,6 +4,8 @@
 #include "types.h"
 #include "core/config.h"
 
+// Expose implementation API
+
 // Memory allocation
 void* mem_alloc(
 #ifdef DEBUG

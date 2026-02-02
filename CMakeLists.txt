@@ -7,7 +7,6 @@ project(assembler C)
 # Create an object file target
 add_library(assembler STATIC
 "src/core/.c"
-"src/memory/memory.c"
 )
 
 # Include dirs
@@ -18,7 +17,7 @@ target_compile_options(assembler PRIVATE -Wall)
 
 # Output the assembler core to ./out
 set_target_properties(assembler PROPERTIES
-	ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out"
+ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out"
 )
 
 # Executable
@@ -28,6 +27,8 @@ add_executable(nyasm
 "src/argparse/strtoXX/strtonum.c"
 "src/argparse/strtoXX/strtounum.c"
 "src/argparse/strtoXX/safe-ctype.c"
+"src/memory/memory.c"
+"src/file/file.c"
 )
 
 # Compile flags

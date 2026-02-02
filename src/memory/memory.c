@@ -1,6 +1,3 @@
-// Api exported to the assembler(core)
-#include "memory/memory.h"
-
 #include "core/config.h"
 #include "core/debug.h"
 #include "memory.h"
@@ -49,7 +46,7 @@ void* mem_alloc(
     
     #ifdef DEBUG
         // Set the debug info
-        struct memory_dbg_t* this = header;
+        struct memory_dbg_t* this = (struct memory_dbg_t*)header;
     
         // Update the last mem dbg trace
         if(last_dbg_trace) last_dbg_trace->next = this;
@@ -69,7 +66,7 @@ void* mem_alloc(
     #endif
 
     // set the data
-    memory.curr = (uintptr_t)data + size;
+    memory.curr = data + size;
     return data;
 }
 

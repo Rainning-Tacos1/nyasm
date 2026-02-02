@@ -2,9 +2,11 @@
 #define CORE_MEMORY_H
 
 #include "config.h"
+
+// API exposed by the implementation
 #include "memory/memory.h"
 
-// Memory API
+// Public Memory API
 
 // MEM_STATS - If debug is enabled, show memory stats
 #ifdef DEBUG
