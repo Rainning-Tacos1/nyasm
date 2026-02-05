@@ -1,7 +1,9 @@
-#include "core/config.h"
-#include "core/debug.h"
-#include "memory.h"
+// Public API
+#include "config.h"
 #include "types.h"
+#include "api/debug.h"
+
+#include "memory.h"
 
 #include <stdlib.h>
 
@@ -12,15 +14,14 @@ struct memory_dbg_t* last_dbg_trace = NULL;
 #endif
 
 // Memory initialization implementation
-nbool mem_init(nint size) {
+char* mem_init(nint size) {
     memory.size = 0;
     memory.end = memory.curr = memory.start = malloc(size);
     if(memory.start != NULL) { 
         memory.size = size;
         memory.end += size;
-        return SUCCESS;
     }
-    return FAIL;
+    return memory.start;
 }
 
 // Memory allocation implementation

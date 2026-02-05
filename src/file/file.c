@@ -1,9 +1,8 @@
-#include "core/config.h"
-#include "core/debug.h"
+// Public API
+#include "api/debug.h"
+#include "api/memory.h"
 #include "types.h"
-
-#include "core/memory.h"
-#include "core/debug.h"
+#include "config.h"
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -5,15 +5,16 @@
 #include <errno.h>
 
 #include "types.h"
+#include "asm_lang.h"
 
-#include "langs/asm_lang.h"
 #include "argparse/argparse.h"
 
 // Public API
-#include "core/memory.h"
-#include "core/debug.h"
-#include "core/log.h"
-#include "core/file.h"
+#include "api/memory.h"
+#include "api/debug.h"
+#include "api/log.h"
+#include "api/file.h"
+#include "api/core.h"
 
 #define VERSION "v0.0.0"
 #define _1KB 1000
@@ -56,7 +57,7 @@ const char* stat_error_message(nint errnum) {
 
 int main(int argc, const char** argv) {
     // Argument variables
-    unint memory = 1048; // Default memory size
+    unint memory_size = 1048; // Default memory size
     nint lang = 0;
     nint version = 0;
 
@@ -68,7 +69,7 @@ int main(int argc, const char** argv) {
         OPT_GROUP("Assembler parameters:"),
         OPT_NBOOLEAN('v', "version", &version, "print the version number", NULL, 0, 0),
         OPT_NBOOLEAN('l', "langs", &lang, "print a list of installed languages", NULL, 0, 0),
-        OPT_UNINTEGER('m', "memory", &memory, "assembler's memory size in Kb", NULL, 0, 0),
+        OPT_UNINTEGER('m', "memory", &memory_size, "assembler's memory size in Kb", NULL, 0, 0),
         OPT_STRING(0, "input", &input, "input file path", NULL, 0, OPT_POSITIONAL),
         OPT_STRING(0, "output", &output, "output file path", NULL, 0, OPT_POSITIONAL),
         OPT_END(),
@@ -116,8 +117,8 @@ int main(int argc, const char** argv) {
     /////////////////////////
 
     // Ensure memory is not 0
-    memory *= _1KB;
-    if(!memory) FATAL("Memory size cannot be 0\n");
+    memory_size *= _1KB;
+    if(!memory_size) FATAL("Memory size cannot be 0\n");
 
     // Ensure required parameters
     if(!input) FATAL("Required argument: `input` is missing\n");
@@ -150,8 +151,8 @@ int main(int argc, const char** argv) {
       ///////////////////////////
      // Memory initialization //
     ///////////////////////////
-
-    if(!MEM_INIT(memory)) FATAL("Failed to allocate %u bytes of memory\n", memory);
+    char* memory = MEM_INIT(memory);
+    if(!memory) FATAL("Failed to allocate %u bytes of memory\n", memory);
 
     LOAD_FILE(input);
 
@@ -160,10 +161,7 @@ int main(int argc, const char** argv) {
      // Testing //
     /////////////
 
-    MEM_ALLOC(100, "ABCDEFGHIJKLMNOPKRSTUV");
-    MEM_ALLOC(8100);
-    MEM_ALLOC(8100, "Test3");
-    MEM_ALLOC(8100, "Test4");
+    ASSEMBLE(memory, input);
 
     MEM_DBG();
     DBG("-------------------------\n");

@@ -1,9 +1,9 @@
-#ifndef CORE_DEBUG_H
-#define CORE_DEBUG_H
+#ifndef API_DEBUG_H
+#define API_DEBUG_H
 
 #include <stdio.h>
 #include "config.h"
-#include "log.h"
+#include "api/log.h"
 
 // Public Debug API
 

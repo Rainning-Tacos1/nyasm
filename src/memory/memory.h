@@ -1,16 +1,13 @@
 #ifndef MEMORY_H
 #define MEMORY_H
 
+// Public API
+#include "api/memory.h"
 #include "types.h"
+
 #include <stddef.h>
 
-#include "core/memory.h"
 
-
-// Memory alignment
-#ifndef MEM_ALIGN
-#define MEM_ALIGN 1
-#endif
 
 #define IS_POWER_OF_2(x) ((x) && (((x) & ((x) - 1)) == 0))
 

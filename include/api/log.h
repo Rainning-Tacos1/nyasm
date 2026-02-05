@@ -1,5 +1,5 @@
-#ifndef CORE_LOG_H
-#define CORE_LOG_H
+#ifndef API_LOG_H
+#define API_LOG_H
 
 #include <stdio.h>
 #include "config.h"

@@ -2,7 +2,7 @@
 #define NYASM_FILE
 
 #include "types.h"
-#include "core/config.h"
+#include "config.h"
 
 // Expose implementation API
 

@@ -6,7 +6,8 @@ project(assembler C)
 
 # Create an object file target
 add_library(assembler STATIC
-"src/core/.c"
+"src/core/core/core.c"
+"src/core/parser/parser.c"
 )
 
 # Include dirs

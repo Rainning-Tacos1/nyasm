@@ -1,8 +1,9 @@
 #ifndef NYASM_MEMORY
 #define NYASM_MEMORY
 
+// Public API
 #include "types.h"
-#include "core/config.h"
+#include "config.h"
 
 // Expose implementation API
 
@@ -16,7 +17,7 @@ void* mem_alloc(
 );
 
 // Memory initialization
-nbool mem_init(
+char* mem_init(
     nint size
 );
 

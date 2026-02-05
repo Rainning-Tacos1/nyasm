@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "langs/asm_lang.h"
+#include "asm_lang.h"
 #include "types.h"
 
 ASM_LANG x86 = {
