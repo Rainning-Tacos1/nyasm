@@ -4,6 +4,6 @@
 #include "../src/core/core/api.h"
 
 // Public Core API
-#define ASSEMBLE(memory, input) assemble(memory, input)
+#define ASSEMBLE(file, len) assemble(file, len)
 
 #endif

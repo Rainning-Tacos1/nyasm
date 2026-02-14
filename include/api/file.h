@@ -5,5 +5,5 @@
 #include "../src/file/api.h"
 
 // Public File API
-#define LOAD_FILE(path) load_file(path)
+#define LOAD_FILE(path, len) load_file(path, len)
 #endif

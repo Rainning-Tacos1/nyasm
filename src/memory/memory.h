@@ -39,7 +39,7 @@ struct memory_dbg_t {
     unint size;
     struct memory_dbg_t* next;
     char* tag;
-} ;
+};
 #endif
 
 #ifdef DEBUG

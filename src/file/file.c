@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void* load_file(char* path) {
+char* load_file(char* path, unint* _size) {
     FILE* fp = fopen(path, "r");
     if(!fp) return NULL;
 
@@ -18,8 +18,10 @@ void* load_file(char* path) {
 
     // Load the file into memory
     void* buf = MEM_ALLOC(size, "File");
-    if(!buf) return NULL;
+    if(!buf) { *_size=0; return NULL; }
 
     fread(buf, 1, size, fp);
     fclose(fp);
+    *_size = size;
+    return buf;
 }

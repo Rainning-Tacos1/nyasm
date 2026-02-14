@@ -6,6 +6,6 @@
 
 // Expose implementation API
 
-void* load_file(char* path);
+char* load_file(char* path, unint* _size);
 
 #endif

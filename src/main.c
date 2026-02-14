@@ -151,17 +151,20 @@ int main(int argc, const char** argv) {
       ///////////////////////////
      // Memory initialization //
     ///////////////////////////
-    char* memory = MEM_INIT(memory);
+    char* memory = MEM_INIT(memory_size);
     if(!memory) FATAL("Failed to allocate %u bytes of memory\n", memory);
 
-    LOAD_FILE(input);
+    unint len = 0;
+    char* file = LOAD_FILE(input, &len);
 
+    if(!file) 
+        FATAL("Error loading input file into memory\n");
 
       /////////////
      // Testing //
     /////////////
 
-    ASSEMBLE(memory, input);
+    ASSEMBLE(file, len);
 
     MEM_DBG();
     DBG("-------------------------\n");

@@ -7,7 +7,9 @@ project(assembler C)
 # Create an object file target
 add_library(assembler STATIC
 "src/core/core/core.c"
-"src/core/parser/parser.c"
+"src/core/unicode/unicode.c"
+"src/utf8/utf8proc_data.c"
+"src/utf8/utf8proc.c"
 )
 
 # Include dirs
@@ -36,19 +38,19 @@ add_executable(nyasm
 target_compile_options(nyasm PRIVATE -Wall)
 
 if(ARCH STREQUAL "32")
-	message(STATUS "Building ${PROJECT_NAME} for 32-bit")
-	target_compile_options(assembler PRIVATE -m32)
-	target_compile_options(nyasm PRIVATE -m32)
-	target_link_options(nyasm PRIVATE -m32)
-	add_definitions(-DARCH=${ARCH})
+    message(STATUS "Building ${PROJECT_NAME} for 32-bit")
+    target_compile_options(assembler PRIVATE -m32)
+    target_compile_options(nyasm PRIVATE -m32)
+    target_link_options(nyasm PRIVATE -m32)
+    add_definitions(-DARCH=${ARCH})
 elseif(ARCH STREQUAL "64")
-	message(STATUS "Building ${PROJECT_NAME} for 64-bit")
-	target_compile_options(assembler PRIVATE -m64)
-	target_compile_options(nyasm PRIVATE -m64)
-	target_link_options(nyasm PRIVATE -m64)
-	add_definitions(-DARCH=${ARCH})
+    message(STATUS "Building ${PROJECT_NAME} for 64-bit")
+    target_compile_options(assembler PRIVATE -m64)
+    target_compile_options(nyasm PRIVATE -m64)
+    target_link_options(nyasm PRIVATE -m64)
+    add_definitions(-DARCH=${ARCH})
 else()
-	message(FATAL_ERROR "Unknown architecture for ${PROJECT_NAME}: ${ARCH} (expected 32 or 64)")
+    message(FATAL_ERROR "Unknown architecture for ${PROJECT_NAME}: ${ARCH} (expected 32 or 64)")
 endif()
 
 # Add languages to build individually or with the assembler
@@ -65,6 +67,6 @@ target_link_options(nyasm PRIVATE -T ${CMAKE_SOURCE_DIR}/src/linker.ld)
 
 # Output the final executable to ./out & ./
 set_target_properties(nyasm PROPERTIES
-	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out"
-	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/"
 )
