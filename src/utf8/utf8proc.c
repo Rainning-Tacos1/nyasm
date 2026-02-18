@@ -765,13 +765,14 @@ UTF8PROC_DLLEXPORT utf8proc_ssize_t utf8proc_reencode(utf8proc_int32_t *buffer, 
     return wpos;
   }
 }
-
+/* CANT BE USED BECAUSE OF FUNCTION THAT USES MALLOC
 UTF8PROC_DLLEXPORT utf8proc_ssize_t utf8proc_map(
   const utf8proc_uint8_t *str, utf8proc_ssize_t strlen, utf8proc_uint8_t **dstptr, utf8proc_option_t options
 ) {
     return utf8proc_map_custom(str, strlen, dstptr, options, NULL, NULL);
 }
-
+*/
+/* CANT BE USED BECAUSE OF MALLOC
 UTF8PROC_DLLEXPORT utf8proc_ssize_t utf8proc_map_custom(
   const utf8proc_uint8_t *str, utf8proc_ssize_t strlen, utf8proc_uint8_t **dstptr, utf8proc_option_t options,
   utf8proc_custom_func custom_func, void *custom_data
@@ -801,38 +802,44 @@ UTF8PROC_DLLEXPORT utf8proc_ssize_t utf8proc_map_custom(
   *dstptr = (utf8proc_uint8_t *)buffer;
   return result;
 }
-
+*/
+/* CANT BE USED BECAUSE OF FUNCTION THAT USES MALLOC
 UTF8PROC_DLLEXPORT utf8proc_uint8_t *utf8proc_NFD(const utf8proc_uint8_t *str) {
   utf8proc_uint8_t *retval;
   utf8proc_map(str, 0, &retval, (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE |
     UTF8PROC_DECOMPOSE));
   return retval;
 }
-
+*/
+/* CANT BE USED BECAUSE OF FUNCTION THAT USES MALLOC
 UTF8PROC_DLLEXPORT utf8proc_uint8_t *utf8proc_NFC(const utf8proc_uint8_t *str) {
   utf8proc_uint8_t *retval;
   utf8proc_map(str, 0, &retval, (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE |
     UTF8PROC_COMPOSE));
   return retval;
 }
-
+*/
+/* CANT BE USED BECAUSE OF FUNCTION THAT USES MALLOC
 UTF8PROC_DLLEXPORT utf8proc_uint8_t *utf8proc_NFKD(const utf8proc_uint8_t *str) {
   utf8proc_uint8_t *retval;
   utf8proc_map(str, 0, &retval, (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE |
     UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT));
   return retval;
 }
-
+*/
+/* CANT BE USED BECAUSE OF FUNCTION THAT USES MALLOC
 UTF8PROC_DLLEXPORT utf8proc_uint8_t *utf8proc_NFKC(const utf8proc_uint8_t *str) {
   utf8proc_uint8_t *retval;
   utf8proc_map(str, 0, &retval, (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE |
     UTF8PROC_COMPOSE | UTF8PROC_COMPAT));
   return retval;
 }
-
+*/
+/* CANT BE USED BECAUSE OF FUNCTION THAT USES MALLOC
 UTF8PROC_DLLEXPORT utf8proc_uint8_t *utf8proc_NFKC_Casefold(const utf8proc_uint8_t *str) {
   utf8proc_uint8_t *retval;
   utf8proc_map(str, 0, &retval, (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE |
     UTF8PROC_COMPOSE | UTF8PROC_COMPAT | UTF8PROC_CASEFOLD | UTF8PROC_IGNORE));
   return retval;
 }
+*/

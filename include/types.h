@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <inttypes.h>
 
 #define SUCCESS true
 #define FAIL false
@@ -17,6 +18,8 @@
 typedef int32_t nint;
 typedef uint32_t unint;
 typedef unint nbool;
+#define _N PRId32
+#define _UN PRIu32
 
 // General Purpose
 #define NINT_MAX INT32_MAX
@@ -26,6 +29,8 @@ typedef unint nbool;
 typedef int64_t nint;
 typedef uint64_t unint;
 typedef unint nbool;
+#define _N PRId64
+#define _UN PRIu64
 
 // General Purpose
 #define NINT_MAX INT64_MAX

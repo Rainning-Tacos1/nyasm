@@ -85,7 +85,7 @@ void mem_dbg() {
 
     if(!last_dbg_trace) return; // No memory allocated yet
     while (curr) {
-        DBG("[MEM_ALLOC]: tag: %-20.20s | size: %-10d | data: %p | curr: %p | next: %p | talign: %d\n", curr->tag, curr->size, curr->chunk, curr, curr->next, curr->talign);
+        DBG("[MEM_ALLOC]: tag: %-20.20s | size: %-10"_UN" | data: %p | curr: %p | next: %p | talign: %"_UN"\n", curr->tag, curr->size, curr->chunk, curr, curr->next, curr->talign);
         curr = curr->next;
     }
 }
@@ -138,19 +138,19 @@ void mem_stats() {
     float ovh_alloc = (float)(header+align) * 100.0f / used;
 
     // Stats
-    DBG("[MEM_STAT]: Total(mem): %10d (bytes) |  Used: %10d (bytes) | Free: %10d (bytes) |\n", total, used, free);
+    DBG("[MEM_STAT]: Total(mem): %10"_UN" (bytes) |  Used: %10"_UN" (bytes) | Free: %10"_UN" (bytes) |\n", total, used, free);
     DBG("[MEM_STAT]: Total(mem): %10.6f (%%)     |  Used: %10.6f (%%)     | Free: %10.6f (%%)     |\n", 100.f, p_used, p_free);
     DBG("\n");
-    DBG("[MEM_STAT]: Total(dat): %10d (bytes) |\n", data);
+    DBG("[MEM_STAT]: Total(dat): %10"_UN" (bytes) |\n", data);
     DBG("[MEM_STAT]: Total(dat): %10.6f (%%)     | Alloc: %10.6f (%%)     |\n", dat_full, dat_alloc);
     DBG("\n");
-    DBG("[MEM_STAT]: Total(dbg): %10d (bytes) |\n", header);
+    DBG("[MEM_STAT]: Total(dbg): %10"_UN" (bytes) |\n", header);
     DBG("[MEM_STAT]: Total(dbg): %10.6f (%%)     | Alloc: %10.6f (%%)     |\n", dbg_full, dbg_alloc);
     DBG("\n");
-    DBG("[MEM_STAT]: Total(aln): %10d (bytes) |\n", align);
+    DBG("[MEM_STAT]: Total(aln): %10"_UN" (bytes) |\n", align);
     DBG("[MEM_STAT]: Total(aln): %10.6f (%%)     | Alloc: %10.6f (%%)     |\n", aln_full, aln_alloc);
     DBG("\n");
-    DBG("[MEM_STAT]: Total(ovh): %10d (bytes) |\n", (header + align));
+    DBG("[MEM_STAT]: Total(ovh): %10"_UN" (bytes) |\n", (header + align));
     DBG("[MEM_STAT]: Total(ovh): %10.6f (%%)     | Alloc: %10.6f (%%)     |\n", ovh_full, ovh_alloc);
 }
 #endif

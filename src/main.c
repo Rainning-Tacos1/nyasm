@@ -51,6 +51,7 @@ const char* stat_error_message(nint errnum) {
         case EFAULT:    return "Bad address";
         case EMFILE:    return "Too many files open in the process";
         case ENFILE:    return "Too many files open in the system";
+        case EOVERFLOW: return "Value too large for defined data type";
         default:        return "An unknown error occurred";
     }
 }
@@ -101,8 +102,7 @@ int main(int argc, const char** argv) {
         unint c = langs_count();
         if(!c) printf("No languages found.\n");
         else {
-
-            printf("Found %u language%s:\n", c, c != 1 ? "s" : "");
+            printf("Found %"_UN" language%s:\n", c, c != 1 ? "s" : "");
             for(nint i=0; i<c; ++i) {
                 struct asm_lang_t* l = &asm_langs[i];
                 printf("  (%s): %s\n",l->code_name, l->lang_name);
@@ -139,10 +139,10 @@ int main(int argc, const char** argv) {
 
     struct stat sinput, soutput;
 
-    if(stat(input, &sinput) != 0) FATAL("Could not open input file: [errno %d] %s\n", errno, stat_error_message(errno));
+    if(stat(input, &sinput) != 0) FATAL("Could not open input file: [errno %"_N"] %s\n", (nint)errno, stat_error_message(errno));
     if(!S_ISREG(sinput.st_mode)) FATAL("Input is not a file\n");
 
-    if(stat(output, &soutput) != 0) FATAL("Could not open output file: [errno %d] %s\n", errno, stat_error_message(errno));
+    if(stat(output, &soutput) != 0) FATAL("Could not open output file: [errno %"_N"] %s\n", (nint)errno, stat_error_message(errno));
     if(!S_ISREG(soutput.st_mode)) FATAL("Output is not a file\n");
 
     if((sinput.st_dev == soutput.st_dev) && (sinput.st_ino == soutput.st_ino)) 
@@ -152,7 +152,7 @@ int main(int argc, const char** argv) {
      // Memory initialization //
     ///////////////////////////
     char* memory = MEM_INIT(memory_size);
-    if(!memory) FATAL("Failed to allocate %u bytes of memory\n", memory);
+    if(!memory) FATAL("Failed to allocate %"_UN" bytes of memory\n", memory_size);
 
     unint len = 0;
     char* file = LOAD_FILE(input, &len);
@@ -170,9 +170,9 @@ int main(int argc, const char** argv) {
     DBG("-------------------------\n");
     MEM_STATS();
 
-    printf("Mem size: %d\n", MEM_SIZE());
-    printf("Mem free: %d\n", MEM_FREE());
-    printf("Mem used: %d\n", MEM_SIZE() - MEM_FREE());
+    printf("Mem size: %"_UN"\n", MEM_SIZE());
+    printf("Mem free: %"_UN"\n", MEM_FREE());
+    printf("Mem used: %"_UN"\n", MEM_SIZE() - MEM_FREE());
 
     MEM_DEINIT();
     return 0;

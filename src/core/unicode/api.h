@@ -1,8 +1,7 @@
 #ifndef UNICODE_H
 #define UNICODE_H
 #include "types.h"
-#include "config.h"
 
-unint read_grapheme(char* buf, unint len, uint32_t out[MAX_GRAPHEME_SIZE]);
+nint read_grapheme(char** _buf, char* end, int32_t* out);
 
 #endif

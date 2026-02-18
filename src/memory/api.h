@@ -28,10 +28,10 @@ void mem_deinit();
 void mem_dbg();
 
 // Amount of free memory
-inline unint mem_free();
+unint mem_free();
 
 // Size of the memory
-inline unint mem_size();
+unint mem_size();
 
 void mem_stats();
 
