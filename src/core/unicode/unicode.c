@@ -64,7 +64,7 @@ nint read_grapheme(char** _buf, char* end, int32_t* out) {
     */
 
     char* buf = *_buf;
-    utf8proc_ssize_t len = buf - end;
+    utf8proc_ssize_t len = end - buf;
     utf8proc_int32_t prev_cp = 0, state = 0;
     utf8proc_ssize_t pos = 0, grapheme_start = 0, cp_count = 0;
 
