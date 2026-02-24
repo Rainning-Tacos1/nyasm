@@ -4,7 +4,7 @@
 #include "config.h"
 
 // API exposed by the implementation
-#include "../src/memory/api.h"
+#include "../../src/memory/api.h"
 // Public Memory API
 
 // MEM_STATS - If debug is enabled, show memory stats

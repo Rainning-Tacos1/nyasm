@@ -24,23 +24,33 @@ REQUIRE_POWER_OF_2(MEM_ALIGN);
 
 
 // Memory
-struct memory_t {
-    char* malloc; // Points to the start of the allocated pool
-    char* start; // Points to the start of the first aligned pool of memory
-    char* end;
-    char* curr;  // Points to free memory
-    unint size;  // Size of the allocated pool
+struct mem_t {
+    char* malloc;                  // Points to the start of the allocated pool
+    char* start;                   // Points to the start of the first aligned pool of memory
+    char* end;                     // Points to the end of memory
+    char* curr;                    // Points to free memory
+    unint size;                    // Size of the allocated pool
+    struct mem_alloc_t* last_alloc; // Last allocated block;
 };
 
 #ifdef DEBUG
-struct memory_dbg_t {
-    char* chunk;
+struct mem_dbg_t {
     unint talign;
     unint size;
-    struct memory_dbg_t* next;
     char* tag;
 };
 #endif
+
+// Intrusive doubly linked list
+struct mem_alloc_t {
+    #ifdef DEBUG
+        struct mem_dbg_t dbg;  // Debug info
+    #endif
+    struct mem_alloc_t* prev;  // Points to the previous allocation
+    struct mem_alloc_t* next;  // Points to the next allocation
+    char* data;                // Points to the aligned allocated chunk
+};
+
 
 #ifdef DEBUG
     #define MEM_CHUNK_SIZE(size1) ((size1) + (sizeof(struct memory_dbg_t)))

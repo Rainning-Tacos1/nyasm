@@ -8,7 +8,7 @@
 #include <stdlib.h>
 
 char* load_file(char* path, unint* _size) {
-    FILE* fp = fopen(path, "r");
+    FILE* fp = fopen(path, "rb");
     if(!fp) return NULL;
 
     // Get the file size

@@ -3,9 +3,11 @@
 
 // Undefine to compile without memory traces
 #define DEBUG
+
 #define MEM_ALIGN 8
 
-// maximum number of codepoints a grapheme can contain
+// Size of the Grapheme codepoint buffer.
+// Stores at most X codepoints of a grapheme
 #define MAX_GRAPHEME_SIZE 64
 
 #endif

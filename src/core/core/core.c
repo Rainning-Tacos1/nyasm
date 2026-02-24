@@ -1,8 +1,10 @@
 
 #include "config.h"
 #include "types.h"
-#include "../unicode/api.h"
+#include "api/unicode.h"
 #include "api/log.h"
+
+#include "api/memory.h"
 
 nbool assemble(char* file, unint len) {
     int32_t cps[MAX_GRAPHEME_SIZE];
@@ -12,7 +14,7 @@ nbool assemble(char* file, unint len) {
     unint nread = 0;
 
     do {
-        nread = read_grapheme(&_file, end, (int32_t*)&cps);
+        nread = READ_GRAPHEME(&_file, end, (int32_t*)&cps);
         if(nread == -1) { LOG("CodePointError\n"); return FAIL;}
         if(nread == -2) { LOG("GraphemeError\n"); return FAIL;}
         if(nread == -3) { LOG("NormalizationError\n"); return FAIL;}

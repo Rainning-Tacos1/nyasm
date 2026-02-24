@@ -1,12 +1,12 @@
 #include "types.h"
 #include "config.h"
 
-#include "api/log.h"
+#include "api/debug.h"
 
 #include <stdint.h>
 
 // UFT8 implementation
-#include "../../utf8/utf8proc.h"
+#include "./utf8/utf8proc.h"
 
 // Helper function
 const char* utf8proc_category_to_string(utf8proc_category_t cp) {
@@ -71,7 +71,7 @@ nint read_grapheme(char** _buf, char* end, int32_t* out) {
     while(true) { // After reading the grapheme update len. WE READ A GRAPHEME SO LEN MUST CHANGE
         utf8proc_int32_t cp = 0;
         utf8proc_ssize_t size = utf8proc_iterate((utf8proc_uint8_t*)(buf+pos), len, &cp);
-        LOG("POS: %zd LEN: %zd SIZE: %zd CP: %d COUNT: %zd\n", pos, len, size, cp, cp_count);
+        DBG("POS: %zd LEN: %zd SIZE: %zd CP: %d COUNT: %zd\n", pos, len, size, cp, cp_count);
 
         if(size < 0) return -1; // Error parsing code point
         if(size == 0 && cp_count != 0) return -2; // Buffer ended before the grapheme ended
@@ -79,28 +79,28 @@ nint read_grapheme(char** _buf, char* end, int32_t* out) {
         
         // If the condition passes, a return is assured
         if(prev_cp && utf8proc_grapheme_break_stateful(prev_cp, cp, &state)) {
-            LOG("  \"");
+            DBG("  \"");
             for (utf8proc_ssize_t i=grapheme_start; i < pos; i++) {
-                LOG("%c", buf[i]);
+                DBG("%c", buf[i]);
             }
-            LOG("\" (%zd cps) ", cp_count);
+            DBG("\" (%zd cps) ", cp_count);
             
             for(utf8proc_ssize_t i=0; i<cp_count; i++) {
-                LOG("%04x ", out[i]);
+                DBG("%04x ", out[i]);
             }
-            LOG(" -> ");
+            DBG(" -> ");
             
             // Grapheme normalization
             utf8proc_ssize_t length = utf8proc_normalize_utf32(out, cp_count, UTF8PROC_COMPOSE);
             
             if(length < 0) return -3; // Error normalizing grapheme
             
-            LOG(" (%zd cps) ", length);
+            DBG(" (%zd cps) ", length);
             
             for (utf8proc_ssize_t i=0; i < length; i++) {
-                LOG("%04x ", out[i]);
+                DBG("%04x ", out[i]);
             }
-            LOG("cat: %s \n", utf8proc_category_to_string(*out));
+            DBG("cat: %s \n", utf8proc_category_to_string(*out));
             *_buf += pos;
 
             return length;
