@@ -7,6 +7,7 @@ project(assembler C)
 # Create an object file target
 add_library(assembler STATIC
 "src/core/core/core.c"
+"src/core/parser/parser.c"
 "src/unicode/unicode.c"
 "src/unicode/utf8/utf8proc_data.c"
 "src/unicode/utf8/utf8proc.c"

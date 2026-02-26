@@ -16,6 +16,9 @@ void* mem_alloc(
 #endif
 );
 
+// Memory deallocation
+void mem_free_last();
+
 // Memory initialization
 char* mem_init(
     nint size

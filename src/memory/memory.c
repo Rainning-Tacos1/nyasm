@@ -48,6 +48,7 @@ void* mem_alloc(
     memory.curr = alloc_end;
     
     // Update Doubly Linked List
+    alloc->start=memory.curr;
     alloc->next = NULL;
     alloc->data = chunk_start;
 
@@ -60,6 +61,22 @@ void* mem_alloc(
     memory.last_alloc = alloc;
 
     return alloc->data;
+}
+
+void mem_free_last() {
+    if(!memory.last_alloc) return;
+
+    if(!memory.last_alloc->prev) {
+        memory.last_alloc = NULL;
+        return;
+    }
+
+    // Unlink
+    memory.last_alloc = memory.last_alloc->prev;
+    memory.last_alloc->next = NULL;
+
+    // Deallocate the data
+    memory.curr = memory.last_alloc->start;
 }
 
 // Memory deinitialization implementation
@@ -75,7 +92,10 @@ void mem_deinit() {
 void mem_dbg() {
     struct mem_alloc_t* curr = (struct mem_alloc_t*)memory.start;
 
-    if(!memory.last_alloc) return; // No memory allocated yet
+    if(!memory.last_alloc) {
+        DBG("[MEM_ALLOC]: No memory allocated\n");
+        return; // No memory allocated yet
+    }
     while (curr) {
         DBG("[MEM_ALLOC]: tag: %-20.20s | size: %-10"_UN" | data: %p | prev: %p | curr: %p | next: %p | talign: %"_UN"\n", curr->dbg.tag, curr->dbg.size, curr->data, curr->prev, curr, curr->next, curr->dbg.talign);
         curr = curr->next;

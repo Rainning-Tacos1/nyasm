@@ -45,4 +45,6 @@
     #define MEM_ALLOC(size, ...) mem_alloc(size)
 #endif
 
+#define MEM_FREE_LAST() mem_free_last()
+
 #endif

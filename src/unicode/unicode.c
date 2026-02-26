@@ -49,11 +49,12 @@ const char* utf8proc_category_to_string(utf8proc_category_t cp) {
 /*
   Reads a graphme and normalizes it.
   Returns:
-    0 .. n : Number of code points after normalization
-    -1     : Error parsing code point
-    -2     : Error parsing grapheme
-    -3     : Error normalizing grapheme
-    -4     : Out buffer too small
+    1 .. n : Number of code points after normalization
+    -1     : EOF
+    -2     : Error parsing code point
+    -3     : Error parsing grapheme
+    -4     : Error normalizing grapheme
+    -5     : Out buffer too small
 */
 nint read_grapheme(char** _buf, char* end, int32_t* out) {
     /*
@@ -71,11 +72,11 @@ nint read_grapheme(char** _buf, char* end, int32_t* out) {
     while(true) { // After reading the grapheme update len. WE READ A GRAPHEME SO LEN MUST CHANGE
         utf8proc_int32_t cp = 0;
         utf8proc_ssize_t size = utf8proc_iterate((utf8proc_uint8_t*)(buf+pos), len, &cp);
-        DBG("POS: %zd LEN: %zd SIZE: %zd CP: %d COUNT: %zd\n", pos, len, size, cp, cp_count);
+        //DBG("POS: %zd LEN: %zd SIZE: %zd CP: %d COUNT: %zd\n", pos, len, size, cp, cp_count);
 
-        if(size < 0) return -1; // Error parsing code point
-        if(size == 0 && cp_count != 0) return -2; // Buffer ended before the grapheme ended
-        if(size == 0) return 0; // Already at the end of the buffer
+        if(size < 0) return -2; // Error parsing code point
+        if(size == 0 && cp_count != 0) return -3; // Buffer ended before the grapheme ended
+        if(size == 0) return -1; // Already at the end of the buffer
         
         // If the condition passes, a return is assured
         if(prev_cp && utf8proc_grapheme_break_stateful(prev_cp, cp, &state)) {
@@ -93,7 +94,7 @@ nint read_grapheme(char** _buf, char* end, int32_t* out) {
             // Grapheme normalization
             utf8proc_ssize_t length = utf8proc_normalize_utf32(out, cp_count, UTF8PROC_COMPOSE);
             
-            if(length < 0) return -3; // Error normalizing grapheme
+            if(length < 0) return -4; // Error normalizing grapheme
             
             DBG(" (%zd cps) ", length);
             
@@ -108,7 +109,7 @@ nint read_grapheme(char** _buf, char* end, int32_t* out) {
             //cp_count = 0;
         }
         
-        if(cp_count > MAX_GRAPHEME_SIZE-1) return -4; // Cant store more code point onto the buffer
+        if(cp_count > MAX_GRAPHEME_SIZE-1) return -5; // Cant store more code point onto the buffer
         pos += size;
         prev_cp = cp;
         out[cp_count++] = cp; // Push the code point onto the stack

@@ -48,7 +48,8 @@ struct mem_alloc_t {
     #endif
     struct mem_alloc_t* prev;  // Points to the previous allocation
     struct mem_alloc_t* next;  // Points to the next allocation
-    char* data;                // Points to the aligned allocated chunk
+    char* start;               // Points to the unaligned allocated chunk of data
+    char* data;                // Points to the aligned allocated chunk of data
 };
 
 

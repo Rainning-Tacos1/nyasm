@@ -10,4 +10,8 @@
 // Stores at most X codepoints of a grapheme
 #define MAX_GRAPHEME_SIZE 64
 
+#define MAXINDENT 64
+#define TABSIZE 8
+#define ALTTABSIZE 1
+
 #endif
