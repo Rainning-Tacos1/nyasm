@@ -3,6 +3,6 @@
 
 #include "types.h"
 
-nbool assemble(char* file, unint len);
+nbool assemble(char* code, unint len);
 
 #endif

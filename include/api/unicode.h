@@ -3,7 +3,9 @@
 
 // API exposed by the implementation
 #include "../../src/unicode/api.h"
-#define READ_GRAPHEME(_buf, end, out) read_grapheme(_buf, end, out)
+
+#define READ_GRAPHEME(uc, nread) read_grapheme(uc, nread)
+#define UNICODE_INIT(uc) unicode_init(uc)
 
 
 #endif

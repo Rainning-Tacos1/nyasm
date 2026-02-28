@@ -1,8 +1,11 @@
 #ifndef CORE_CONFIG_H
 #define CORE_CONFIG_H
 
-// Undefine to compile without memory traces
+// Undefine to compile without memory traces and dbg stuff
 #define DEBUG
+
+#define DO_MEM_DBG 1
+#define DO_UC_DBG 0
 
 #define MEM_ALIGN 8
 
@@ -10,8 +13,10 @@
 // Stores at most X codepoints of a grapheme
 #define MAX_GRAPHEME_SIZE 64
 
-#define MAXINDENT 64
-#define TABSIZE 8
-#define ALTTABSIZE 1
+
+// Indentation related settings
+#define MAX_INDENT 64
+#define TAB_SIZE 8
+#define ALT_TAB_SIZE 1
 
 #endif

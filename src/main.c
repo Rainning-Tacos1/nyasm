@@ -167,7 +167,7 @@ int main(int argc, const char** argv) {
     ASSEMBLE(file, len);
 
     MEM_DBG();
-    DBG("-------------------------\n");
+    DBG(1, "-------------------------\n");
     MEM_STATS();
 
     printf("Mem size: %"_UN"\n", MEM_SIZE());

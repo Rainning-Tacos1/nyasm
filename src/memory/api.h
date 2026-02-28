@@ -1,5 +1,5 @@
-#ifndef NYASM_MEMORY
-#define NYASM_MEMORY
+#ifndef MEMORY_H
+#define MEMORY_H
 
 // Public API
 #include "types.h"
