@@ -8,6 +8,7 @@
 #include "api/debug.h"
 
 #include "tokenizer.h"
+#include "token.h"
 
 nbool assemble(char* code, unint len) {
     struct tok_state tok;
@@ -21,10 +22,11 @@ nbool assemble(char* code, unint len) {
 
     struct token token;
     nint _tok;
+    DBG(1, "Start!\n");
     do {
         _tok = tokenize(&tok, &token);
         DBG(1, "_tok: %d\n", _tok);
-    } while(_tok > 0);
+    } while(_tok != ERRORTOKEN);
 
     if(suc == UNICODE_ERR_CODEPOINT) { LOG("CodePointError\n"); return FAIL;}
     if(suc == UNICODE_ERR_GRAPHEME) { LOG("GraphemeError\n"); return FAIL;}

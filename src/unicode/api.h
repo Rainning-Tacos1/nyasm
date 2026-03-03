@@ -5,6 +5,7 @@
 #include "config.h"
 
 // Errors provided by read_grapheme
+#define UNICODE_OK 0
 #define UNICODE_ERR_CODEPOINT -1
 #define UNICODE_ERR_GRAPHEME -2
 #define UNICODE_ERR_EOF -3
@@ -16,10 +17,12 @@ struct unicode {
     char* curr;
     char* end;
 
+    unint err; // Unicode parser error;
+
     int32_t cps[MAX_GRAPHEME_SIZE];
 };
 
-unint read_grapheme(struct unicode* uc, unint* nread);
+nbool read_grapheme(struct unicode* uc, unint* nread);
 
 void unicode_init(struct unicode* uc);
 

@@ -2,17 +2,10 @@
 #define _UNICODE_H
 
 
-#define UNICODE_SUCCESS(stmt) \
-    do {           \
-        stmt;      \
-        return 1;  \
+#define UNICODE_RETURN(uc, stat) \
+    do {                         \
+        (uc)->err = stat;        \
+        return (stat != UNICODE_OK); \
     } while (0)
-
-#define UNICODE_FAIL(err, stmt) \
-    do {           \
-        stmt;      \
-        return err;  \
-    } while (0)
-
 
 #endif

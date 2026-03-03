@@ -62,7 +62,7 @@ void unicode_init(struct unicode* uc) {
         sets nread to the number of code points after normalization
     1      : Error
 */
-unint read_grapheme(struct unicode* uc, unint* nread) {
+nbool read_grapheme(struct unicode* uc, unint* nread) {
     /*
       Iterates thorugh each code point of a grapheme and pushes it into `out`.
       Normalizes the codepoints with `utf8proc_normalize_utf32`
@@ -81,9 +81,9 @@ unint read_grapheme(struct unicode* uc, unint* nread) {
         utf8proc_int32_t cp = 0;
         utf8proc_ssize_t size = utf8proc_iterate((utf8proc_uint8_t*)(buf+pos), len, &cp);
 
-        if(size < 0) UNICODE_FAIL(UNICODE_ERR_CODEPOINT, ); // Error parsing code point
-        if(size == 0 && cp_count != 0) UNICODE_FAIL(UNICODE_ERR_GRAPHEME, ); // Buffer ended before the grapheme ended
-        if(size == 0) UNICODE_FAIL(UNICODE_ERR_EOF, ); // Already at the end of the buffer
+        if(size < 0) UNICODE_RETURN(uc, UNICODE_ERR_CODEPOINT); // Error parsing code point
+        if(size == 0 && cp_count != 0) UNICODE_RETURN(uc, UNICODE_ERR_GRAPHEME); // Buffer ended before the grapheme ended
+        if(size == 0) UNICODE_RETURN(uc, UNICODE_ERR_EOF); // Already at the end of the buffer
         
         // If the condition passes, a return is assured
         if(prev_cp && utf8proc_grapheme_break_stateful(prev_cp, cp, &state)) {
@@ -101,7 +101,7 @@ unint read_grapheme(struct unicode* uc, unint* nread) {
             // Grapheme normalization
             utf8proc_ssize_t length = utf8proc_normalize_utf32(out, cp_count, UTF8PROC_COMPOSE);
             
-            if(length < 0) UNICODE_FAIL(UNICODE_ERR_NORMALIZE, ); // Error normalizing grapheme
+            if(length < 0) UNICODE_RETURN(uc, UNICODE_ERR_NORMALIZE); // Error normalizing grapheme
             
             DBG(DO_UC_DBG, " (%zd cps) ", length);
             
@@ -111,10 +111,11 @@ unint read_grapheme(struct unicode* uc, unint* nread) {
             DBG(DO_UC_DBG, "cat: %s \n", utf8proc_category_to_string(*out));
             uc->curr += pos;
 
-            UNICODE_SUCCESS(*nread = length);
+            *nread = length;
+            UNICODE_RETURN(uc, UNICODE_OK);
         }
         
-        if(cp_count > MAX_GRAPHEME_SIZE-1) UNICODE_FAIL(UNICODE_ERR_TOO_SMALL, ); // Cant store more code point onto the buffer
+        if(cp_count > MAX_GRAPHEME_SIZE-1) UNICODE_RETURN(uc, UNICODE_ERR_TOO_SMALL); // Cant store more code point onto the buffer
         pos += size;
         prev_cp = cp;
         out[cp_count++] = cp; // Push the code point onto the stack

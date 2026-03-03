@@ -6,8 +6,8 @@
 #include <stdbool.h>
 #include <inttypes.h>
 
-#define SUCCESS true
-#define FAIL false
+#define SUCCESS 0
+#define FAIL 1
 
 #ifndef ARCH
 // Default architecture
