@@ -9,7 +9,7 @@ project(nyasm C)
 # Static lib for the core
 add_library(core STATIC
 "src/core/core.c"
-"src/core/tokenizer.c"
+"src/core/lexer.c"
 )
 
 # Static lib for implementations

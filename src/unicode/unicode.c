@@ -11,8 +11,10 @@
 #include "api.h"
 #include "unicode.h"
 
+unint unicode_cat(int32_t cp) { return (unint)utf8proc_category((int32_t)cp); }
+
 // Helper function
-const char* utf8proc_category_to_string(utf8proc_category_t cp) {
+const char* utf8proc_category_to_string(int32_t cp) {
     switch (utf8proc_category(cp)) {
         case UTF8PROC_CATEGORY_CN: return "Other, not assigned (CN)";
         case UTF8PROC_CATEGORY_LU: return "Letter, uppercase (LU)";

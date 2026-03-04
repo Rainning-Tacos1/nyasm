@@ -1,5 +1,5 @@
 #include "types.h"
-#include "tokenizer.h"
+#include "lexer.h"
 
 #include "api/unicode.h"
 #include "api/debug.h"
@@ -37,7 +37,7 @@ void next_grapheme(struct tok_state* tok) {
     // Except for EOF, pls check if its bc of an error.
 
     tok->nread = -1;
-    tok->err = E_UNICODE;
+    tok->err = E_DECODE;
     *tok->uc.cps = EOF;
 }
 
@@ -114,6 +114,84 @@ unint generate_indent_dedent_token(struct tok_state* tok, struct token* token) {
     }
 }
 
+/*
+  Tells if a code point is a valid identifier start
+  Allow: characters and '_'
+*/
+unint is_identifier_start(int32_t cp) {
+    unint cat = UNICODE_CAT(cp);
+
+    if (
+        cp == '_' ||
+
+        cat == UTF8PROC_CATEGORY_LU ||
+        cat == UTF8PROC_CATEGORY_LL ||
+        cat == UTF8PROC_CATEGORY_LT ||
+        cat == UTF8PROC_CATEGORY_LM ||
+        cat == UTF8PROC_CATEGORY_LO
+    ) {
+        return SUCCESS;
+    }
+    else {
+        return FAIL;
+    }
+}
+
+/*
+  Tells if a code point is a valid identifier continuation
+  Allow: characters, numbers(0..9) and '_'
+*/
+unint is_identifier_continue(int32_t cp) {
+    unint cat = UNICODE_CAT(cp);
+
+    if (
+        cp == '_' ||
+
+        (cp >= '0' && cp <= '9') ||
+
+        cat == UTF8PROC_CATEGORY_LU ||
+        cat == UTF8PROC_CATEGORY_LL ||
+        cat == UTF8PROC_CATEGORY_LT ||
+        cat == UTF8PROC_CATEGORY_LM ||
+        cat == UTF8PROC_CATEGORY_LO ||
+
+        cat == UTF8PROC_CATEGORY_MN ||
+        cat == UTF8PROC_CATEGORY_MC
+    ) {
+        return SUCCESS;
+    }
+    else if (
+        cat == UTF8PROC_CATEGORY_ME ||
+        cat == UTF8PROC_CATEGORY_ND ||
+        cat == UTF8PROC_CATEGORY_NL ||
+        cat == UTF8PROC_CATEGORY_NO ||
+        cat == UTF8PROC_CATEGORY_PC ||
+        cat == UTF8PROC_CATEGORY_PD ||
+        cat == UTF8PROC_CATEGORY_PS ||
+        cat == UTF8PROC_CATEGORY_PE ||
+        cat == UTF8PROC_CATEGORY_PI ||
+        cat == UTF8PROC_CATEGORY_PF ||
+        cat == UTF8PROC_CATEGORY_PO ||
+        cat == UTF8PROC_CATEGORY_SM ||
+        cat == UTF8PROC_CATEGORY_SC ||
+        cat == UTF8PROC_CATEGORY_SK ||
+        cat == UTF8PROC_CATEGORY_SO ||
+        cat == UTF8PROC_CATEGORY_ZS ||
+        cat == UTF8PROC_CATEGORY_ZL ||
+        cat == UTF8PROC_CATEGORY_ZP ||
+        cat == UTF8PROC_CATEGORY_CC ||
+        cat == UTF8PROC_CATEGORY_CF ||
+        cat == UTF8PROC_CATEGORY_CS ||
+        cat == UTF8PROC_CATEGORY_CO ||
+        cat == UTF8PROC_CATEGORY_CN
+    ) {
+        return FAIL;
+    }
+    else {
+        return FAIL; // just in case
+    }
+}
+
 nint tokenize(struct tok_state* tok, struct token* token) {
     int32_t* cps = tok->uc.cps;
 
@@ -128,25 +206,37 @@ nint tokenize(struct tok_state* tok, struct token* token) {
     // Need to generate indent/dedent tokens?
     while (tok->pendin != 0) return generate_indent_dedent_token(tok, token); // Updates tok->pendin
     for(;;) {
-        switch(*tok->uc.cps) {
+        switch(*cps) {
             // Use python lexing for new lines
             case '\r':
                 next_grapheme(tok);
             case '\n':
-                if (*tok->uc.cps != '\n') break; // Check because of \r fallthrough. The same is done in python but with ifs
+                if (*cps != '\n') break; // Check because of \r fallthrough. The same is done in python but with ifs
 
                 ++tok->lineno;
                 tok->atbol = 1;
 
-                return 40;
-            case ' ': case '\f': case '\t': case '\v': {  /* spaces */
+                return NEWLINE;
+            case ' ': case '\f': case '\t': case '\v': /* spaces */
                 next_grapheme(tok);
                 break;
-            }
-            default:
-                DBG(1, "Char: %c ", (char)*cps);
+            case '"':
+                DBG(DO_LEXER_DBG, "\"");
+                do { next_grapheme(tok); DBG(DO_LEXER_DBG, "%c", (char)*cps); } while(*cps != '"');
                 next_grapheme(tok);
-                return 30;
+                DBG(DO_LEXER_DBG, " ");
+                return 70; // String
+            case '@':
+                next_grapheme(tok);
+                DBG(DO_LEXER_DBG, "@");
+            default:
+                if(is_identifier_start(*cps) == FAIL) return make_token(tok, ERRORTOKEN, token);
+                do {
+                    DBG(DO_LEXER_DBG, "%c", (char)*cps);
+                    next_grapheme(tok);
+                } while(is_identifier_continue(*cps) == SUCCESS);
+                DBG(DO_LEXER_DBG, " ");
+                return NAME;
         }
     }
 }

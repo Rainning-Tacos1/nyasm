@@ -7,7 +7,7 @@
 #include "api/memory.h"
 #include "api/debug.h"
 
-#include "tokenizer.h"
+#include "lexer.h"
 #include "token.h"
 
 nbool assemble(char* code, unint len) {
@@ -25,7 +25,18 @@ nbool assemble(char* code, unint len) {
     DBG(1, "Start!\n");
     do {
         _tok = tokenize(&tok, &token);
-        DBG(1, "_tok: %d\n", _tok);
+
+        switch(_tok) {
+            case NAME: {DBG(1, "[IDENTIFIER]"); break; }
+            case INDENT: {DBG(1, "[INDENT]"); break; }
+            case DEDENT: {DBG(1, "[DEDENT]\n"); break; }
+            case NEWLINE: {DBG(1, "[\\n]\n"); break; }
+            case ERRORTOKEN: {DBG(1, "[ERR TOKEN]\n"); break; }
+            case 70: {DBG(1, "[STRING]"); break; }
+            default: {DBG(1, "[???]"); break; }
+        }
+        if(_tok != NEWLINE && _tok != DEDENT && _tok != ERRORTOKEN) DBG(1, " ");
+
     } while(_tok != ERRORTOKEN);
 
     if(suc == UNICODE_ERR_CODEPOINT) { LOG("CodePointError\n"); return FAIL;}

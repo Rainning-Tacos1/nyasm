@@ -6,6 +6,7 @@
 
 #define DO_MEM_DBG 1
 #define DO_UC_DBG 0
+#define DO_LEXER_DBG 1
 
 #define MEM_ALIGN 8
 
