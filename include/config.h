@@ -20,4 +20,6 @@
 #define TAB_SIZE 8
 #define ALT_TAB_SIZE 1
 
+// Max number of bytes to encode a grapheme in an encoding format
+#define MAX_ENCODING_SIZE 64
 #endif

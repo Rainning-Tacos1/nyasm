@@ -11,6 +11,9 @@
 #include "api.h"
 #include "unicode.h"
 
+/*
+  Returns the unicode category of a code point
+*/
 unint unicode_cat(int32_t cp) { return (unint)utf8proc_category((int32_t)cp); }
 
 // Helper function
@@ -50,11 +53,32 @@ const char* utf8proc_category_to_string(int32_t cp) {
     }
 }
 
+/*
+  Init unicode structure with blank data
+*/
 void unicode_init(struct unicode* uc) {
     uc->buf = NULL;
     for(unint i=0; i<MAX_GRAPHEME_SIZE; ++i) uc->cps[i] = 0;
     uc->curr = NULL;
     uc->end = NULL;
+}
+
+/*
+  Converts an array of unicode codepoints into a encoding format(UTF-8)
+  Returns:
+    0: If successfull
+    1: If it failed
+*/
+nbool unicode_to_encoding(int32_t* cps, unint cp_len, char* out, unint len) {
+    unint out_i = 0;
+
+    for(unint i=0; i<cp_len; ++i) {
+        unint n = utf8proc_encode_char(cps[i], out+out_i); // 0 if it failed
+        out_i += n;
+        if(out_i >= len || !n) return FAIL; // >= so that we have one more for '\0'; 
+    }
+    out[out_i] = '\0';
+    return SUCCESS;
 }
 
 /*

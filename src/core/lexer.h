@@ -34,14 +34,19 @@ struct tok_state {
 
     unint atbol;
     unint lineno;
+    unint col_offset;
+    char* source;
 
     unint indent; 
     nint pendin;
     unint indstack[MAX_INDENT];
     unint altindstack[MAX_INDENT];
+
+    // May change place
+    char encoded[MAX_ENCODING_SIZE];
 };
 
 void tok_state_init(struct tok_state* tok);
-nint tokenize(struct tok_state* tok, struct token* token);
+unint tokenize(struct tok_state* tok, struct token* token);
 
 #endif

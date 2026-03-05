@@ -13,36 +13,36 @@
 #define UNICODE_ERR_NORMALIZE -4
 #define UNICODE_ERR_TOO_SMALL -5
 
-#define __UNICODE_CATEGORY_CN 0 /**< Other, not assigned */
-#define __UNICODE_CATEGORY_LU 1 /**< Letter, uppercase */
-#define __UNICODE_CATEGORY_LL 2 /**< Letter, lowercase */
-#define __UNICODE_CATEGORY_LT 3 /**< Letter, titlecase */
-#define __UNICODE_CATEGORY_LM 4 /**< Letter, modifier */
-#define __UNICODE_CATEGORY_LO 5 /**< Letter, other */
-#define __UNICODE_CATEGORY_MN 6 /**< Mark, nonspacing */
-#define __UNICODE_CATEGORY_MC 7 /**< Mark, spacing combining */
-#define __UNICODE_CATEGORY_ME 8 /**< Mark, enclosing */
-#define __UNICODE_CATEGORY_ND 9 /**< Number, decimal digit */
-#define __UNICODE_CATEGORY_NL 10 /**< Number, letter */
-#define __UNICODE_CATEGORY_NO 11 /**< Number, other */
-#define __UNICODE_CATEGORY_PC 12 /**< Punctuation, connector */
-#define __UNICODE_CATEGORY_PD 13 /**< Punctuation, dash */
-#define __UNICODE_CATEGORY_PS 14 /**< Punctuation, open */
-#define __UNICODE_CATEGORY_PE 15 /**< Punctuation, close */
-#define __UNICODE_CATEGORY_PI 16 /**< Punctuation, initial quote */
-#define __UNICODE_CATEGORY_PF 17 /**< Punctuation, final quote */
-#define __UNICODE_CATEGORY_PO 18 /**< Punctuation, other */
-#define __UNICODE_CATEGORY_SM 19 /**< Symbol, math */
-#define __UNICODE_CATEGORY_SC 20 /**< Symbol, currency */
-#define __UNICODE_CATEGORY_SK 21 /**< Symbol, modifier */
-#define __UNICODE_CATEGORY_SO 22 /**< Symbol, other */
-#define __UNICODE_CATEGORY_ZS 23 /**< Separator, space */
-#define __UNICODE_CATEGORY_ZL 24 /**< Separator, line */
-#define __UNICODE_CATEGORY_ZP 25 /**< Separator, paragraph */
-#define __UNICODE_CATEGORY_CC 26 /**< Other, control */
-#define __UNICODE_CATEGORY_CF 27 /**< Other, format */
-#define __UNICODE_CATEGORY_CS 28 /**< Other, surrogate */
-#define __UNICODE_CATEGORY_CO 29 /**< Other, private use */
+#define __UNICODE_CATEGORY_CN UTF8PROC_CATEGORY_CN /**< Other, not assigned */
+#define __UNICODE_CATEGORY_LU UTF8PROC_CATEGORY_LU /**< Letter, uppercase */
+#define __UNICODE_CATEGORY_LL UTF8PROC_CATEGORY_LL /**< Letter, lowercase */
+#define __UNICODE_CATEGORY_LT UTF8PROC_CATEGORY_LT /**< Letter, titlecase */
+#define __UNICODE_CATEGORY_LM UTF8PROC_CATEGORY_LM /**< Letter, modifier */
+#define __UNICODE_CATEGORY_LO UTF8PROC_CATEGORY_LO /**< Letter, other */
+#define __UNICODE_CATEGORY_MN UTF8PROC_CATEGORY_MN /**< Mark, nonspacing */
+#define __UNICODE_CATEGORY_MC UTF8PROC_CATEGORY_MC /**< Mark, spacing combining */
+#define __UNICODE_CATEGORY_ME UTF8PROC_CATEGORY_ME /**< Mark, enclosing */
+#define __UNICODE_CATEGORY_ND UTF8PROC_CATEGORY_ND /**< Number, decimal digit */
+#define __UNICODE_CATEGORY_NL UTF8PROC_CATEGORY_NL /**< Number, letter */
+#define __UNICODE_CATEGORY_NO UTF8PROC_CATEGORY_NO /**< Number, other */
+#define __UNICODE_CATEGORY_PC UTF8PROC_CATEGORY_PC /**< Punctuation, connector */
+#define __UNICODE_CATEGORY_PD UTF8PROC_CATEGORY_PD /**< Punctuation, dash */
+#define __UNICODE_CATEGORY_PS UTF8PROC_CATEGORY_PS /**< Punctuation, open */
+#define __UNICODE_CATEGORY_PE UTF8PROC_CATEGORY_PE /**< Punctuation, close */
+#define __UNICODE_CATEGORY_PI UTF8PROC_CATEGORY_PI /**< Punctuation, initial quote */
+#define __UNICODE_CATEGORY_PF UTF8PROC_CATEGORY_PF /**< Punctuation, final quote */
+#define __UNICODE_CATEGORY_PO UTF8PROC_CATEGORY_PO /**< Punctuation, other */
+#define __UNICODE_CATEGORY_SM UTF8PROC_CATEGORY_SM /**< Symbol, math */
+#define __UNICODE_CATEGORY_SC UTF8PROC_CATEGORY_SC /**< Symbol, currency */
+#define __UNICODE_CATEGORY_SK UTF8PROC_CATEGORY_SK /**< Symbol, modifier */
+#define __UNICODE_CATEGORY_SO UTF8PROC_CATEGORY_SO /**< Symbol, other */
+#define __UNICODE_CATEGORY_ZS UTF8PROC_CATEGORY_ZS /**< Separator, space */
+#define __UNICODE_CATEGORY_ZL UTF8PROC_CATEGORY_ZL /**< Separator, line */
+#define __UNICODE_CATEGORY_ZP UTF8PROC_CATEGORY_ZP /**< Separator, paragraph */
+#define __UNICODE_CATEGORY_CC UTF8PROC_CATEGORY_CC /**< Other, control */
+#define __UNICODE_CATEGORY_CF UTF8PROC_CATEGORY_CF /**< Other, format */
+#define __UNICODE_CATEGORY_CS UTF8PROC_CATEGORY_CS /**< Other, surrogate */
+#define __UNICODE_CATEGORY_CO UTF8PROC_CATEGORY_CO /**< Other, private use */
 
 struct unicode {
     char* buf;
@@ -59,5 +59,7 @@ nbool read_grapheme(struct unicode* uc, unint* nread);
 void unicode_init(struct unicode* uc);
 
 unint unicode_cat(int32_t cp);
+
+nbool unicode_to_encoding(int32_t* cps, unint cp_len, char* out, unint len);
 
 #endif

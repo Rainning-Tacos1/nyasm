@@ -9,9 +9,10 @@
 
 void tok_state_init(struct tok_state* tok) {
     for(unint i=0; i<MAX_INDENT; ++i) tok->altindstack[i] = tok->indstack[i] = 0;
-    tok->lineno = tok->pendin = tok->indent = tok->nread = 0;
+    tok->col_offset = tok->lineno = tok->pendin = tok->indent = tok->nread = 0;
     tok->err = E_OK;
     tok->atbol = 1;
+    tok->source = NULL;
     UNICODE_INIT(&tok->uc);
 }
 
@@ -31,11 +32,12 @@ unint make_token(struct tok_state* tok, unint token_type, struct token* token) {
 */
 void next_grapheme(struct tok_state* tok) {
     nbool fail;
-    if((fail = READ_GRAPHEME(&tok->uc, &tok->nread)) == UNICODE_OK) return;
-
+    if((fail = READ_GRAPHEME(&tok->uc, &tok->nread)) == UNICODE_OK) {
+        ++tok->col_offset;
+        return;
+    }
     // Set error params so that we can do "normal" checks and fail every time
     // Except for EOF, pls check if its bc of an error.
-
     tok->nread = -1;
     tok->err = E_DECODE;
     *tok->uc.cps = EOF;
@@ -140,6 +142,7 @@ unint is_identifier_start(int32_t cp) {
 /*
   Tells if a code point is a valid identifier continuation
   Allow: characters, numbers(0..9) and '_'
+  Returns: SUCCESS or FAIL
 */
 unint is_identifier_continue(int32_t cp) {
     unint cat = UNICODE_CAT(cp);
@@ -192,14 +195,20 @@ unint is_identifier_continue(int32_t cp) {
     }
 }
 
-nint tokenize(struct tok_state* tok, struct token* token) {
+unint lexer_error(struct tok_state* tok, void* msg) {
+    LOG("%s:%d %s\n", tok->source, tok->lineno, msg);
+    LOG("Column: %d\n", tok->col_offset);
+    return ERRORTOKEN;
+}
+
+unint tokenize(struct tok_state* tok, struct token* token) {
     int32_t* cps = tok->uc.cps;
 
     // If: At Begining Of Line
     if(tok->atbol) {
         tok->atbol = 0;
         // Updates tok->pendin and errorrs
-        if(get_indentation(tok) == FAIL) return make_token(tok, ERRORTOKEN, token);
+        if(get_indentation(tok) == FAIL) return lexer_error(tok, "Error encoding code point to encoding");
 
     }
 
@@ -226,13 +235,41 @@ nint tokenize(struct tok_state* tok, struct token* token) {
                 next_grapheme(tok);
                 DBG(DO_LEXER_DBG, " ");
                 return 70; // String
+            case '0': case '1': case '2': case '3': case '4': // From Lua
+            case '5': case '6': case '7': case '8': case '9':
+                // From python
+                if(*cps == '0') {
+                    /* Hex, octal or binary -- maybe. */
+                    next_grapheme(tok);
+                    if(*cps == 'x' || *cps == 'X') {
+                        /* Hex */
+                        next_grapheme(tok);
+                        do {
+                            if(*cps == '_') next_grapheme(tok);
+                            if (!((*cps >= '0' && *cps <= '9') ||
+                                (*cps >= 'a' && *cps <= 'f') ||
+                                (*cps >= 'A' && *cps <= 'F'))) {
+                                tok->col_offset--;
+                                return lexer_error(tok, "Invalid hexadecimal literal");
+                            }
+                            do {
+                                next_grapheme(tok);
+                            } while((*cps >= '0' && *cps <= '9') ||
+                                (*cps >= 'a' && *cps <= 'f') ||
+                                (*cps >= 'A' && *cps <= 'F'));
+                        } while (*cps == '_');
+                        if(is_identifier_continue(*cps) == SUCCESS) return lexer_error(tok, "Invalid hexadecimal literal!");
+                    }
+                }
+                return NUMBER;
             case '@':
                 next_grapheme(tok);
                 DBG(DO_LEXER_DBG, "@");
             default:
-                if(is_identifier_start(*cps) == FAIL) return make_token(tok, ERRORTOKEN, token);
+                if(is_identifier_start(*cps) == FAIL) return lexer_error(tok, "Invalid Syntax");
                 do {
-                    DBG(DO_LEXER_DBG, "%c", (char)*cps);
+                    if(UNICODE_TO_ENCODING(cps, tok->nread, tok->encoded, MAX_ENCODING_SIZE) != SUCCESS) return lexer_error(tok, "Error encoding code point to encoding");
+                    DBG(DO_LEXER_DBG, "%s", tok->encoded);
                     next_grapheme(tok);
                 } while(is_identifier_continue(*cps) == SUCCESS);
                 DBG(DO_LEXER_DBG, " ");

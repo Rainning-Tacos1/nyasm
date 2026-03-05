@@ -16,6 +16,7 @@ nbool assemble(char* code, unint len) {
 
     tok.uc.curr = tok.uc.buf = code;
     tok.uc.end = code+len;
+    tok.source = "main";
 
     unint nread = 0;
     unint suc;
@@ -31,6 +32,7 @@ nbool assemble(char* code, unint len) {
             case INDENT: {DBG(1, "[INDENT]"); break; }
             case DEDENT: {DBG(1, "[DEDENT]\n"); break; }
             case NEWLINE: {DBG(1, "[\\n]\n"); break; }
+            case NUMBER: {DBG(1, "[NUMBER]"); break; }
             case ERRORTOKEN: {DBG(1, "[ERR TOKEN]\n"); break; }
             case 70: {DBG(1, "[STRING]"); break; }
             default: {DBG(1, "[???]"); break; }

@@ -6,7 +6,7 @@
 
 // Public Logging API
 
-// Choose your debug function or create an implementation
+// Choose your log function or create an implementation
 #define LOG(__format, ...) printf(__format, ##__VA_ARGS__)
 
 
