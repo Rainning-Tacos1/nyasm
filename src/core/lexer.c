@@ -9,16 +9,23 @@
 
 void tok_state_init(struct tok_state* tok) {
     for(unint i=0; i<MAX_INDENT; ++i) tok->altindstack[i] = tok->indstack[i] = 0;
-    tok->col_offset = tok->lineno = tok->pendin = tok->indent = tok->nread = 0;
+    tok->col_offset = tok->lineno = tok->pendin = tok->indent = 0;
     tok->err = E_OK;
     tok->atbol = 1;
     tok->source = NULL;
     UNICODE_INIT(&tok->uc);
 }
 
+unint lexer_error(struct tok_state* tok, void* msg) {
+    LOG("%s:%d %s\n", tok->source, tok->lineno, msg);
+    LOG("Column: %d\n", tok->col_offset);
+    return ERRORTOKEN;
+}
+
 unint make_token(struct tok_state* tok, unint token_type, struct token* token) {
     // For now
     token->lineno = tok->lineno;
+    token->col_offset = tok->col_offset;
     return token_type;
 }
 
@@ -31,16 +38,19 @@ unint make_token(struct tok_state* tok, unint token_type, struct token* token) {
     you can perform "normal" character checks as they will never trigger
 */
 void next_grapheme(struct tok_state* tok) {
-    nbool fail;
-    if((fail = READ_GRAPHEME(&tok->uc, &tok->nread)) == UNICODE_OK) {
+    int32_t* cps = tok->uc.cps;
+    int32_t curr = *cps;
+    if(READ_GRAPHEME(&tok->uc) == SUCCESS) {
+        DBG(DO_LEXER_CHAR_DBG, "READ '%c', %d\n", (char)*cps, *cps);
         ++tok->col_offset;
-        return;
+        if(curr != '\n' && *cps == EOF) { // add a 'fake' new line at the end
+            DBG(DO_LEXER_CHAR_DBG, "ADDING 'FAKE' NEW LINE\n");
+            *cps = '\n';
+            tok->uc.nread = 1;
+            tok->uc.err = UNICODE_OK;
+        }
     }
-    // Set error params so that we can do "normal" checks and fail every time
-    // Except for EOF, pls check if its bc of an error.
-    tok->nread = -1;
-    tok->err = E_DECODE;
-    *tok->uc.cps = EOF;
+    return;
 }
 
 /*
@@ -55,13 +65,14 @@ nbool get_indentation(struct tok_state* tok) {
     unint blankline = 0;
 
     int32_t* cps = tok->uc.cps;
+    unint* nread = &tok->uc.nread;
 
     for(;;) {
         next_grapheme(tok);
-        if(tok->nread != 1) break;
+        if(*nread != 1) break;
 
-        if(*cps == (int32_t)' ') { ++col; ++altcol; }
-        else if(*cps == (int32_t)'\t') {
+        if(*cps == ' ') { ++col; ++altcol; }
+        else if(*cps == '\t') {
             col = (col / TAB_SIZE + 1) * TAB_SIZE;
             altcol = (altcol / ALT_TAB_SIZE + 1) * ALT_TAB_SIZE;
         }
@@ -70,7 +81,7 @@ nbool get_indentation(struct tok_state* tok) {
         else break;
     }
     // Blank lines
-    if(tok->nread == 1 && *cps == (int32_t)'\n') blankline = 1;
+    if(*nread == 1 && *cps == '\n') blankline = 1;
     // col = cont_line_col ? cont_line_col : col;
     // altcol = cont_line_col ? cont_line_col : altcol;
     if(!blankline) {
@@ -78,10 +89,10 @@ nbool get_indentation(struct tok_state* tok) {
         altcol = altcol;
 
         if(col == tok->indstack[tok->indent]) {
-            if (altcol != tok->altindstack[tok->indent]) DO_FAIL(tok->err = E_TABSPACE);
+            if (altcol != tok->altindstack[tok->indent]) DO_FAIL(lexer_error(tok, "E_TABSPACE"));
         } else if(col > tok->indstack[tok->indent]) {
-            if (tok->indent+1 >= MAX_INDENT) DO_FAIL(tok->err = E_TOODEEP);
-            if (altcol <= tok->altindstack[tok->indent]) DO_FAIL(tok->err = E_TABSPACE);
+            if (tok->indent+1 >= MAX_INDENT) DO_FAIL(lexer_error(tok, "E_TOODEEP"));
+            if (altcol <= tok->altindstack[tok->indent]) DO_FAIL(lexer_error(tok, "E_TABSPACE"));
             tok->pendin++;
             tok->indstack[++tok->indent] = col;
             tok->altindstack[tok->indent] = altcol;
@@ -91,12 +102,12 @@ nbool get_indentation(struct tok_state* tok) {
                 tok->pendin--;
                 tok->indent--;
             }
-            if (col != tok->indstack[tok->indent]) DO_FAIL(tok->err = E_DEDENT);
-            if (altcol != tok->altindstack[tok->indent]) DO_FAIL(tok->err = E_TABSPACE);
+            if (col != tok->indstack[tok->indent]) DO_FAIL(lexer_error(tok, "E_DEDENT"));
+            if (altcol != tok->altindstack[tok->indent]) DO_FAIL(lexer_error(tok, "E_TABSPACE"));
         }
     }
-    
-    return (tok->uc.err != UNICODE_OK);
+
+    return (tok->uc.err == UNICODE_OK) ? SUCCESS : FAIL;
 }
 
 /*
@@ -195,20 +206,15 @@ unint is_identifier_continue(int32_t cp) {
     }
 }
 
-unint lexer_error(struct tok_state* tok, void* msg) {
-    LOG("%s:%d %s\n", tok->source, tok->lineno, msg);
-    LOG("Column: %d\n", tok->col_offset);
-    return ERRORTOKEN;
-}
-
 unint tokenize(struct tok_state* tok, struct token* token) {
     int32_t* cps = tok->uc.cps;
+    unint* nread = &tok->uc.nread;
 
     // If: At Begining Of Line
     if(tok->atbol) {
         tok->atbol = 0;
         // Updates tok->pendin and errorrs
-        if(get_indentation(tok) == FAIL) return lexer_error(tok, "Error encoding code point to encoding");
+        if(get_indentation(tok) == FAIL) return lexer_error(tok, "Indentation error");
 
     }
 
@@ -226,15 +232,19 @@ unint tokenize(struct tok_state* tok, struct token* token) {
                 tok->atbol = 1;
 
                 return NEWLINE;
+
             case ' ': case '\f': case '\t': case '\v': /* spaces */
                 next_grapheme(tok);
                 break;
+
             case '"':
-                DBG(DO_LEXER_DBG, "\"");
-                do { next_grapheme(tok); DBG(DO_LEXER_DBG, "%c", (char)*cps); } while(*cps != '"');
+                DBG(DO_LEXER_TOKEN_DBG, "\"");
+                do { next_grapheme(tok); DBG(DO_LEXER_TOKEN_DBG, "%c", (char)*cps); } while(*cps != '"');
                 next_grapheme(tok);
-                DBG(DO_LEXER_DBG, " ");
+                DBG(DO_LEXER_TOKEN_DBG, " ");
                 return 70; // String
+            // Numbers - dec, hex, bin, oct
+            // Negative numbers?
             case '0': case '1': case '2': case '3': case '4': // From Lua
             case '5': case '6': case '7': case '8': case '9':
                 // From python
@@ -246,6 +256,7 @@ unint tokenize(struct tok_state* tok, struct token* token) {
                         next_grapheme(tok);
                         do {
                             if(*cps == '_') next_grapheme(tok);
+    
                             if (!((*cps >= '0' && *cps <= '9') ||
                                 (*cps >= 'a' && *cps <= 'f') ||
                                 (*cps >= 'A' && *cps <= 'F'))) {
@@ -262,17 +273,23 @@ unint tokenize(struct tok_state* tok, struct token* token) {
                     }
                 }
                 return NUMBER;
+
+            case EOF:
+                if (tok->uc.err == UNICODE_OK) return ENDMARKER;
+                return lexer_error(tok, "Unicode error");
+
             case '@':
                 next_grapheme(tok);
-                DBG(DO_LEXER_DBG, "@");
+                DBG(DO_LEXER_TOKEN_DBG, "@");
             default:
-                if(is_identifier_start(*cps) == FAIL) return lexer_error(tok, "Invalid Syntax");
+                if(is_identifier_start(*cps) == FAIL) { DBG(1, "%c is not a valid identidfier", (char)*cps); return lexer_error(tok, "Invalid Syntax"); }
+
                 do {
-                    if(UNICODE_TO_ENCODING(cps, tok->nread, tok->encoded, MAX_ENCODING_SIZE) != SUCCESS) return lexer_error(tok, "Error encoding code point to encoding");
-                    DBG(DO_LEXER_DBG, "%s", tok->encoded);
+                    if(UNICODE_TO_ENCODING(cps, *nread, tok->encoded, MAX_ENCODING_SIZE) != SUCCESS) return lexer_error(tok, "Error encoding code point to encoding");
+                    DBG(DO_LEXER_TOKEN_DBG, "%s", tok->encoded);
                     next_grapheme(tok);
                 } while(is_identifier_continue(*cps) == SUCCESS);
-                DBG(DO_LEXER_DBG, " ");
+                DBG(DO_LEXER_TOKEN_DBG, " ");
                 return NAME;
         }
     }

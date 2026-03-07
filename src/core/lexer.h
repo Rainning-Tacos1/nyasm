@@ -28,7 +28,6 @@ struct token {
 
 struct tok_state {
     struct unicode uc;
-    unint nread;
 
     unint err;
 

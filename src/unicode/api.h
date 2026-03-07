@@ -9,9 +9,9 @@
 #define UNICODE_OK 0
 #define UNICODE_ERR_CODEPOINT -1
 #define UNICODE_ERR_GRAPHEME -2
-#define UNICODE_ERR_EOF -3
-#define UNICODE_ERR_NORMALIZE -4
-#define UNICODE_ERR_TOO_SMALL -5
+#define UNICODE_ERR_NORMALIZE -3
+#define UNICODE_ERR_TOO_SMALL -4
+#define UNICODE_ERR_EOF -5
 
 #define __UNICODE_CATEGORY_CN UTF8PROC_CATEGORY_CN /**< Other, not assigned */
 #define __UNICODE_CATEGORY_LU UTF8PROC_CATEGORY_LU /**< Letter, uppercase */
@@ -49,12 +49,14 @@ struct unicode {
     char* curr;
     char* end;
 
+    unint nread;
+
     unint err; // Unicode parser error;
 
     int32_t cps[MAX_GRAPHEME_SIZE];
 };
 
-nbool read_grapheme(struct unicode* uc, unint* nread);
+nbool read_grapheme(struct unicode* uc);
 
 void unicode_init(struct unicode* uc);
 

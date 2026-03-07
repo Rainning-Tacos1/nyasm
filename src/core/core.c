@@ -18,7 +18,6 @@ nbool assemble(char* code, unint len) {
     tok.uc.end = code+len;
     tok.source = "main";
 
-    unint nread = 0;
     unint suc;
 
     struct token token;
@@ -26,6 +25,7 @@ nbool assemble(char* code, unint len) {
     DBG(1, "Start!\n");
     do {
         _tok = tokenize(&tok, &token);
+        if(tok.uc.err != UNICODE_OK) _tok = ERRORTOKEN;
 
         switch(_tok) {
             case NAME: {DBG(1, "[IDENTIFIER]"); break; }
@@ -33,19 +33,19 @@ nbool assemble(char* code, unint len) {
             case DEDENT: {DBG(1, "[DEDENT]\n"); break; }
             case NEWLINE: {DBG(1, "[\\n]\n"); break; }
             case NUMBER: {DBG(1, "[NUMBER]"); break; }
+            case ENDMARKER: {DBG(1, "[EOF]\n"); break; }
             case ERRORTOKEN: {DBG(1, "[ERR TOKEN]\n"); break; }
             case 70: {DBG(1, "[STRING]"); break; }
             default: {DBG(1, "[???]"); break; }
         }
         if(_tok != NEWLINE && _tok != DEDENT && _tok != ERRORTOKEN) DBG(1, " ");
 
-    } while(_tok != ERRORTOKEN);
+    } while(_tok != ERRORTOKEN && _tok != ENDMARKER);
 
-    if(suc == UNICODE_ERR_CODEPOINT) { LOG("CodePointError\n"); return FAIL;}
-    if(suc == UNICODE_ERR_GRAPHEME) { LOG("GraphemeError\n"); return FAIL;}
-    if(suc == UNICODE_ERR_EOF) { LOG("EOF\n"); return FAIL;}
-    if(suc == UNICODE_ERR_NORMALIZE) { LOG("NormalizationError\n"); return FAIL;}
-    if(suc == UNICODE_ERR_TOO_SMALL) { LOG("CantStoreGrapheme\n"); return FAIL;}
+    if(tok.uc.err == UNICODE_ERR_CODEPOINT) { LOG("CodePointError\n"); return FAIL;}
+    if(tok.uc.err == UNICODE_ERR_GRAPHEME) { LOG("GraphemeError\n"); return FAIL;}
+    if(tok.uc.err == UNICODE_ERR_NORMALIZE) { LOG("NormalizationError\n"); return FAIL;}
+    if(tok.uc.err == UNICODE_ERR_TOO_SMALL) { LOG("CantStoreGrapheme\n"); return FAIL;}
     
     return SUCCESS;
 }
