@@ -33,7 +33,10 @@ nbool assemble(char* code, unint len) {
             case DEDENT: {DBG(1, "[DEDENT]\n"); break; }
             case NEWLINE: {DBG(1, "[\\n]\n"); break; }
             case NUMBER: {DBG(1, "[NUMBER]"); break; }
+            case COMMENT: {DBG(1, "[COMMENT]"); break;}
             case ENDMARKER: {DBG(1, "[EOF]\n"); break; }
+            case EQUAL: {DBG(1, "[=]"); break; }
+            case EQEQUAL: {DBG(1, "[==]"); break; }
             case ERRORTOKEN: {DBG(1, "[ERR TOKEN]\n"); break; }
             case 70: {DBG(1, "[STRING]"); break; }
             default: {DBG(1, "[???]"); break; }

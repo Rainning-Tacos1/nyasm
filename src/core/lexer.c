@@ -273,11 +273,36 @@ unint tokenize(struct tok_state* tok, struct token* token) {
                     }
                 }
                 return NUMBER;
-
+            case '.':
+                next_grapheme(tok);
+                return DOT;
+            case '=':
+                next_grapheme(tok);
+                return *cps == '=' ? EQEQUAL : EQUAL;
+            case '#':
+                while(!(*cps == '\n' || *cps == '\r') && *cps != EOF) next_grapheme(tok);
+                return COMMENT;
+            case '/':
+                next_grapheme(tok);
+                if(*cps == '/') { // Comment
+                    while(!(*cps == '\n' || *cps == '\r') && *cps != EOF) next_grapheme(tok);
+                    return COMMENT;
+                } else if(*cps == '*') { // Multi line comment
+                    while (*cps != EOF) {
+                        if (*cps == '*') {
+                            next_grapheme(tok);
+                            if (*cps == '/') {
+                                next_grapheme(tok);
+                                break;
+                            }
+                        } else next_grapheme(tok);
+                    }
+                    return COMMENT;
+                }
+                return SLASH;
             case EOF:
                 if (tok->uc.err == UNICODE_OK) return ENDMARKER;
                 return lexer_error(tok, "Unicode error");
-
             case '@':
                 next_grapheme(tok);
                 DBG(DO_LEXER_TOKEN_DBG, "@");
