@@ -63,6 +63,10 @@ void* mem_alloc(
     return alloc->data;
 }
 
+void* mem_get_last() {
+    return memory.last_alloc->data;
+}
+
 void mem_free_last() {
     if(!memory.last_alloc) return;
 
@@ -77,6 +81,21 @@ void mem_free_last() {
 
     // Deallocate the data
     memory.curr = memory.last_alloc->start;
+}
+
+void* mem_resize_last(unint new_size) {
+    struct mem_alloc_t* last = memory.last_alloc;
+    if(last == NULL) return NULL; // memory not allocated yet
+
+    char* end = last->data + new_size;
+    if(memory.end <= end) return NULL;
+
+    #ifdef DEBUG
+        last->dbg.size = new_size;
+    #endif
+
+    memory.curr = end;
+    return last->data;
 }
 
 // Memory deinitialization implementation
@@ -121,11 +140,11 @@ void mem_stats() {
     float p_used = (float)used*100.0f / (float)total;
     float p_free = (float)free*100.0f / (float)total;
 
-    unint dbg = 0;
-    unint align = 0;
-    unint data = 0;
-    unint all = 0;
-    unint ovh = 0;
+    unint dbg = 0;    // Debug
+    unint align = 0;  // Alignment
+    unint data = 0;   // Data
+    unint all = 0;    // Allocators
+    unint ovh = 0;    // Overhead
     
     if (memory.last_alloc) {
         struct mem_alloc_t *curr = (struct mem_alloc_t*)memory.start;

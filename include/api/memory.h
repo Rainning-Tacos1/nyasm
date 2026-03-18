@@ -47,4 +47,8 @@
 
 #define MEM_FREE_LAST() mem_free_last()
 
+#define MEM_RESIZE_LAST(new_size) mem_resize_last(new_size)
+
+#define MEM_GET_LAST() mem_get_last()
+
 #endif

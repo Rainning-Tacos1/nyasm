@@ -16,6 +16,9 @@ void* mem_alloc(
 #endif
 );
 
+// Get the last memory block allocated
+void* mem_get_last();
+
 // Memory deallocation
 void mem_free_last();
 
@@ -26,6 +29,9 @@ char* mem_init(
 
 // Total memory deinitialization
 void mem_deinit();
+
+// Resize the last element
+void* mem_resize_last(unint new_size);
 
 // Memory debug
 void mem_dbg();

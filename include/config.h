@@ -12,11 +12,6 @@
 
 #define MEM_ALIGN 8
 
-// Size of the Grapheme codepoint buffer.
-// Stores at most X codepoints of a grapheme
-#define MAX_GRAPHEME_SIZE 64
-
-
 // Indentation related settings
 #define MAX_INDENT 64
 #define TAB_SIZE 8
@@ -24,4 +19,8 @@
 
 // Max number of bytes to encode a grapheme in an encoding format
 #define MAX_ENCODING_SIZE 64
+
+// Initial size of the allocated buffer for the token's codepoints
+#define TOKEN_CP_BUFFER_INIT_SIZE 32
+
 #endif

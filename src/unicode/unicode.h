@@ -12,7 +12,7 @@
 #define UNICODE_FAIL(uc, _err) \
     do {                       \
         (uc)->nread = 0;       \
-        *(uc)->cps = EOF;      \
+        (uc)->cp = EOF;      \
         (uc)->err = _err;      \
         return FAIL;           \
     } while (0)

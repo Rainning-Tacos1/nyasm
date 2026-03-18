@@ -8,6 +8,6 @@
 
 // Choose your log function or create an implementation
 #define LOG(__format, ...) printf(__format, ##__VA_ARGS__)
-
+#define VLOG(__format, __arg) vprintf((const char*)(__format), __arg)
 
 #endif

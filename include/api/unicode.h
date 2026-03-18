@@ -38,6 +38,7 @@
 
 // Functions
 #define READ_GRAPHEME(uc) read_grapheme(uc)
+#define READ_CODEPOINT(uc) read_codepoint(uc)
 #define UNICODE_INIT(uc) unicode_init(uc)
 #define UNICODE_CAT(cp) unicode_cat(cp)
 #define UNICODE_TO_ENCODING(cps, cp_len, out, len) unicode_to_encoding(cps, cp_len, out, len)

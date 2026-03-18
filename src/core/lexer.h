@@ -23,26 +23,35 @@
 
 struct token {
     unint lineno, col_offset, end_lineno, end_col_offset;
-    char *start, *end;
+    int32_t* cps;
 };
 
 struct tok_state {
+    // Unicode related
     struct unicode uc;
 
-    unint err;
-
+    // File related
     unint atbol;
     unint lineno;
     unint col_offset;
     char* source;
 
+    // Token related
+    char* start;
+    char* end;
+
+    // Token cp buffer related
+    unint token_cp_buffer_idx;
+    unint token_cp_buffer_size;
+
+    // Indentation related
     unint indent; 
     nint pendin;
     unint indstack[MAX_INDENT];
     unint altindstack[MAX_INDENT];
 
     // May change place
-    char encoded[MAX_ENCODING_SIZE];
+    unsigned char encoded[MAX_ENCODING_SIZE];
 };
 
 void tok_state_init(struct tok_state* tok);
