@@ -14,8 +14,9 @@
 #define CTF_XDIGIT 0x10
 
 #define CTF_ODIGIT 0x20
+#define CTF_BDIGIT 0x40
 
-#define MAX_CTF_TYPE_VAL (CTF_LOWER | CTF_UPPER | CTF_DIGIT | CTF_SPACE | CTF_XDIGIT | CTF_ODIGIT)
+#define MAX_CTF_TYPE_VAL (CTF_LOWER | CTF_UPPER | CTF_DIGIT | CTF_SPACE | CTF_XDIGIT | CTF_ODIGIT | CTF_BDIGIT)
 
 extern const unint __ctype_table[256];
 
@@ -33,6 +34,7 @@ extern const unint __ctype_table[256];
 #define ISSPACE(c)  (ISASCII(c) && (__ctype_table[CHARMASK(c)] & CTF_SPACE))
 
 #define ISODIGIT(c) (ISASCII(c) && (__ctype_table[CHARMASK(c)] & CTF_ODIGIT))
+#define ISBDIGIT(c) (ISASCII(c) && (__ctype_table[CHARMASK(c)] & CTF_BDIGIT))
 
 extern const unsigned char __ctype_tolower[256];
 extern const unsigned char __ctype_toupper[256];

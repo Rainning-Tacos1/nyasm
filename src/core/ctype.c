@@ -54,8 +54,8 @@ const unint __ctype_table[256] = {
     0, /* 0x2d '-' */
     0, /* 0x2e '.' */
     0, /* 0x2f '/' */
-    CTF_DIGIT | CTF_XDIGIT | CTF_ODIGIT, /* 0x30 '0' */
-    CTF_DIGIT | CTF_XDIGIT | CTF_ODIGIT, /* 0x31 '1' */
+    CTF_DIGIT | CTF_XDIGIT | CTF_ODIGIT | CTF_BDIGIT, /* 0x30 '0' */
+    CTF_DIGIT | CTF_XDIGIT | CTF_ODIGIT | CTF_BDIGIT, /* 0x31 '1' */
     CTF_DIGIT | CTF_XDIGIT | CTF_ODIGIT, /* 0x32 '2' */
     CTF_DIGIT | CTF_XDIGIT | CTF_ODIGIT, /* 0x33 '3' */
     CTF_DIGIT | CTF_XDIGIT | CTF_ODIGIT, /* 0x34 '4' */

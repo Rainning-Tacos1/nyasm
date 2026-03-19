@@ -275,6 +275,32 @@ unint is_identifier_continue(int32_t cp) {
         return FAIL; // just in case
     }
 }
+/*
+  Reads a decimal number. Stops at the last valid character of the number.
+  After an '_' there must be a valid number or it will emit a syntax error
+  Returns:
+    0: Success
+    1: Fail
+    and tok is at next codepoint after the number
+*/
+unint tok_decimal_tail(struct tok_state* tok) {
+    int32_t* cp = &tok->uc.cp;
+
+    while(1) {
+        do {
+            next_cp(tok);
+        }while(ISDIGIT(*cp));
+
+        if(*cp != '_') break;
+
+        next_cp(tok);
+        if(!ISDIGIT(*cp)) {
+            lexer_error(tok, "Invalid decimal literal");
+            return FAIL;
+        }
+    }
+    return SUCCESS;
+}
 
 unint verify_identifier(struct tok_state* tok) {
     
@@ -457,6 +483,54 @@ _loop:
                 // Verify the end of the number
                 if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid octal literal");
             }
+        
+            // Binary number
+            else if(*cp == 'b' || *cp == 'B') {
+                next_cp(tok);
+
+                do {
+                    // Ignore underscores
+                    if(*cp == '_') next_cp(tok);
+
+                    // If it'ts not a binary digit
+                    if(!ISBDIGIT(*cp)) {
+                        return ISDIGIT(*cp) ? 
+                            lexer_error(tok, "Invalid digit '%c' in binary literal", (char)*cp) :
+                            lexer_error(tok, "Invalid binary literal");
+                    }
+
+                    do {
+                        next_cp(tok);
+                    }while(ISODIGIT(*cp));
+
+                }while(*cp == '_');
+
+                // Verify if it was a digit but not in binary range
+                if(ISDIGIT(*cp)) return lexer_error(tok, "Invalid digit '%c' in binary literal", (char)*cp);
+
+                // Verify the end of the number
+                if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid binary literal");
+            }
+
+        }
+        // Decimal or Float / Double
+        else {
+
+            // Integer part
+            if(tok_decimal_tail(tok) == FAIL) return ERRORTOKEN;
+
+            if(*cp == '.') {
+                next_cp(tok);
+
+                // Decimal part
+                if(ISDIGIT(*cp)) {
+                    if(tok_decimal_tail(tok) == FAIL) return ERRORTOKEN;
+                }
+                if(0 /* e  OR E */) {}
+                else if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid decimal literal");
+            }
+
+
         }
         return NUMBER;
     }
