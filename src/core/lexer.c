@@ -453,7 +453,7 @@ _loop:
                 }while(*cp == '_');
 
                 // Verify the end of the number
-                if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "111Invalid hexadecimal literal");
+                if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid hexadecimal literal");
             }
             
             // Octal number
@@ -512,10 +512,12 @@ _loop:
                 if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid binary literal");
             }
 
+            // No suport for old-style so just read the number as a decimal
+            else goto decimal;
         }
         // Decimal or Float / Double
         else {
-
+decimal:
             // Integer part
             if(tok_decimal_tail(tok) == FAIL) return ERRORTOKEN;
 
@@ -526,10 +528,31 @@ _loop:
                 if(ISDIGIT(*cp)) {
                     if(tok_decimal_tail(tok) == FAIL) return ERRORTOKEN;
                 }
-                if(0 /* e  OR E */) {}
-                else if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid decimal literal");
             }
 
+            // Exponent
+            if(*cp == 'e' || *cp == 'E') {
+                next_cp(tok);
+                
+                // Sign
+                if(*cp == '+' || *cp == '-') {
+                    next_cp(tok);
+                    if(!ISDIGIT(*cp)) return lexer_error(tok, "Invalid decimal literal"); 
+
+                // Digits
+                } else if(!ISDIGIT(*cp)) {
+                    // Verify end of number
+                    if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid decimal literal");
+
+                    return NUMBER;
+                }
+
+                // Verify
+                if(tok_decimal_tail(tok) == FAIL) return ERRORTOKEN;
+            }
+            
+            // Verify end of number
+            else if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid decimal literal");
 
         }
         return NUMBER;
