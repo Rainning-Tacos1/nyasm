@@ -58,12 +58,12 @@ struct unicode {
 
 nbool read_codepoint(struct unicode* uc);
 
-nbool read_grapheme(struct unicode* uc);
-
 void unicode_init(struct unicode* uc);
 
 unint unicode_cat(int32_t cp);
 
 nbool unicode_to_encoding(int32_t* cps, unint cp_len, unsigned char* out, unint len);
+
+nbool backup_cp(struct unicode* uc);
 
 #endif

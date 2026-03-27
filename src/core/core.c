@@ -9,7 +9,6 @@
 
 #include "lexer.h"
 #include "token.h"
-#include <stdio.h>
 
 nbool assemble(char* code, unint len) {
     struct tok_state tok;
@@ -39,7 +38,7 @@ nbool assemble(char* code, unint len) {
             case EQEQUAL: {DBG(1, "[==]\n"); break; }
             case ERRORTOKEN: {DBG(1, "[ERR TOKEN]\n"); break; }
             case STRING: {DBG(1, "[STRING]\n"); break; }
-            default: {DBG(1, "[???]"); break; }
+            default: {DBG(1, "[???](%d)", _tok); break; }
         }
         //if(_tok != NEWLINE && _tok != DEDENT && _tok != ERRORTOKEN) DBG(1, " ");
 

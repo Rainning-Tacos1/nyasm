@@ -116,6 +116,12 @@ void next_cp(struct tok_state* tok) {
     }
 }
 
+void increment_line_number(struct tok_state* tok) {
+    ++tok->lineno;
+    tok->col_offset = 0;
+    tok->atbol = 1;
+}
+
 /*
   Parse indentation and update tokenizer state
   Returns:
@@ -140,8 +146,15 @@ nbool get_indentation(struct tok_state* tok) {
         // Handle multiline
         else break;
     }
-    // Blank lines
-    if(*cp == '\n') blankline = 1;
+    // Blank lines; Comments ignore indentation
+    if(*cp == '#' || *cp == '\n' || *cp == '\r') blankline = 1;
+    else if(*cp == '/') {
+        next_cp(tok);
+        if(*cp == '*') blankline = 1;
+        backup_cp(&tok->uc); // No problem on trying to backup and EOF/error
+    }
+
+
     // col = cont_line_col ? cont_line_col : col;
     // altcol = cont_line_col ? cont_line_col : altcol;
     if(!blankline) {
@@ -185,16 +198,6 @@ unint generate_indent_dedent_token(struct tok_state* tok, struct token* token) {
         tok->pendin--;
         return make_token(tok, INDENT, token);
     }
-}
-
-void increment_line_number(struct tok_state* tok) {
-    ++tok->lineno;
-    tok->col_offset = 0;
-    tok->atbol = 1;
-}
-
-unint verify_end_of_number(struct tok_state* tok, int32_t cp, char* kind) {
-    if(cp < 128 && is_potential_identifier_char(cp)) return lexer_error(tok, "Invalid literal");
 }
 
 /*
@@ -326,7 +329,6 @@ _loop:
     tok->start = NULL;
 
     // Skip spaces
-    // Change a little bc we dont have tok_backup()
     while (*cp == ' ' || *cp == '\t' || *cp == '\014') next_cp(tok);
 
     // Comments (#)
@@ -363,7 +365,12 @@ _loop:
                 prev = *cp;
                 next_cp(tok);
             }
+            next_cp(tok);
 
+            // A Unicode error can pass through bc its not a new line, which is requered
+            if(*cp != '\n') return lexer_error(tok, "Multi-line comments must end on a new line ('\\n')");
+
+            increment_line_number(tok);
             return COMMENT;
         }
         return SLASH;
@@ -557,6 +564,11 @@ decimal:
         }
         return NUMBER;
     }
+    
+    if(*cp == '\'' || *cp == '"') {
+        // Read the string
+    }
+
     DBG(1, "GOT TO THE END\n");
     return lexer_error(tok, "Invalid character (U+%04X)", *cp);
 }

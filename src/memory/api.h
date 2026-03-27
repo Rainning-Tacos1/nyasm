@@ -23,7 +23,7 @@ void* mem_get_last();
 void mem_free_last();
 
 // Memory initialization
-char* mem_init(
+void* mem_init(
     nint size
 );
 

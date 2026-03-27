@@ -10,7 +10,7 @@
 struct mem_t memory;
 
 // Memory initialization implementation
-char* mem_init(nint size) {
+void* mem_init(nint size) {
     memory.size = 0;
     memory.last_alloc = NULL;
     memory.malloc = memory.end = memory.curr = memory.start = malloc(size);

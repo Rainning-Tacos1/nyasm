@@ -81,6 +81,32 @@ nbool unicode_to_encoding(int32_t* cps, unint cp_len, unsigned char* out, unint 
     return SUCCESS;
 }
 
+
+/*
+  Backup one code point
+  Author:  Chat-GPT
+  Returns:
+    0      : Success
+    1      : Error
+*/
+nbool backup_cp(struct unicode* uc) {
+    if (uc->curr == uc->buf || uc->err != UNICODE_OK)
+        return FAIL;
+
+    // Step 1: go to start of current codepoint
+    char* p = uc->curr - uc->nread -1;
+
+    if (p < uc->buf) return FAIL;
+
+    // We assume that if the first condition doesn't fail, there must be a valid utf-8 sequence that wont make p go below uc->buf
+    while (p > uc->buf && ((*p & 0xC0) == 0x80)) {
+        p--;
+    }
+
+    uc->curr = p;
+    return read_codepoint(uc);
+}
+
 /*
   Reads a codepoint.
   Returns:
@@ -101,7 +127,7 @@ nbool read_codepoint(struct unicode* uc) {
         DBG(DO_UC_DBG, "  \"EOF\" cat: EOF\n");
         *cp = EOF;
     }
-    *nread = 1;
+    *nread = size;
     uc->curr += size;
 
     // Debug
