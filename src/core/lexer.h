@@ -36,9 +36,15 @@ struct tok_state {
     unint col_offset;
     char* source;
 
+    // Column related
+    unint starting_col_offset;
+
     // Token related
     char* start;
     char* end;
+
+    // Error related
+    unint done;
 
     // Token cp buffer related
     unint token_cp_buffer_idx;

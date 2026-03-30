@@ -45,9 +45,6 @@ nbool assemble(char* code, unint len) {
     } while(_tok != ERRORTOKEN && _tok != ENDMARKER);
 
     if(tok.uc.err == UNICODE_ERR_CODEPOINT) { LOG("CodePointError\n"); return FAIL;}
-    if(tok.uc.err == UNICODE_ERR_GRAPHEME) { LOG("GraphemeError\n"); return FAIL;}
-    if(tok.uc.err == UNICODE_ERR_NORMALIZE) { LOG("NormalizationError\n"); return FAIL;}
-    if(tok.uc.err == UNICODE_ERR_TOO_SMALL) { LOG("CantStoreGrapheme\n"); return FAIL;}
     
     return SUCCESS;
 }

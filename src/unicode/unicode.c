@@ -90,13 +90,13 @@ nbool unicode_to_encoding(int32_t* cps, unint cp_len, unsigned char* out, unint 
     1      : Error
 */
 nbool backup_cp(struct unicode* uc) {
-    if (uc->curr == uc->buf || uc->err != UNICODE_OK)
+    if (uc->err != UNICODE_OK || uc->nread == 0)
         return FAIL;
 
     // Step 1: go to start of current codepoint
-    char* p = uc->curr - uc->nread -1;
+    char* p = uc->curr - uc->nread;
 
-    if (p < uc->buf) return FAIL;
+    if (p < uc->buf) return FAIL; 
 
     // We assume that if the first condition doesn't fail, there must be a valid utf-8 sequence that wont make p go below uc->buf
     while (p > uc->buf && ((*p & 0xC0) == 0x80)) {
@@ -104,7 +104,7 @@ nbool backup_cp(struct unicode* uc) {
     }
 
     uc->curr = p;
-    return read_codepoint(uc);
+    return SUCCESS;
 }
 
 /*
@@ -123,12 +123,15 @@ nbool read_codepoint(struct unicode* uc) {
 
     utf8proc_ssize_t size = utf8proc_iterate((utf8proc_uint8_t*)(buf), len, cp);
     if(size < 0) UNICODE_FAIL(uc, UNICODE_ERR_CODEPOINT); // Error parsing code point
+
+    *nread = size;
+    uc->curr += size;
+
     if(size == 0) {
         DBG(DO_UC_DBG, "  \"EOF\" cat: EOF\n");
         *cp = EOF;
+        UNICODE_SUCCESS(uc);
     }
-    *nread = size;
-    uc->curr += size;
 
     // Debug
     DBG(DO_UC_DBG, "  \"");
@@ -143,5 +146,5 @@ nbool read_codepoint(struct unicode* uc) {
     else DBG(DO_UC_DBG, "%s", utf8proc_category_to_string(*cp));
     DBG(DO_UC_DBG, "\n");
 
-    UNICODE_SUCCESS(uc); // Already at the end of the buffer
+    UNICODE_SUCCESS(uc);
 }

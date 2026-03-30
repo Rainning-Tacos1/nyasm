@@ -73,10 +73,20 @@ int32_t* token_trim_cp_buffer(struct tok_state* tok) {
 
 void tok_state_init(struct tok_state* tok) {
     for(unint i=0; i<MAX_INDENT; ++i) tok->altindstack[i] = tok->indstack[i] = 0;
-    tok->col_offset = tok->pendin = tok->indent = 0;
+    tok->starting_col_offset = tok->col_offset = tok->pendin = tok->indent = 0;
     tok->atbol = tok->lineno = 1;
     tok->source = tok->start = tok->end = NULL;
+    tok->done = E_OK;
     UNICODE_INIT(&tok->uc);
+}
+
+unint lexer_error_no_col(struct tok_state* tok, void* msg, ...) {
+    va_list args;
+    va_start(args, msg);
+
+    LOG("%s:%d ", tok->source, tok->lineno);
+    VLOG(msg, args);
+    return ERRORTOKEN;
 }
 
 unint lexer_error(struct tok_state* tok, void* msg, ...) {
@@ -96,17 +106,62 @@ unint make_token(struct tok_state* tok, unint token_type, struct token* token) {
     return token_type;
 }
 
+nbool _backup_cp(struct tok_state* tok) {
+    if(tok->col_offset > 0) --tok->col_offset;
+    return BACKUP_CP(&tok->uc);
+}
+
 
 /*
   Tries to read the next code point
+  Python uses a system where a line is stored in a buffer and when the buffer is at the end it is replaced(tok->underflow) with the next line.
+  Python also checks for UTF8 errors on the line read.
 */
 void next_cp(struct tok_state* tok) {
+
     int32_t* cp = &tok->uc.cp;
     int32_t curr = *cp;
-    if(READ_CODEPOINT(&tok->uc) != SUCCESS) return;
+    struct unicode* uc = &tok->uc;
 
-    DBG(DO_LEXER_CHAR_DBG, "READ '%c', %d\n", (char)*cp, *cp);
+    // Unfortunatelly do whole line verification for badly encoded characters
+    
+    if(uc->curr == uc->buf || *cp == '\n' || *cp == '\r') { // First time or at the end of a line
+        // Save uc values
+        struct unicode _uc = *uc;
+        
+        int32_t prev = 0;
+        int32_t* _cp = &_uc.cp;
+
+        // Read & verify a line or stop at EOF
+        while (true) {
+            nbool suc = READ_CODEPOINT(&_uc);
+
+            DBG(DO_LEXER_CHAR_VERIFICATION_LOOKAHEAD_DBG, "VERIFY READ '%c', %d\n", (char)*_cp, *_cp);
+
+            if(suc != SUCCESS){
+                if(_uc.err == UNICODE_ERR_CODEPOINT) {
+                    tok->done = E_DECODE;
+                    lexer_error_no_col(tok, "Malformed character encoding");
+                } else lexer_error_no_col(tok, "Unknown Unicode error");
+                *cp = EOF;
+                return;
+            } else tok->done = E_OK;
+
+            if(prev == '\r') {
+                if (*_cp != '\n') BACKUP_CP(&_uc);
+                break;
+            }
+            
+            prev = *_cp;
+            if (*_cp == EOF) break;
+            if (*_cp == '\n') break;
+            if (*_cp == '\r') continue;
+        }
+    }
+    READ_CODEPOINT(uc); // It is safe to not check for errors
+
     ++tok->col_offset;
+    DBG(DO_LEXER_CHAR_DBG, "READ '%c', %d", (char)*cp, *cp);
 
     // add a 'fake' new line at the end
     if(curr != '\n' && *cp == EOF) {
@@ -144,6 +199,7 @@ nbool get_indentation(struct tok_state* tok) {
         }
         // No formfeed
         // Handle multiline
+        else if(*cp == EOF) return ERRORTOKEN;
         else break;
     }
     // Blank lines; Comments ignore indentation
@@ -151,9 +207,10 @@ nbool get_indentation(struct tok_state* tok) {
     else if(*cp == '/') {
         next_cp(tok);
         if(*cp == '*') blankline = 1;
-        backup_cp(&tok->uc); // No problem on trying to backup and EOF/error
-    }
+        _backup_cp(tok); // No problem on trying to backup and EOF/error
 
+    }
+    _backup_cp(tok);
 
     // col = cont_line_col ? cont_line_col : col;
     // altcol = cont_line_col ? cont_line_col : altcol;
@@ -318,6 +375,7 @@ unint tokenize(struct tok_state* tok, struct token* token) {
     // If: At Begining Of Line
     if(tok->atbol) {
         tok->atbol = 0;
+        DBG(1, "Reading Indentation\n");
         // Updates tok->pendin and errors
         if(get_indentation(tok) == FAIL) return lexer_error(tok, "Indentation error");
 
@@ -328,13 +386,24 @@ unint tokenize(struct tok_state* tok, struct token* token) {
 _loop:
     tok->start = NULL;
 
+    /* Peek ahead at the next character */
+    next_cp(tok);
+    _backup_cp(tok);
+
     // Skip spaces
-    while (*cp == ' ' || *cp == '\t' || *cp == '\014') next_cp(tok);
+    do {
+        next_cp(tok);
+    } while (*cp == ' ' || *cp == '\t' || *cp == '\014');
+
+    // Python checks if tok->cur == NULL to see if there was an error, we check if tok->done is not E_OK
+    // We don't need it for now
+    tok->start = tok->uc.curr == NULL ? NULL : tok->uc.curr - 1;
+    tok->starting_col_offset = tok->col_offset - 1;
 
     // Comments (#)
     if(*cp == '#') {
-        while(!(*cp == '\n' || *cp == '\r') && *cp != EOF) 
-            next_cp(tok); // EOF & Error safe.
+        while(*cp != EOF && !(*cp == '\n' || *cp == '\r')) 
+            next_cp(tok);
 
         increment_line_number(tok);
         return COMMENT;
@@ -346,7 +415,7 @@ _loop:
 
         if(*cp == '/') { // Comment
             while(!(*cp == '\n' || *cp == '\r') && *cp != EOF) 
-                next_cp(tok); // EOF & Error safe.
+                next_cp(tok);
             
             increment_line_number(tok);
             return COMMENT;
@@ -355,20 +424,34 @@ _loop:
         } else if(*cp == '*') {
             int32_t prev = 0;
 
-            while (*cp != EOF) {
-                if (*cp == '\n')
-                    increment_line_number(tok);
-            
-                if (prev == '*' && *cp == '/')
-                    break;
-            
-                prev = *cp;
+            while(true) {
                 next_cp(tok);
-            }
-            next_cp(tok);
 
-            // A Unicode error can pass through bc its not a new line, which is requered
-            if(*cp != '\n') return lexer_error(tok, "Multi-line comments must end on a new line ('\\n')");
+                // Errors
+                if(tok->done == E_DECODE)
+                    return ERRORTOKEN; // break; in python (string)
+
+                // Enexpected ending
+                if(*cp == EOF)
+                    return lexer_error(tok, "Unterminated multi-line comment");
+
+                // New line
+                if(*cp == '\n')
+                    increment_line_number(tok);
+
+                if (prev == '*' && *cp == '/') {
+                    next_cp(tok);
+
+                    // No need to check for errors as '\n' is on the same line as "*/" so next_cp already check for malformed characters on that line
+                    
+                    // Exit?
+                    if(*cp == '\n')
+                        break;
+
+                    return lexer_error(tok, "Multi-line comments must end on a new line ('\\n')");
+                }
+                prev = *cp;
+            }
 
             increment_line_number(tok);
             return COMMENT;
@@ -417,6 +500,7 @@ _loop:
         
             next_cp(tok);
         }
+        _backup_cp(tok);
 
         token_cp_buffer = token_trim_cp_buffer(tok);
         if(token_cp_buffer == NULL) return lexer_error(tok, "Could not trim left space for identifier");
@@ -566,7 +650,27 @@ decimal:
     }
     
     if(*cp == '\'' || *cp == '"') {
-        // Read the string
+        while(true) {
+            next_cp(tok);
+            DBG(1, "READ STR: %c\n", *cp);
+            // No need to do the checks that python does because those checks are for triple quote strings that allow new lines that are not checked immediately when reading the '"'
+            if(*cp == EOF || *cp == '\n') {
+                lexer_error(tok, "unterminated string literal (detected at line %d)", tok->lineno);
+                if (*cp != '\n') tok->done = E_EOLS;
+                return ERRORTOKEN;
+            }
+
+            // Exit?
+            if(*cp == '"') {
+                return STRING;
+            }
+            else {
+                if(*cp == '\\') {
+                    next_cp(tok);
+                    if (*cp == '\r') next_cp(tok);
+                }
+            }
+        }
     }
 
     DBG(1, "GOT TO THE END\n");
