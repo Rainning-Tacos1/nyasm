@@ -1,13 +1,17 @@
 #ifndef API_LOG_H
 #define API_LOG_H
 
-#include <stdio.h>
 #include "config.h"
 
 // Public Logging API
 
+// API exposed by the implementation
+#include <stdio.h>
+#include "../../src/log/api.h"
+
 // Choose your log function or create an implementation
-#define LOG(__format, ...) printf(__format, ##__VA_ARGS__)
-#define VLOG(__format, __arg) vprintf((const char*)(__format), __arg)
+#define LOG(__format, ...) _printf(__format, ##__VA_ARGS__)
+#define VLOG(__format, __arg) _vprintf((const char*)(__format), __arg)
+#define LOG_CP(cp) print_cp(cp)
 
 #endif

@@ -15,6 +15,7 @@ add_library(core STATIC
 
 # Static lib for implementations
 add_library(impl STATIC
+"src/log/log.c"
 "src/memory/memory.c"
 "src/file/file.c"
 "src/unicode/unicode.c"

@@ -3,6 +3,8 @@
 
 #include "types.h"
 
+#define IS_VALID_CP(c) ((c) <= 0x10FFFF)
+
 #define UNICODE_SUCCESS(uc)       \
     do {                          \
         (uc)->err = UNICODE_OK;   \

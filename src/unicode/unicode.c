@@ -64,32 +64,13 @@ void unicode_init(struct unicode* uc) {
 }
 
 /*
-  Converts an array of unicode codepoints into a encoding format(UTF-8)
-  Returns:
-    0: If successfull
-    1: If it failed
-*/
-nbool unicode_to_encoding(int32_t* cps, unint cp_len, unsigned char* out, unint len) {
-    unint out_i = 0;
-
-    for(unint i=0; i<cp_len; ++i) {
-        unint n = utf8proc_encode_char(cps[i], out+out_i); // 0 if it failed
-        out_i += n;
-        if(out_i >= len || !n) return FAIL; // >= so that we have one more for '\0'; 
-    }
-    out[out_i] = '\0';
-    return SUCCESS;
-}
-
-
-/*
   Backup one code point
   Author:  Chat-GPT
   Returns:
     0      : Success
     1      : Error
 */
-nbool backup_cp(struct unicode* uc) {
+nbool backup_codepoint(struct unicode* uc) {
     if (uc->err != UNICODE_OK || uc->nread == 0)
         return FAIL;
 
@@ -136,15 +117,22 @@ nbool read_codepoint(struct unicode* uc) {
     // Debug
     DBG(DO_UC_DBG, "  \"");
 
-    nbool suc;
-    unsigned char enc[5]; // Max UTF-8 character is 4 bytes + 1 '\0'
-    if((suc = unicode_to_encoding(cp, 1, enc, sizeof(enc))) == FAIL) DBG(DO_UC_DBG, "ERR");
-    else DBG(DO_UC_DBG, "%s", enc);
+    if(IS_VALID_CP(*cp)) DBG_CP(DO_UC_DBG, *cp);
+    else DBG(DO_UC_DBG, "ERR");
 
     DBG(DO_UC_DBG, "\" cat: ");
-    if(suc == FAIL) DBG(DO_UC_DBG, "ERR");
-    else DBG(DO_UC_DBG, "%s", utf8proc_category_to_string(*cp));
+
+    if(IS_VALID_CP(*cp)) DBG(DO_UC_DBG, "%s", utf8proc_category_to_string(*cp));
+    else DBG(DO_UC_DBG, "ERR");
+
     DBG(DO_UC_DBG, "\n");
 
     UNICODE_SUCCESS(uc);
+}
+
+/*
+  Returns the width of a code point
+*/
+unint codepoint_width(int32_t cp) {
+    return (unint)utf8proc_charwidth(cp);
 }

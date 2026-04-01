@@ -73,31 +73,270 @@ int32_t* token_trim_cp_buffer(struct tok_state* tok) {
 
 void tok_state_init(struct tok_state* tok) {
     for(unint i=0; i<MAX_INDENT; ++i) tok->altindstack[i] = tok->indstack[i] = 0;
-    tok->starting_col_offset = tok->col_offset = tok->pendin = tok->indent = 0;
-    tok->atbol = tok->lineno = 1;
-    tok->source = tok->start = tok->end = NULL;
+    tok->level = tok->starting_col_offset = tok->col_offset = tok->pendin = tok->indent = 0;
+    tok->first_lineno = tok->atbol = tok->lineno = 1;
+    tok->multi_line_start = tok->inp = tok->line_start = tok->source = tok->start = tok->end = NULL;
     tok->done = E_OK;
     UNICODE_INIT(&tok->uc);
 }
 
-unint lexer_error_no_col(struct tok_state* tok, void* msg, ...) {
-    va_list args;
-    va_start(args, msg);
+/*
+  Syntax error functions
 
-    LOG("%s:%d ", tok->source, tok->lineno);
-    VLOG(msg, args);
+*/
+
+/*
+  In python its implemented in python
+  stype: error type (SyntaxError)
+  msg: error message
+  filename: file name
+  ...
+  text: the line of code that caused the error
+  end: points to the end of the line of code that caused the error
+  vargs args for formating the msg string
+*/
+void _format_syntax_error(char* stype, char* msg, char* filename, unint* lineno, nint* offset, unint* end_lineno, nint* end_offset, char* text, char* end, va_list vargs) {
+    // char* filename_sufix = "";
+    if(lineno != NULL) {
+        LOG(
+            "  File: \"%s\", line %d\n", 
+            filename != NULL ? filename : "<string>",
+            *lineno
+        );
+    } else if(filename != NULL) { /* Handled later */}
+
+    if(text != NULL && end != NULL) {
+        struct unicode uc;
+        int32_t* cp = &uc.cp;
+        
+        UNICODE_INIT(&uc);
+        uc.buf = uc.curr = text;
+        uc.end = end;
+        
+        
+        char* ltext = NULL;
+        char* rtext = NULL;
+
+        unint lspaces = 0;
+        unint rspaces = 0;
+        unint spaces = 0;
+        unint len = 0;
+        
+        // Iterate through the text
+        while(uc.curr != uc.end) {
+            char* _start = uc.curr;
+
+            nbool suc = READ_CP(&uc);
+        
+            if(suc != SUCCESS) { *cp = 0xFFFD; uc.curr = _start + 1;}
+
+            // Inc len
+            ++len;
+
+            // lstrip logic
+            if(ltext == NULL) {
+                if(*cp == ' ' || *cp == '\n' || *cp == '\f') { ++lspaces; continue; }
+
+                ltext = _start; // The prev char
+            }
+
+            // rstrip logic
+            if(*cp != '\n') { rtext = _start; rspaces = 0; } // The prev char
+            else ++rspaces;
+        }
+        spaces = lspaces + rspaces;
+
+        if(offset == NULL) {
+            LOG("    ");
+            if(ltext == NULL) LOG("\n");
+            else {
+                struct unicode uc;
+                int32_t* cp = &uc.cp;
+                
+                UNICODE_INIT(&uc);
+                uc.buf = uc.curr = ltext;
+                uc.end = end;
+
+                // Iterate through the text
+                while(uc.curr != uc.end) {
+                    char* _start = uc.curr;
+
+                    nbool suc = READ_CP(&uc);
+                
+                    if(suc != SUCCESS) { *cp = 0xFFFD; uc.curr = _start + 1;}
+                    LOG_CP(*cp);
+                }
+                LOG("\n");
+
+            }
+        } else {
+            nint _offset = *offset;
+            nint _end_offset = 0;
+            
+            if(*lineno == *end_lineno) _end_offset = (*end_offset != 0) ? *end_offset : *offset;
+            else _end_offset = (len - rspaces) + 1;
+            
+            if(text != NULL && _offset > (nint)len) _offset = (len - rspaces) + 1;
+            if(text != NULL && _end_offset > (nint)len) _end_offset = (len - rspaces) + 1;
+            if(_offset >= _end_offset || _end_offset < 0) _end_offset = _offset + 1;
+            
+            nint colno = _offset - 1 - spaces;
+            nint end_colno = _end_offset - 1 - spaces;
+
+            if(colno >= 0) {
+                struct unicode uc;
+                int32_t* cp = &uc.cp;
+
+                unint dp_colno = 0;
+
+                UNICODE_INIT(&uc);
+                uc.end = uc.buf = uc.curr = ltext;
+                uc.end += colno;
+                
+                // Iterate through the text
+                while(uc.curr != uc.end) {
+                    char* _start = uc.curr;
+
+                    nbool suc = READ_CP(&uc);
+                    
+                    if(suc != SUCCESS) { *cp = 0xFFFD; uc.curr = _start + 1;}
+                    dp_colno += (CP_WIDTH(*cp) == 2) ? 2 : 1;
+                }
+
+                nint highlighted = end_colno - colno;
+
+                unint caret_count = 0;
+                if(!highlighted) caret_count = (end_colno - colno);
+                else {
+                    UNICODE_INIT(&uc);
+                    uc.buf = uc.curr = ltext + colno;
+                    uc.end = ltext + end_colno;
+
+                    // Iterate through the text
+                    while(uc.curr != uc.end) {
+                        char* _start = uc.curr;
+
+                        nbool suc = READ_CP(&uc);
+                        
+                        if(suc != SUCCESS) { *cp = 0xFFFD; uc.curr = _start + 1;}
+                        caret_count += (CP_WIDTH(*cp) == 2) ? 2 : 1;
+                    }
+                }
+
+                // Print the cursor
+                // Repeated code
+                LOG("    ");
+                if(ltext == NULL) LOG("\n");
+                else {
+                    UNICODE_INIT(&uc);
+                    uc.buf = uc.curr = ltext;
+                    uc.end = end;
+
+                    // Iterate through the text
+                    while(uc.curr != uc.end) {
+                        char* _start = uc.curr;
+
+                        nbool suc = READ_CP(&uc);
+                        if(suc != SUCCESS) { *cp = 0xFFFD; uc.curr = _start + 1;}
+                        LOG_CP(*cp);
+                    }
+                    LOG("\n");
+
+                }
+
+                LOG("    ");
+                for(nint i=0; i<dp_colno; ++i) LOG(" ");
+                for(nint i=0; i<caret_count; ++i) LOG("^");
+                LOG("\n");
+
+            } else {
+                // Repeated code
+                LOG("    ");
+                if(ltext == NULL) LOG("\n");
+                else {
+                    struct unicode uc;
+                    int32_t* cp = &uc.cp;
+                    
+                    UNICODE_INIT(&uc);
+                    uc.buf = uc.curr = ltext;
+                    uc.end = end;
+
+                    // Iterate through the text
+                    while(uc.curr != uc.end) {
+                        char* _start = uc.curr;
+
+                        nbool suc = READ_CP(&uc);
+                    
+                        if(suc != SUCCESS) { *cp = 0xFFFD; uc.curr = _start + 1;}
+                        LOG_CP(*cp);
+                    }
+                    LOG("\n");
+
+                }                
+            }
+        }
+
+    }
+    LOG("%s: ", stype);
+
+    VLOG(msg != NULL ? msg : "<no detail available>", vargs);
+
+    if(lineno == NULL && filename != NULL) LOG("(%s)", filename);
+    LOG("\n");
+}
+
+unint _syntaxerror_range(struct tok_state *tok, const char *format, nint col_offset, nint end_col_offset, va_list vargs) {
+    // Not needed for now
+    if (tok->done == E_ERROR) {
+        return ERRORTOKEN;
+    }
+
+    // Save
+    char* _curr =  tok->uc.curr;
+
+    struct unicode _uc = tok->uc;
+    int32_t* _cp = &_uc.cp;
+    unint len = 0;
+
+    // Line with error
+    _uc.curr = tok->line_start;
+    do {
+        nbool suc = READ_CP(&_uc);
+
+        if(suc != SUCCESS) { *_cp = 0xFFFD; ++_uc.curr; } // print replacement and skip
+
+        if(_uc.curr <= _curr) ++len;
+
+    } while(*_cp != '\n');
+
+    // Cursor
+    if (col_offset == -1) col_offset = len;
+    if (end_col_offset == -1) end_col_offset = col_offset;
+
+    // call func
+    _format_syntax_error("SyntaxError", format, tok->source, &tok->lineno, &col_offset, &tok->lineno, &end_col_offset, tok->line_start, _uc.curr - _uc.nread, vargs);
+
+    tok->done = E_ERROR;
     return ERRORTOKEN;
 }
 
-unint lexer_error(struct tok_state* tok, void* msg, ...) {
-    va_list args;
-    va_start(args, msg);
-
-    LOG("%s:%d ", tok->source, tok->lineno);
-    VLOG(msg, args);
-    LOG("\nColumn: %d\n", tok->col_offset);
-    return ERRORTOKEN;
+unint _Tokenizer_syntaxerror(struct tok_state *tok, const char *format, ...) {
+    va_list vargs;
+    va_start(vargs, format);
+    unint ret = _syntaxerror_range(tok, format, -1, -1, vargs);
+    va_end(vargs);
+    return ret;
 }
+
+unint _Tokenizer_syntaxerror_known_range(struct tok_state *tok, nint col_offset, nint end_col_offset, const char *format, ...) {
+    va_list vargs;
+    va_start(vargs, format);
+    unint ret = _syntaxerror_range(tok, format, col_offset, end_col_offset, vargs);
+    va_end(vargs);
+    return ret;
+}
+
+/* ----------- */
 
 unint make_token(struct tok_state* tok, unint token_type, struct token* token) {
     // For now
@@ -106,7 +345,7 @@ unint make_token(struct tok_state* tok, unint token_type, struct token* token) {
     return token_type;
 }
 
-nbool _backup_cp(struct tok_state* tok) {
+nbool backup_cp(struct tok_state* tok) {
     if(tok->col_offset > 0) --tok->col_offset;
     return BACKUP_CP(&tok->uc);
 }
@@ -126,26 +365,32 @@ void next_cp(struct tok_state* tok) {
     // Unfortunatelly do whole line verification for badly encoded characters
     
     if(uc->curr == uc->buf || *cp == '\n' || *cp == '\r') { // First time or at the end of a line
+        tok->line_start = uc->curr;
         // Save uc values
         struct unicode _uc = *uc;
         
         int32_t prev = 0;
         int32_t* _cp = &_uc.cp;
 
+        nint col_offset = 0;
+
         // Read & verify a line or stop at EOF
         while (true) {
-            nbool suc = READ_CODEPOINT(&_uc);
+            nbool suc = READ_CP(&_uc);
 
             DBG(DO_LEXER_CHAR_VERIFICATION_LOOKAHEAD_DBG, "VERIFY READ '%c', %d\n", (char)*_cp, *_cp);
-
+            
             if(suc != SUCCESS){
                 if(_uc.err == UNICODE_ERR_CODEPOINT) {
                     tok->done = E_DECODE;
-                    lexer_error_no_col(tok, "Malformed character encoding");
-                } else lexer_error_no_col(tok, "Unknown Unicode error");
+                    _Tokenizer_syntaxerror_known_range(tok, col_offset+1, col_offset+1, "malformed character encoding");
+                } else _Tokenizer_syntaxerror_known_range(tok, col_offset+1, col_offset+1, "unknown Unicode error");
                 *cp = EOF;
                 return;
-            } else tok->done = E_OK;
+            }
+
+            tok->done = E_OK;
+            ++col_offset;
 
             if(prev == '\r') {
                 if (*_cp != '\n') BACKUP_CP(&_uc);
@@ -157,8 +402,11 @@ void next_cp(struct tok_state* tok) {
             if (*_cp == '\n') break;
             if (*_cp == '\r') continue;
         }
+        DBG(DO_LEXER_CHAR_VERIFICATION_LOOKAHEAD_DBG, "Verification done\n");
+        tok->inp = _uc.curr;
+
     }
-    READ_CODEPOINT(uc); // It is safe to not check for errors
+    READ_CP(uc); // It is safe to not check for errors
 
     ++tok->col_offset;
     DBG(DO_LEXER_CHAR_DBG, "READ '%c', %d", (char)*cp, *cp);
@@ -176,6 +424,13 @@ void increment_line_number(struct tok_state* tok) {
     tok->col_offset = 0;
     tok->atbol = 1;
 }
+
+unint _Tokenizer_indenterror(struct tok_state *tok) {
+    tok->done = E_TABSPACE;
+    tok->uc.curr = tok->inp; // tok->inp = End of line
+    return ERRORTOKEN;    
+}
+
 
 /*
   Parse indentation and update tokenizer state
@@ -199,7 +454,7 @@ nbool get_indentation(struct tok_state* tok) {
         }
         // No formfeed
         // Handle multiline
-        else if(*cp == EOF) return ERRORTOKEN;
+        else if(*cp == EOF) return FAIL;
         else break;
     }
     // Blank lines; Comments ignore indentation
@@ -207,22 +462,26 @@ nbool get_indentation(struct tok_state* tok) {
     else if(*cp == '/') {
         next_cp(tok);
         if(*cp == '*') blankline = 1;
-        _backup_cp(tok); // No problem on trying to backup and EOF/error
+        backup_cp(tok); // No problem on trying to backup and EOF/error
 
     }
-    _backup_cp(tok);
+    backup_cp(tok);
 
     // col = cont_line_col ? cont_line_col : col;
     // altcol = cont_line_col ? cont_line_col : altcol;
-    if(!blankline) {
+    if(!blankline && tok->level == 0) {
         col = col;
         altcol = altcol;
 
         if(col == tok->indstack[tok->indent]) {
-            if (altcol != tok->altindstack[tok->indent]) DO_FAIL(lexer_error(tok, "E_TABSPACE"));
+            if (altcol != tok->altindstack[tok->indent]) DO_FAIL(_Tokenizer_indenterror(tok));
         } else if(col > tok->indstack[tok->indent]) {
-            if (tok->indent+1 >= MAX_INDENT) DO_FAIL(lexer_error(tok, "E_TOODEEP"));
-            if (altcol <= tok->altindstack[tok->indent]) DO_FAIL(lexer_error(tok, "E_TABSPACE"));
+            if (tok->indent+1 >= MAX_INDENT) {
+                tok->done = E_TOODEEP;
+                tok->uc.curr = tok->inp;
+                return FAIL;
+            }
+            if (altcol <= tok->altindstack[tok->indent]) DO_FAIL(_Tokenizer_indenterror(tok));
             tok->pendin++;
             tok->indstack[++tok->indent] = col;
             tok->altindstack[tok->indent] = altcol;
@@ -232,8 +491,12 @@ nbool get_indentation(struct tok_state* tok) {
                 tok->pendin--;
                 tok->indent--;
             }
-            if (col != tok->indstack[tok->indent]) DO_FAIL(lexer_error(tok, "E_DEDENT"));
-            if (altcol != tok->altindstack[tok->indent]) DO_FAIL(lexer_error(tok, "E_TABSPACE"));
+            if (col != tok->indstack[tok->indent]) {
+                tok->done = E_DEDENT;
+                tok->uc.curr = tok->inp;
+                return FAIL;
+            }
+            if (altcol != tok->altindstack[tok->indent]) DO_FAIL(_Tokenizer_indenterror(tok));
         }
     }
 
@@ -355,9 +618,19 @@ unint tok_decimal_tail(struct tok_state* tok) {
 
         next_cp(tok);
         if(!ISDIGIT(*cp)) {
-            lexer_error(tok, "Invalid decimal literal");
+            _Tokenizer_syntaxerror(tok, "invalid decimal literal");
             return FAIL;
         }
+    }
+    return SUCCESS;
+}
+
+unint verify_end_of_number(struct tok_state* tok, char* kind) {
+    int32_t* cp = &tok->uc.cp;
+    if(ISASCII(*cp) && is_potential_identifier_char(*cp)) {
+        backup_cp(tok);
+        _Tokenizer_syntaxerror(tok, "invalid %s literal", kind);
+        return FAIL;
     }
     return SUCCESS;
 }
@@ -377,7 +650,7 @@ unint tokenize(struct tok_state* tok, struct token* token) {
         tok->atbol = 0;
         DBG(1, "Reading Indentation\n");
         // Updates tok->pendin and errors
-        if(get_indentation(tok) == FAIL) return lexer_error(tok, "Indentation error");
+        if(get_indentation(tok) == FAIL) return ERRORTOKEN;
 
     }
     // Need to generate indent/dedent tokens?
@@ -388,7 +661,7 @@ _loop:
 
     /* Peek ahead at the next character */
     next_cp(tok);
-    _backup_cp(tok);
+    backup_cp(tok);
 
     // Skip spaces
     do {
@@ -424,16 +697,25 @@ _loop:
         } else if(*cp == '*') {
             int32_t prev = 0;
 
+            tok->first_lineno = tok->lineno;
+            tok->multi_line_start = tok->line_start;
+
             while(true) {
                 next_cp(tok);
-
                 // Errors
                 if(tok->done == E_DECODE)
                     return ERRORTOKEN; // break; in python (string)
 
-                // Enexpected ending
-                if(*cp == EOF)
-                    return lexer_error(tok, "Unterminated multi-line comment");
+                // Unexpected ending
+                if(*cp == EOF) {
+                    tok->uc.curr = (char *)tok->start;
+                    tok->uc.curr++;
+                    tok->line_start = tok->multi_line_start;
+                    unint start = tok->lineno;
+                    tok->lineno = tok->first_lineno;
+
+                    return _Tokenizer_syntaxerror(tok, "Unterminated multi-line comment (detected at line %d)", start);
+                }
 
                 // New line
                 if(*cp == '\n')
@@ -448,7 +730,7 @@ _loop:
                     if(*cp == '\n')
                         break;
 
-                    return lexer_error(tok, "Multi-line comments must end on a new line ('\\n')");
+                    return _Tokenizer_syntaxerror(tok, "Multi-line comments must end on a new line ('\\n')");
                 }
                 prev = *cp;
             }
@@ -462,7 +744,7 @@ _loop:
     // EOF or unicode errors
     if(*cp == EOF) {
         if (tok->uc.err == UNICODE_OK) return ENDMARKER;
-        return lexer_error(tok, "Unicode error");
+        return _Tokenizer_syntaxerror(tok, "Unicode error");
     }
 
     // Identifier
@@ -476,37 +758,39 @@ _loop:
     if(is_potential_identifier_start(*cp)) {
 
         // ASCII validation is done on the while condition but Unicode validation isnt so do it here
-        if(!ISASCII(*cp) && is_identifier_start(*cp) == FAIL) return lexer_error(tok, "BAD");
+        if(!ISASCII(*cp) && is_identifier_start(*cp) == FAIL) return _Tokenizer_syntaxerror(tok, "BAD");
 
         // Init the cp buffer
         token_cp_buffer = token_cp_buffer_init(tok);
-        if(token_cp_buffer == NULL) return lexer_error(tok, "Could not allocate initial buffer for identifier");
+        if(token_cp_buffer == NULL) return _Tokenizer_syntaxerror(tok, "Could not allocate initial buffer for identifier");
 
         // If it's an '@' identifier, push it
         if(is_at_identifier) {
             token_push_cp(tok, (int32_t)'@');
-            if(token_cp_buffer == NULL) return lexer_error(tok, "Could not allocate space for identifier");
+            if(token_cp_buffer == NULL) return _Tokenizer_syntaxerror(tok, "Could not allocate space for identifier");
         }
 
         // Read the identifier
         while(is_potential_identifier_char(*cp)) {
             // Unicode validation is not done on the while condition so it is done here
-            if(!ISASCII(*cp) && is_identifier_continue(*cp) == FAIL) return lexer_error(tok, "BAD2");      
+            if(!ISASCII(*cp) && is_identifier_continue(*cp) == FAIL) return _Tokenizer_syntaxerror(tok, "BAD2");      
 
             // Push the codepoint
             // This also serves as the "push" of the identifier start
             token_cp_buffer = token_push_cp(tok, *cp);
-            if(token_cp_buffer == NULL) return lexer_error(tok, "Could not allocate space for identifier");
+            if(token_cp_buffer == NULL) return _Tokenizer_syntaxerror(tok, "Could not allocate space for identifier");
         
             next_cp(tok);
         }
-        _backup_cp(tok);
+        backup_cp(tok);
 
         token_cp_buffer = token_trim_cp_buffer(tok);
-        if(token_cp_buffer == NULL) return lexer_error(tok, "Could not trim left space for identifier");
+        if(token_cp_buffer == NULL) return _Tokenizer_syntaxerror(tok, "Could not trim left space for identifier");
+
+        // Verify identifier name
 
         // Test for now
-        for(unint i=0; i<tok->token_cp_buffer_size; ++i) DBG(1, "%c", (char)token_cp_buffer[i]);
+        for(unint i=0; i<tok->token_cp_buffer_size; ++i) DBG_CP(1, token_cp_buffer[i]);
         return NAME;
     }
 
@@ -519,6 +803,16 @@ _loop:
         increment_line_number(tok);
 
         return NEWLINE;
+    }
+
+    // Period or number starting with period?
+    if(*cp == '.') {
+        next_cp(tok);
+
+        if(ISDIGIT(*cp)) goto fraction;
+        else backup_cp(tok);
+
+        return DOT;
     }
 
     if(ISDIGIT(*cp)) {
@@ -535,8 +829,10 @@ _loop:
                     if(*cp == '_') next_cp(tok);
 
                     // If it'ts not a hex digit
-                    if(!ISXDIGIT(*cp)) return lexer_error(tok, "Invalid hexadecimal literal");
-
+                    if(!ISXDIGIT(*cp)) {
+                        backup_cp(tok);
+                        return _Tokenizer_syntaxerror(tok, "invalid hexadecimal literal");
+                    }
                     do {
                         next_cp(tok);
                     }while(ISXDIGIT(*cp));
@@ -544,7 +840,7 @@ _loop:
                 }while(*cp == '_');
 
                 // Verify the end of the number
-                if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid hexadecimal literal");
+                if(verify_end_of_number(tok, "hexadecimal") == FAIL) return ERRORTOKEN;
             }
             
             // Octal number
@@ -557,9 +853,11 @@ _loop:
 
                     // If it'ts not an octal digit
                     if(!ISODIGIT(*cp)) {
-                        return ISDIGIT(*cp) ? 
-                            lexer_error(tok, "Invalid digit '%c' in octal literal", (char)*cp) :
-                            lexer_error(tok, "Invalid octal literal");
+                        if(ISDIGIT(*cp)) return _Tokenizer_syntaxerror(tok, "invalid digit '%c' in octal literal", (char)*cp);
+                        else {
+                            backup_cp(tok);
+                            return _Tokenizer_syntaxerror(tok, "invalid octal literal");
+                        }
                     }
 
                     do {
@@ -569,10 +867,10 @@ _loop:
                 }while(*cp == '_');
 
                 // Verify if it was a digit but not in octal range
-                if(ISDIGIT(*cp)) return lexer_error(tok, "Invalid digit '%c' in octal literal", (char)*cp);
+                if(ISDIGIT(*cp)) return _Tokenizer_syntaxerror(tok, "Invalid digit '%c' in octal literal", (char)*cp);
 
                 // Verify the end of the number
-                if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid octal literal");
+                if(verify_end_of_number(tok, "octal") == FAIL) return ERRORTOKEN;
             }
         
             // Binary number
@@ -585,9 +883,11 @@ _loop:
 
                     // If it'ts not a binary digit
                     if(!ISBDIGIT(*cp)) {
-                        return ISDIGIT(*cp) ? 
-                            lexer_error(tok, "Invalid digit '%c' in binary literal", (char)*cp) :
-                            lexer_error(tok, "Invalid binary literal");
+                        if(ISDIGIT(*cp)) _Tokenizer_syntaxerror(tok, "invalid digit '%c' in binary literal", (char)*cp);
+                        else {
+                            backup_cp(tok);
+                            _Tokenizer_syntaxerror(tok, "invalid binary literal");
+                        }
                     }
 
                     do {
@@ -597,10 +897,10 @@ _loop:
                 }while(*cp == '_');
 
                 // Verify if it was a digit but not in binary range
-                if(ISDIGIT(*cp)) return lexer_error(tok, "Invalid digit '%c' in binary literal", (char)*cp);
+                if(ISDIGIT(*cp)) return _Tokenizer_syntaxerror(tok, "Invalid digit '%c' in binary literal", (char)*cp);
 
                 // Verify the end of the number
-                if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid binary literal");
+                if(verify_end_of_number(tok, "binary") == FAIL) return _Tokenizer_syntaxerror(tok, "invalid binary literal");
             }
 
             // No suport for old-style so just read the number as a decimal
@@ -614,7 +914,7 @@ decimal:
 
             if(*cp == '.') {
                 next_cp(tok);
-
+fraction:
                 // Decimal part
                 if(ISDIGIT(*cp)) {
                     if(tok_decimal_tail(tok) == FAIL) return ERRORTOKEN;
@@ -628,13 +928,16 @@ decimal:
                 // Sign
                 if(*cp == '+' || *cp == '-') {
                     next_cp(tok);
-                    if(!ISDIGIT(*cp)) return lexer_error(tok, "Invalid decimal literal"); 
+                    if(!ISDIGIT(*cp)) {
+                        backup_cp(tok);
+                        return _Tokenizer_syntaxerror(tok, "invalid decimal literal");
+                    }
 
                 // Digits
                 } else if(!ISDIGIT(*cp)) {
                     // Verify end of number
-                    if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid decimal literal");
-
+                    if(verify_end_of_number(tok, "decimal") == FAIL) return ERRORTOKEN;
+                    backup_cp(tok);
                     return NUMBER;
                 }
 
@@ -643,9 +946,10 @@ decimal:
             }
             
             // Verify end of number
-            else if(ISASCII(*cp) && is_potential_identifier_char(*cp)) return lexer_error(tok, "Invalid decimal literal");
+            else if(verify_end_of_number(tok, "decimal") == FAIL) return ERRORTOKEN;
 
         }
+        backup_cp(tok);
         return NUMBER;
     }
     
@@ -653,9 +957,14 @@ decimal:
         while(true) {
             next_cp(tok);
             DBG(1, "READ STR: %c\n", *cp);
-            // No need to do the checks that python does because those checks are for triple quote strings that allow new lines that are not checked immediately when reading the '"'
+            // No need to do the checks that python does because those checks are for triple quote strings that allow new lines that are not checked immediately for UTF8 errors when reading the '"'
             if(*cp == EOF || *cp == '\n') {
-                lexer_error(tok, "unterminated string literal (detected at line %d)", tok->lineno);
+
+                tok->uc.curr = (char *)tok->start;
+                tok->uc.curr++;
+
+                _Tokenizer_syntaxerror(tok, "unterminated string literal (detected at line %d)", tok->lineno);
+                //lexer_error_with_col(tok, 1, "unterminated string literal (detected at line %d)", tok->lineno);
                 if (*cp != '\n') tok->done = E_EOLS;
                 return ERRORTOKEN;
             }
@@ -674,5 +983,5 @@ decimal:
     }
 
     DBG(1, "GOT TO THE END\n");
-    return lexer_error(tok, "Invalid character (U+%04X)", *cp);
+    return _Tokenizer_syntaxerror(tok, "Invalid character (U+%04X)", *cp);
 }

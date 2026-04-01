@@ -15,7 +15,7 @@ nbool assemble(char* code, unint len) {
     tok_state_init(&tok);
 
     tok.uc.curr = tok.uc.buf = code;
-    tok.uc.end = code+len;
+    tok.uc.end = code+len-1;
     tok.source = "main";
 
     struct token token;
