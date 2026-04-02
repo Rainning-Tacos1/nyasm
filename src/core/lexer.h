@@ -32,29 +32,34 @@ struct tok_state {
     // Unicode related
     struct unicode uc;
 
-    char* inp;
+    const char* inp;
 
     // () [] {} Parentheses nesting level
     unint level;
 
     // File related
-    char* source;
+    const char* source;
 
     // State
     unint atbol;
     unint done;
     
     // Line/Column related
-    char* line_start;
-    char* multi_line_start;
-    unint first_lineno;
-    unint lineno;
-    unint col_offset;
-    unint starting_col_offset;
+    const char* line_start;
+    const char* multi_line_start;
+    nint first_lineno;
+    nint lineno;
+    nint col_offset;
+    nint starting_col_offset;
+
+    // Parentheses related
+    int32_t parenstack[MAX_PARENTHESES_LEVEL];
+    nint parenlinenostack[MAX_PARENTHESES_LEVEL];
+    nint parencolstack[MAX_PARENTHESES_LEVEL];
 
     // Token related
-    char* start;
-    char* end;
+    const char* start;
+    const char* end;
 
     // Token cp buffer related
     unint token_cp_buffer_idx;
@@ -66,8 +71,6 @@ struct tok_state {
     unint indstack[MAX_INDENT];
     unint altindstack[MAX_INDENT];
 
-    // May change place
-    unsigned char encoded[MAX_ENCODING_SIZE];
 };
 
 void tok_state_init(struct tok_state* tok);

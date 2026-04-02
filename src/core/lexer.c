@@ -48,7 +48,7 @@ int32_t* token_push_cp(struct tok_state* tok, int32_t cp) {
     
     // Need more space?
     if(tok->token_cp_buffer_idx == tok->token_cp_buffer_size) {
-        tok->token_cp_buffer_size = tok->token_cp_buffer_size + tok->token_cp_buffer_size >> 1; // 1.5x growth
+        tok->token_cp_buffer_size = tok->token_cp_buffer_size + (tok->token_cp_buffer_size >> 1); // 1.5x growth
 
         mem = (int32_t*)MEM_RESIZE_LAST(tok->token_cp_buffer_size);
         if(mem == NULL) return NULL;
@@ -95,7 +95,7 @@ void tok_state_init(struct tok_state* tok) {
   end: points to the end of the line of code that caused the error
   vargs args for formating the msg string
 */
-void _format_syntax_error(char* stype, char* msg, char* filename, unint* lineno, nint* offset, unint* end_lineno, nint* end_offset, char* text, char* end, va_list vargs) {
+void _format_syntax_error(const char* stype, const char* msg, const char* filename, nint* lineno, nint* offset, nint* end_lineno, nint* end_offset, const char* text, const char* end, va_list vargs) {
     // char* filename_sufix = "";
     if(lineno != NULL) {
         LOG(
@@ -114,8 +114,9 @@ void _format_syntax_error(char* stype, char* msg, char* filename, unint* lineno,
         uc.end = end;
         
         
-        char* ltext = NULL;
-        char* rtext = NULL;
+        const char* ltext = NULL;
+        const char* rtext = NULL;
+        (void)rtext; // Unused
 
         unint lspaces = 0;
         unint rspaces = 0;
@@ -124,7 +125,7 @@ void _format_syntax_error(char* stype, char* msg, char* filename, unint* lineno,
         
         // Iterate through the text
         while(uc.curr != uc.end) {
-            char* _start = uc.curr;
+            const char* _start = uc.curr;
 
             nbool suc = READ_CP(&uc);
         
@@ -159,7 +160,7 @@ void _format_syntax_error(char* stype, char* msg, char* filename, unint* lineno,
 
                 // Iterate through the text
                 while(uc.curr != uc.end) {
-                    char* _start = uc.curr;
+                    const char* _start = uc.curr;
 
                     nbool suc = READ_CP(&uc);
                 
@@ -195,7 +196,7 @@ void _format_syntax_error(char* stype, char* msg, char* filename, unint* lineno,
                 
                 // Iterate through the text
                 while(uc.curr != uc.end) {
-                    char* _start = uc.curr;
+                    const char* _start = uc.curr;
 
                     nbool suc = READ_CP(&uc);
                     
@@ -214,7 +215,7 @@ void _format_syntax_error(char* stype, char* msg, char* filename, unint* lineno,
 
                     // Iterate through the text
                     while(uc.curr != uc.end) {
-                        char* _start = uc.curr;
+                        const char* _start = uc.curr;
 
                         nbool suc = READ_CP(&uc);
                         
@@ -234,7 +235,7 @@ void _format_syntax_error(char* stype, char* msg, char* filename, unint* lineno,
 
                     // Iterate through the text
                     while(uc.curr != uc.end) {
-                        char* _start = uc.curr;
+                        const char* _start = uc.curr;
 
                         nbool suc = READ_CP(&uc);
                         if(suc != SUCCESS) { *cp = 0xFFFD; uc.curr = _start + 1;}
@@ -263,7 +264,7 @@ void _format_syntax_error(char* stype, char* msg, char* filename, unint* lineno,
 
                     // Iterate through the text
                     while(uc.curr != uc.end) {
-                        char* _start = uc.curr;
+                        const char* _start = uc.curr;
 
                         nbool suc = READ_CP(&uc);
                     
@@ -292,7 +293,7 @@ unint _syntaxerror_range(struct tok_state *tok, const char *format, nint col_off
     }
 
     // Save
-    char* _curr =  tok->uc.curr;
+    const char* _curr =  tok->uc.curr;
 
     struct unicode _uc = tok->uc;
     int32_t* _cp = &_uc.cp;
@@ -336,20 +337,14 @@ unint _Tokenizer_syntaxerror_known_range(struct tok_state *tok, nint col_offset,
     return ret;
 }
 
+unint _Tokenizer_indenterror(struct tok_state *tok) {
+    tok->done = E_TABSPACE;
+    tok->uc.curr = tok->inp; // tok->inp = End of line
+    return ERRORTOKEN;    
+}
+
+
 /* ----------- */
-
-unint make_token(struct tok_state* tok, unint token_type, struct token* token) {
-    // For now
-    token->lineno = tok->lineno;
-    token->col_offset = tok->col_offset;
-    return token_type;
-}
-
-nbool backup_cp(struct tok_state* tok) {
-    if(tok->col_offset > 0) --tok->col_offset;
-    return BACKUP_CP(&tok->uc);
-}
-
 
 /*
   Tries to read the next code point
@@ -378,7 +373,7 @@ void next_cp(struct tok_state* tok) {
         while (true) {
             nbool suc = READ_CP(&_uc);
 
-            DBG(DO_LEXER_CHAR_VERIFICATION_LOOKAHEAD_DBG, "VERIFY READ '%c', %d\n", (char)*_cp, *_cp);
+            DBG(DO_LEXER_CHAR_VERIFICATION_LOOKAHEAD_DBG, "VERIFY READ '%s', %d\n", CP_TO_ENCODING(*cp), *_cp);
             
             if(suc != SUCCESS){
                 if(_uc.err == UNICODE_ERR_CODEPOINT) {
@@ -409,7 +404,7 @@ void next_cp(struct tok_state* tok) {
     READ_CP(uc); // It is safe to not check for errors
 
     ++tok->col_offset;
-    DBG(DO_LEXER_CHAR_DBG, "READ '%c', %d", (char)*cp, *cp);
+    DBG(DO_LEXER_CHAR_DBG, "READ '%s', %d", CP_TO_ENCODING(*cp), *cp);
 
     // add a 'fake' new line at the end
     if(curr != '\n' && *cp == EOF) {
@@ -419,18 +414,24 @@ void next_cp(struct tok_state* tok) {
     }
 }
 
+nbool backup_cp(struct tok_state* tok) {
+    if(tok->col_offset > 0) --tok->col_offset;
+    return BACKUP_CP(&tok->uc);
+}
+
+
 void increment_line_number(struct tok_state* tok) {
     ++tok->lineno;
     tok->col_offset = 0;
     tok->atbol = 1;
 }
 
-unint _Tokenizer_indenterror(struct tok_state *tok) {
-    tok->done = E_TABSPACE;
-    tok->uc.curr = tok->inp; // tok->inp = End of line
-    return ERRORTOKEN;    
+unint make_token(struct tok_state* tok, unint token_type, struct token* token) {
+    // For now
+    token->lineno = tok->lineno;
+    token->col_offset = tok->col_offset;
+    return token_type;
 }
-
 
 /*
   Parse indentation and update tokenizer state
@@ -438,10 +439,9 @@ unint _Tokenizer_indenterror(struct tok_state *tok) {
     0 : Success
     1 : Indentation error
 */
-nbool get_indentation(struct tok_state* tok) {
+nbool get_indentation(struct tok_state* tok, unint* blankline) {
     unint col = 0;
     unint altcol = 0;
-    unint blankline = 0;
 
     int32_t* cp = &tok->uc.cp;
 
@@ -458,10 +458,10 @@ nbool get_indentation(struct tok_state* tok) {
         else break;
     }
     // Blank lines; Comments ignore indentation
-    if(*cp == '#' || *cp == '\n' || *cp == '\r') blankline = 1;
+    if(*cp == '#' || *cp == '\n' || *cp == '\r') *blankline = 1;
     else if(*cp == '/') {
         next_cp(tok);
-        if(*cp == '*') blankline = 1;
+        if(*cp == '*') *blankline = 1;
         backup_cp(tok); // No problem on trying to backup and EOF/error
 
     }
@@ -469,7 +469,7 @@ nbool get_indentation(struct tok_state* tok) {
 
     // col = cont_line_col ? cont_line_col : col;
     // altcol = cont_line_col ? cont_line_col : altcol;
-    if(!blankline && tok->level == 0) {
+    if(!*blankline && tok->level == 0) {
         col = col;
         altcol = altcol;
 
@@ -530,17 +530,38 @@ unint is_identifier_start(int32_t cp) {
     if (
         cp == '_' ||
 
-        cat == UTF8PROC_CATEGORY_LU ||
-        cat == UTF8PROC_CATEGORY_LL ||
-        cat == UTF8PROC_CATEGORY_LT ||
-        cat == UTF8PROC_CATEGORY_LM ||
-        cat == UTF8PROC_CATEGORY_LO
+        cat == UNICODE_CATEGORY_LU ||
+        cat == UNICODE_CATEGORY_LL ||
+        cat == UNICODE_CATEGORY_LT ||
+        cat == UNICODE_CATEGORY_LM ||
+        cat == UNICODE_CATEGORY_LO
     ) {
         return SUCCESS;
     }
     else {
         return FAIL;
     }
+}
+
+unint utf8proc_is_printable(int32_t cp) {
+    unint cat = UNICODE_CAT(cp);
+
+    // Non-printable categories
+    if (cat == UNICODE_CATEGORY_CC ||  // Control
+        cat == UNICODE_CATEGORY_CF ||  // Format
+        cat == UNICODE_CATEGORY_CS ||  // Surrogate
+        cat == UNICODE_CATEGORY_CO ||  // Private use
+        cat == UNICODE_CATEGORY_CN ||  // Unassigned
+        cat == UNICODE_CATEGORY_ZL ||  // Line separator
+        cat == UNICODE_CATEGORY_ZP)    // Paragraph separator
+    {
+        return FAIL;
+    }
+
+    // Exclude Unicode non-characters
+    if ((cp & 0xFFFF) >= 0xFFFE || (cp >= 0xFDD0 && cp <= 0xFDEF)) return FAIL;
+
+    return SUCCESS;
 }
 
 /*
@@ -636,27 +657,209 @@ unint verify_end_of_number(struct tok_state* tok, char* kind) {
 }
 
 unint verify_identifier(struct tok_state* tok) {
-    
+    return SUCCESS;
 }
+
+/* Some token helper functions */
+
+unint _Token_OneChar(int32_t c1){
+    switch (c1) {
+    case '!': return EXCLAMATION;
+    case '%': return PERCENT;
+    case '&': return AMPER;
+    case '(': return LPAR;
+    case ')': return RPAR;
+    case '*': return STAR;
+    case '+': return PLUS;
+    case ',': return COMMA;
+    case '-': return MINUS;
+    case '.': return DOT;
+    case '/': return SLASH;
+    case ':': return COLON;
+    // case ';': return SEMI;
+    case '<': return LESS;
+    case '=': return EQUAL;
+    case '>': return GREATER;
+    // case '@': return AT;
+    case '[': return LSQB;
+    case ']': return RSQB;
+    case '^': return CIRCUMFLEX;
+    // case '{': return LBRACE;
+    case '|': return VBAR;
+    // case '}': return RBRACE;
+    case '~': return TILDE;
+    }
+    return OP;
+}
+
+unint _Token_TwoChars(int32_t c1, int32_t c2) {
+    switch (c1) {
+    case '!':
+        switch (c2) {
+        case '=': return NOTEQUAL;
+        }
+        break;
+    case '%':
+        switch (c2) {
+        case '=': return PERCENTEQUAL;
+        }
+        break;
+    case '&':
+        switch (c2) {
+        case '=': return AMPEREQUAL;
+        }
+        break;
+    case '*':
+        switch (c2) {
+        case '*': return DOUBLESTAR;
+        case '=': return STAREQUAL;
+        }
+        break;
+    case '+':
+        switch (c2) {
+        case '=': return PLUSEQUAL;
+        }
+        break;
+    case '-':
+        switch (c2) {
+        case '=': return MINEQUAL;
+        case '>': return RARROW;
+        }
+        break;
+    case '/':
+        switch (c2) {
+        case '/': return DOUBLESLASH;
+        case '=': return SLASHEQUAL;
+        }
+        break;
+    case ':':
+        switch (c2) {
+        case '=': return COLONEQUAL;
+        }
+        break;
+    case '<':
+        switch (c2) {
+        case '<': return LEFTSHIFT;
+        case '=': return LESSEQUAL;
+        case '>': return NOTEQUAL;
+        }
+        break;
+    case '=':
+        switch (c2) {
+        case '=': return EQEQUAL;
+        }
+        break;
+    case '>':
+        switch (c2) {
+        case '=': return GREATEREQUAL;
+        case '>': return RIGHTSHIFT;
+        }
+        break;
+    // case '@':
+    //     switch (c2) {
+    //     case '=': return ATEQUAL;
+    //     }
+    //     break;
+    case '^':
+        switch (c2) {
+        case '=': return CIRCUMFLEXEQUAL;
+        }
+        break;
+    case '|':
+        switch (c2) {
+        case '=': return VBAREQUAL;
+        }
+        break;
+    }
+    return OP;
+}
+
+unint _Token_ThreeChars(int32_t c1, int32_t c2, int32_t c3) {
+    switch (c1) {
+    case '*':
+        switch (c2) {
+        case '*':
+            switch (c3) {
+            case '=': return DOUBLESTAREQUAL;
+            }
+            break;
+        }
+        break;
+    // case '.':
+    //     switch (c2) {
+    //     case '.':
+    //         switch (c3) {
+    //         case '.': return ELLIPSIS;
+    //         }
+    //         break;
+    //     }
+    //     break;
+    case '/':
+        switch (c2) {
+        case '/':
+            switch (c3) {
+            case '=': return DOUBLESLASHEQUAL;
+            }
+            break;
+        }
+        break;
+    case '<':
+        switch (c2) {
+        case '<':
+            switch (c3) {
+            case '=': return LEFTSHIFTEQUAL;
+            }
+            break;
+        }
+        break;
+    case '>':
+        switch (c2) {
+        case '>':
+            switch (c3) {
+            case '=': return RIGHTSHIFTEQUAL;
+            }
+            break;
+        }
+        break;
+    }
+    return OP;
+}
+
+/* ----------- */
 
 unint tokenize(struct tok_state* tok, struct token* token) {
     int32_t* cp = &tok->uc.cp;
     unint* nread = &tok->uc.nread;
+    (void)nread; // Unused for now
 
     int32_t* token_cp_buffer = NULL;
+
+    unint blankline = 0;
+
+    const char *p_start = NULL;
+    const char *p_end = NULL;
+nextline:
+    tok->start = NULL;
+    tok->starting_col_offset = -1;
+    blankline = 0;
 
     // If: At Begining Of Line
     if(tok->atbol) {
         tok->atbol = 0;
-        DBG(1, "Reading Indentation\n");
+        DBG(DO_LEXER_INDENTATION_DBG, "Reading Indentation\n");
         // Updates tok->pendin and errors
-        if(get_indentation(tok) == FAIL) return ERRORTOKEN;
+        if(get_indentation(tok, &blankline) == FAIL) return ERRORTOKEN;
 
     }
+
+    tok->start = tok->uc.curr;
+    tok->starting_col_offset = tok->col_offset;
+
     // Need to generate indent/dedent tokens?
     while (tok->pendin != 0) return generate_indent_dedent_token(tok, token); // Updates tok->pendin
 
 _loop:
+    if (0) goto _loop; // Remove Compiler warning about unused label
     tok->start = NULL;
 
     /* Peek ahead at the next character */
@@ -791,6 +994,10 @@ _loop:
 
         // Test for now
         for(unint i=0; i<tok->token_cp_buffer_size; ++i) DBG_CP(1, token_cp_buffer[i]);
+
+        p_start = tok->start;
+        p_end = tok->uc.curr;
+
         return NAME;
     }
 
@@ -801,7 +1008,10 @@ _loop:
     if (*cp == '\n') {
         // Increment line number
         increment_line_number(tok);
+        if (blankline || tok->level > 0) goto nextline;
 
+        p_start = tok->start;
+        p_end = tok->uc.curr - tok->uc.nread;
         return NEWLINE;
     }
 
@@ -812,9 +1022,12 @@ _loop:
         if(ISDIGIT(*cp)) goto fraction;
         else backup_cp(tok);
 
+        p_start = tok->start;
+        p_end = tok->uc.curr;
         return DOT;
     }
 
+    // Digits / numbers
     if(ISDIGIT(*cp)) {
         if(*cp == '0') {
             // Hex, octal, bin
@@ -853,7 +1066,7 @@ _loop:
 
                     // If it'ts not an octal digit
                     if(!ISODIGIT(*cp)) {
-                        if(ISDIGIT(*cp)) return _Tokenizer_syntaxerror(tok, "invalid digit '%c' in octal literal", (char)*cp);
+                        if(ISDIGIT(*cp)) return _Tokenizer_syntaxerror(tok, "invalid digit '%s' in octal literal", CP_TO_ENCODING(*cp));
                         else {
                             backup_cp(tok);
                             return _Tokenizer_syntaxerror(tok, "invalid octal literal");
@@ -867,7 +1080,7 @@ _loop:
                 }while(*cp == '_');
 
                 // Verify if it was a digit but not in octal range
-                if(ISDIGIT(*cp)) return _Tokenizer_syntaxerror(tok, "Invalid digit '%c' in octal literal", (char)*cp);
+                if(ISDIGIT(*cp)) return _Tokenizer_syntaxerror(tok, "Invalid digit '%s' in octal literal", CP_TO_ENCODING(*cp));
 
                 // Verify the end of the number
                 if(verify_end_of_number(tok, "octal") == FAIL) return ERRORTOKEN;
@@ -883,7 +1096,7 @@ _loop:
 
                     // If it'ts not a binary digit
                     if(!ISBDIGIT(*cp)) {
-                        if(ISDIGIT(*cp)) _Tokenizer_syntaxerror(tok, "invalid digit '%c' in binary literal", (char)*cp);
+                        if(ISDIGIT(*cp)) _Tokenizer_syntaxerror(tok, "invalid digit '%s' in binary literal", CP_TO_ENCODING(*cp));
                         else {
                             backup_cp(tok);
                             _Tokenizer_syntaxerror(tok, "invalid binary literal");
@@ -897,7 +1110,7 @@ _loop:
                 }while(*cp == '_');
 
                 // Verify if it was a digit but not in binary range
-                if(ISDIGIT(*cp)) return _Tokenizer_syntaxerror(tok, "Invalid digit '%c' in binary literal", (char)*cp);
+                if(ISDIGIT(*cp)) return _Tokenizer_syntaxerror(tok, "Invalid digit '%s' in binary literal", CP_TO_ENCODING(*cp));
 
                 // Verify the end of the number
                 if(verify_end_of_number(tok, "binary") == FAIL) return _Tokenizer_syntaxerror(tok, "invalid binary literal");
@@ -938,6 +1151,9 @@ fraction:
                     // Verify end of number
                     if(verify_end_of_number(tok, "decimal") == FAIL) return ERRORTOKEN;
                     backup_cp(tok);
+
+                    p_start = tok->start;
+                    p_end = tok->uc.curr;
                     return NUMBER;
                 }
 
@@ -950,27 +1166,38 @@ fraction:
 
         }
         backup_cp(tok);
+
+        p_start = tok->start;
+        p_end = tok->uc.curr;
         return NUMBER;
     }
     
+    // Strings
     if(*cp == '\'' || *cp == '"') {
+        int32_t quote = *cp;
+        unint len = 0;
+
         while(true) {
             next_cp(tok);
-            DBG(1, "READ STR: %c\n", *cp);
+
             // No need to do the checks that python does because those checks are for triple quote strings that allow new lines that are not checked immediately for UTF8 errors when reading the '"'
             if(*cp == EOF || *cp == '\n') {
 
                 tok->uc.curr = (char *)tok->start;
                 tok->uc.curr++;
 
-                _Tokenizer_syntaxerror(tok, "unterminated string literal (detected at line %d)", tok->lineno);
-                //lexer_error_with_col(tok, 1, "unterminated string literal (detected at line %d)", tok->lineno);
+                if(quote == '\'' && len == 1) _Tokenizer_syntaxerror(tok, "unterminated character literal (detected at line %d)", tok->lineno);
+                else if(quote == '\'') _Tokenizer_syntaxerror(tok, "unterminated multi-character literal (detected at line %d)", tok->lineno);
+                else _Tokenizer_syntaxerror(tok, "unterminated string literal (detected at line %d)", tok->lineno);
+
                 if (*cp != '\n') tok->done = E_EOLS;
                 return ERRORTOKEN;
             }
 
             // Exit?
-            if(*cp == '"') {
+            if(*cp == quote) {
+                p_start = tok->start;
+                p_end = tok->uc.curr;
                 return STRING;
             }
             else {
@@ -979,9 +1206,81 @@ fraction:
                     if (*cp == '\r') next_cp(tok);
                 }
             }
+            ++len;
         }
     }
 
-    DBG(1, "GOT TO THE END\n");
-    return _Tokenizer_syntaxerror(tok, "Invalid character (U+%04X)", *cp);
+    // Check for two-character token
+    // Save
+    {
+        int32_t cp1 = *cp; 
+        next_cp(tok); int32_t cp2 = *cp; 
+
+        unint current_token = _Token_TwoChars(cp1, cp2);
+        if (current_token != OP) {
+            next_cp(tok); int32_t cp3 = *cp; 
+            unint current_token3 = _Token_ThreeChars(cp1, cp2, cp3);
+
+            if (current_token3 != OP) current_token = current_token3;
+            else backup_cp(tok);
+
+            p_start = tok->start;
+            p_end = tok->uc.curr;
+
+            return current_token;
+        }
+        backup_cp(tok);
+    }
+    // Python has c saved but we can't just save the current cp, we also need to save nread
+    // So, go back one more and read to get the info
+    backup_cp(tok);
+    next_cp(tok);
+
+    // Parentheses
+    switch(*cp) {
+        case '(':
+        case '[':
+            if(tok->level >= MAX_PARENTHESES_LEVEL) return DO_ERRTOKEN(_Tokenizer_syntaxerror(tok, "too many nested parentheses"));
+            tok->parenstack[tok->level] = *cp;
+            tok->parenlinenostack[tok->level] = tok->lineno;
+            tok->parencolstack[tok->level] = tok->col_offset; // in python: (int)(tok->start - tok->line_start);
+            tok->level++;
+            break;
+        case ')':
+        case ']':
+            if(!tok->level) return DO_ERRTOKEN(_Tokenizer_syntaxerror(tok, "unmatched '%s'", CP_TO_ENCODING(*cp)));
+
+            if(tok->level > 0) {
+                tok->level--;
+                int32_t opening = tok->parenstack[tok->level];
+
+                if(!(
+                    (opening == '(' && *cp == ')') ||
+                    (opening == '[' && *cp == ']')
+                )) {
+                    if (tok->parenlinenostack[tok->level] != tok->lineno) 
+                        return DO_ERRTOKEN(_Tokenizer_syntaxerror(tok,
+                                "closing parenthesis '%s' does not match "
+                                "opening parenthesis '%s' on line %d",
+                                CP_TO_ENCODING(*cp), CP_TO_ENCODING(opening), tok->parenlinenostack[tok->level]));
+                    else
+                        return DO_ERRTOKEN(_Tokenizer_syntaxerror(tok,
+                                "closing parenthesis '%s' does not match "
+                                "opening parenthesis '%s'",
+                                CP_TO_ENCODING(*cp), CP_TO_ENCODING(opening)));
+                }
+
+            }
+            break;
+        default:
+            break;
+    }
+
+    // Non printable codepoints
+    if(utf8proc_is_printable(*cp) == FAIL) return DO_ERRTOKEN(_Tokenizer_syntaxerror(tok, "invalid non-printable character U+%04X", *cp));
+    
+    p_start = tok->start;
+    p_end = tok->uc.curr;
+    return _Token_OneChar(*cp);
+
 }

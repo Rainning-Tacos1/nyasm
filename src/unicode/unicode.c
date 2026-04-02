@@ -65,7 +65,7 @@ void unicode_init(struct unicode* uc) {
 
 /*
   Backup one code point
-  Author:  Chat-GPT
+  Author:  Chat-GPT + Human
   Returns:
     0      : Success
     1      : Error
@@ -75,11 +75,11 @@ nbool backup_codepoint(struct unicode* uc) {
         return FAIL;
 
     // Step 1: go to start of current codepoint
-    char* p = uc->curr - uc->nread;
+    const char* p = uc->curr - uc->nread;
 
     if (p < uc->buf) return FAIL; 
 
-    // We assume that if the first condition doesn't fail, there must be a valid utf-8 sequence that wont make p go below uc->buf
+    // Human: We assume that if the first condition doesn't fail, there must be a valid utf-8 sequence that wont make p go below uc->buf
     while (p > uc->buf && ((*p & 0xC0) == 0x80)) {
         p--;
     }
@@ -99,7 +99,7 @@ nbool read_codepoint(struct unicode* uc) {
     unint* nread = &uc->nread;
     int32_t* cp = &uc->cp;
 
-    char* buf = uc->curr;
+    const char* buf = uc->curr;
     utf8proc_ssize_t len = uc->end - buf;
 
     utf8proc_ssize_t size = utf8proc_iterate((utf8proc_uint8_t*)(buf), len, cp);
@@ -135,4 +135,21 @@ nbool read_codepoint(struct unicode* uc) {
 */
 unint codepoint_width(int32_t cp) {
     return (unint)utf8proc_charwidth(cp);
+}
+
+/*
+  Converts a unicode codepoint into a encoding format(UTF-8)
+  Returns:
+    a pointer to the encoded codepoint
+*/
+unsigned char* codepoint_to_encoding(int32_t cp) {
+    static unsigned char __unicode_to_encoding[5];
+
+    unint len = utf8proc_encode_char(cp, __unicode_to_encoding);
+    if (len < 0) {
+        len = utf8proc_encode_char(0xFFFD, __unicode_to_encoding);
+    }
+
+    __unicode_to_encoding[len] = '\0';
+    return __unicode_to_encoding;
 }

@@ -41,9 +41,9 @@
 #define __UNICODE_CATEGORY_CO UTF8PROC_CATEGORY_CO /**< Other, private use */
 
 struct unicode {
-    char* buf;
-    char* curr;
-    char* end;
+    const char* buf;
+    const char* curr;
+    const char* end;
 
     unint nread;
 
@@ -61,5 +61,7 @@ void unicode_init(struct unicode* uc);
 unint unicode_cat(int32_t cp);
 
 unint codepoint_width(int32_t cp);
+
+unsigned char* codepoint_to_encoding(int32_t cp);
 
 #endif

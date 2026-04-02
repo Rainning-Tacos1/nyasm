@@ -52,11 +52,4 @@ struct mem_alloc_t {
     char* data;                // Points to the aligned allocated chunk of data
 };
 
-
-#ifdef DEBUG
-    #define MEM_CHUNK_SIZE(size1) ((size1) + (sizeof(struct memory_dbg_t)))
-#else
-    #define MEM_CHUNK_SIZE(size1) (size1)
-#endif
-
 #endif

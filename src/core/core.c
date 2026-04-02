@@ -10,6 +10,79 @@
 #include "lexer.h"
 #include "token.h"
 
+const char * const _Parser_TokenNames[] = {
+    "ENDMARKER",
+    "NAME",
+    "NUMBER",
+    "STRING",
+    "NEWLINE",
+    "INDENT",
+    "DEDENT",
+    "LPAR",
+    "RPAR",
+    "LSQB",
+    "RSQB",
+    "COLON",
+    "COMMA",
+    "SEMI",
+    "PLUS",
+    "MINUS",
+    "STAR",
+    "SLASH",
+    "VBAR",
+    "AMPER",
+    "LESS",
+    "GREATER",
+    "EQUAL",
+    "DOT",
+    "PERCENT",
+    "LBRACE",
+    "RBRACE",
+    "EQEQUAL",
+    "NOTEQUAL",
+    "LESSEQUAL",
+    "GREATEREQUAL",
+    "TILDE",
+    "CIRCUMFLEX",
+    "LEFTSHIFT",
+    "RIGHTSHIFT",
+    "DOUBLESTAR",
+    "PLUSEQUAL",
+    "MINEQUAL",
+    "STAREQUAL",
+    "SLASHEQUAL",
+    "PERCENTEQUAL",
+    "AMPEREQUAL",
+    "VBAREQUAL",
+    "CIRCUMFLEXEQUAL",
+    "LEFTSHIFTEQUAL",
+    "RIGHTSHIFTEQUAL",
+    "DOUBLESTAREQUAL",
+    "DOUBLESLASH",
+    "DOUBLESLASHEQUAL",
+    "AT",
+    "ATEQUAL",
+    "RARROW",
+    "ELLIPSIS",
+    "COLONEQUAL",
+    "EXCLAMATION",
+    "OP",
+    "TYPE_IGNORE",
+    "TYPE_COMMENT",
+    "SOFT_KEYWORD",
+    "FSTRING_START",
+    "FSTRING_MIDDLE",
+    "FSTRING_END",
+    "TSTRING_START",
+    "TSTRING_MIDDLE",
+    "TSTRING_END",
+    "COMMENT",
+    "NL",
+    "<ERRORTOKEN>",
+    "<ENCODING>",
+    "<N_TOKENS>",
+};
+
 nbool assemble(char* code, unint len) {
     struct tok_state tok;
     tok_state_init(&tok);
@@ -26,21 +99,7 @@ nbool assemble(char* code, unint len) {
         _tok = tokenize(&tok, &token);
         if(tok.uc.err != UNICODE_OK) _tok = ERRORTOKEN;
 
-        switch(_tok) {
-            case NAME: {DBG(1, "[IDENTIFIER]\n"); break; }
-            case INDENT: {DBG(1, "[INDENT]\n"); break; }
-            case DEDENT: {DBG(1, "[DEDENT]\n"); break; }
-            case NEWLINE: {DBG(1, "[\\n]\n"); break; }
-            case NUMBER: {DBG(1, "[NUMBER]\n"); break; }
-            case COMMENT: {DBG(1, "[COMMENT]\n"); break;}
-            case ENDMARKER: {DBG(1, "[EOF]\n"); break; }
-            case EQUAL: {DBG(1, "[=]\n"); break; }
-            case EQEQUAL: {DBG(1, "[==]\n"); break; }
-            case ERRORTOKEN: {DBG(1, "[ERR TOKEN]\n"); break; }
-            case STRING: {DBG(1, "[STRING]\n"); break; }
-            default: {DBG(1, "[???](%d)", _tok); break; }
-        }
-        //if(_tok != NEWLINE && _tok != DEDENT && _tok != ERRORTOKEN) DBG(1, " ");
+        DBG(1, "[%s]\n", _Parser_TokenNames[_tok]);
 
     } while(_tok != ERRORTOKEN && _tok != ENDMARKER);
 

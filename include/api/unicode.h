@@ -41,7 +41,7 @@
 #define BACKUP_CP(uc) backup_codepoint(uc)
 #define UNICODE_INIT(uc) unicode_init(uc)
 #define UNICODE_CAT(cp) unicode_cat(cp)
-#define UNICODE_TO_ENCODING(cps, cp_len, out, len) unicode_to_encoding(cps, cp_len, out, len)
 #define CP_WIDTH(cp) codepoint_width(cp)
+#define CP_TO_ENCODING(cp) codepoint_to_encoding(cp)
 
 #endif
