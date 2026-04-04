@@ -43,5 +43,6 @@
 #define UNICODE_CAT(cp) unicode_cat(cp)
 #define CP_WIDTH(cp) codepoint_width(cp)
 #define CP_TO_ENCODING(cp) codepoint_to_encoding(cp)
+#define WRITE_IMPLICIT_NL(buf) write_implicit_newline(buf)
 
 #endif

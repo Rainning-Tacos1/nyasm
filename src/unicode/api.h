@@ -64,4 +64,6 @@ unint codepoint_width(int32_t cp);
 
 unsigned char* codepoint_to_encoding(int32_t cp);
 
+unint write_implicit_newline(char* buf);
+
 #endif

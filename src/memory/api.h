@@ -10,7 +10,7 @@
 // Memory allocation
 void* mem_alloc(
 #ifdef DEBUG
-    unint size, char* tag
+    unint size, const char* tag
 #else
     unint size
 #endif

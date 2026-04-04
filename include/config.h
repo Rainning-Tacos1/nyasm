@@ -10,6 +10,10 @@
 #define DO_LEXER_CHAR_DBG 0
 #define DO_LEXER_CHAR_VERIFICATION_LOOKAHEAD_DBG 0
 #define DO_LEXER_INDENTATION_DBG 0
+#define DO_LEXER_PEEK_DEBUG 0
+#define DO_LEXER_SPACE_DEBUG 0
+#define DO_LEXER_USED_CHARACTER_DBG 0
+#define DO_LEXER_TOKEN_FILL_DBG 0
 
 #define MAX_PARENTHESES_LEVEL 100
 
@@ -22,5 +26,7 @@
 
 // Initial size of the allocated buffer for the token's / strings's codepoints
 #define TOKEN_CP_BUFFER_INIT_SIZE 32
+
+#define SIZEOF_IMPLICIT_NEWLINE 1
 
 #endif

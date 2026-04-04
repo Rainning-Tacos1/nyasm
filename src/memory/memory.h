@@ -37,7 +37,7 @@ struct mem_t {
 struct mem_dbg_t {
     unint talign;
     unint size;
-    char* tag;
+    const char* tag;
 };
 #endif
 

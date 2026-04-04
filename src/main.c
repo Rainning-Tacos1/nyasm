@@ -157,6 +157,9 @@ int main(int argc, const char** argv) {
     unint len = 0;
     char* file = LOAD_FILE(input, &len);
 
+    // Make room for a potential implicit new line
+    if(file != NULL) file = MEM_RESIZE_LAST(len + SIZEOF_IMPLICIT_NEWLINE);
+
     if(!file) 
         FATAL("Error loading input file into memory\n");
 

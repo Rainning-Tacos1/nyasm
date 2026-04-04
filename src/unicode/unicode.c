@@ -65,6 +65,7 @@ void unicode_init(struct unicode* uc) {
 
 /*
   Backup one code point
+  You cannot backup from EOF as the previous number of bytes read(nread) is replaced with 0
   Author:  Chat-GPT + Human
   Returns:
     0      : Success
@@ -109,18 +110,18 @@ nbool read_codepoint(struct unicode* uc) {
     uc->curr += size;
 
     if(size == 0) {
-        DBG(DO_UC_DBG, "  \"EOF\" cat: EOF\n");
+        DBG(DO_UC_DBG, "\tUnicode: \"EOF\" cat: EOF\n");
         *cp = EOF;
         UNICODE_SUCCESS(uc);
     }
 
     // Debug
-    DBG(DO_UC_DBG, "  \"");
+    DBG(DO_UC_DBG, "\tUnicode: \"");
 
     if(IS_VALID_CP(*cp)) DBG_CP(DO_UC_DBG, *cp);
     else DBG(DO_UC_DBG, "ERR");
 
-    DBG(DO_UC_DBG, "\" cat: ");
+    DBG(DO_UC_DBG, "\" (U+%04X) cat: ", *cp);
 
     if(IS_VALID_CP(*cp)) DBG(DO_UC_DBG, "%s", utf8proc_category_to_string(*cp));
     else DBG(DO_UC_DBG, "ERR");
@@ -145,11 +146,15 @@ unint codepoint_width(int32_t cp) {
 unsigned char* codepoint_to_encoding(int32_t cp) {
     static unsigned char __unicode_to_encoding[5];
 
-    unint len = utf8proc_encode_char(cp, __unicode_to_encoding);
-    if (len < 0) {
-        len = utf8proc_encode_char(0xFFFD, __unicode_to_encoding);
-    }
+    unint len = utf8proc_codepoint_valid(cp) ?
+        utf8proc_encode_char(cp, __unicode_to_encoding) :
+        utf8proc_encode_char(0xFFFD, __unicode_to_encoding);
 
     __unicode_to_encoding[len] = '\0';
     return __unicode_to_encoding;
+}
+
+unint write_implicit_newline(char* buf) {
+    *buf = '\n';
+    return SIZEOF_IMPLICIT_NEWLINE;
 }

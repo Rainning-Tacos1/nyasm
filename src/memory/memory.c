@@ -26,7 +26,7 @@ void* mem_init(nint size) {
 // Memory allocation implementation
 void* mem_alloc(
 #ifdef DEBUG
-    unint size, char* tag
+    unint size, const char* tag
 #else
     unint size
 #endif 

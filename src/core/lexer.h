@@ -24,8 +24,12 @@
 #define DO_ERRTOKEN(stmt) ((stmt), ERRORTOKEN)
 
 struct token {
-    unint lineno, col_offset, end_lineno, end_col_offset;
+    unint level;
+    unint lineno, end_lineno;
+    nint col_offset, end_col_offset;
+    const char *start, *end;
     int32_t* cps;
+    unint len;
 };
 
 struct tok_state {
@@ -39,6 +43,12 @@ struct tok_state {
 
     // File related
     const char* source;
+
+    // Implicte new line
+    unint implicit_newline;
+    // Needed to restore the codepoint before the implicit new line as the codepoint is overwritten with a \n 
+    int32_t implicit_newline_save_cp;
+    unint implicit_newline_save_nread;
 
     // State
     unint atbol;
