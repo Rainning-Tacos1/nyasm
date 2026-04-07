@@ -120,7 +120,7 @@ const char * const _Parser_TokenNames[] = {
 int32_t* token_cp_buffer_init(struct tok_state* tok) {
     tok->token_cp_buffer_idx = 0;
     tok->token_cp_buffer_size = TOKEN_CP_BUFFER_INIT_SIZE;
-    return (int32_t*)MEM_ALLOC(TOKEN_CP_BUFFER_INIT_SIZE, "token");
+    return (int32_t*)MEM_ALLOC(TOKEN_CP_BUFFER_INIT_SIZE * sizeof(int32_t), "token");
 }
 
 /*
@@ -137,7 +137,7 @@ int32_t* token_push_cp(struct tok_state* tok, int32_t cp) {
     if(tok->token_cp_buffer_idx == tok->token_cp_buffer_size) {
         tok->token_cp_buffer_size = tok->token_cp_buffer_size + (tok->token_cp_buffer_size >> 1); // 1.5x growth
 
-        mem = (int32_t*)MEM_RESIZE_LAST(tok->token_cp_buffer_size);
+        mem = (int32_t*)MEM_RESIZE_LAST(tok->token_cp_buffer_size * sizeof(int32_t));
         if(mem == NULL) return NULL;
     }
 
@@ -155,67 +155,13 @@ int32_t* token_push_cp(struct tok_state* tok, int32_t cp) {
 */
 int32_t* token_trim_cp_buffer(struct tok_state* tok) {
     tok->token_cp_buffer_size = tok->token_cp_buffer_idx;
-    return (int32_t*)MEM_RESIZE_LAST(tok->token_cp_buffer_idx);
+    return (int32_t*)MEM_RESIZE_LAST(tok->token_cp_buffer_idx * sizeof(int32_t));
 }
-
-unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type, const char *start, const char *end) {
-    token->level = tok->level;
-    if (ISSTRINGLIT(type)) {
-        token->lineno = tok->first_lineno;
-    }
-    else {
-        token->lineno = tok->lineno;
-    }
-    token->end_lineno = tok->lineno;
-    token->col_offset = token->end_col_offset = -1;
-    token->start = start;
-    token->end = end;
-    token->cps = NULL;
-    token->len = 0;
-
-    if (start != NULL && end != NULL) {
-        token->col_offset = tok->starting_col_offset;
-        token->end_col_offset = tok->col_offset;
-    }
-
-    unint size = end - start;
-
-    DBG(DO_LEXER_TOKEN_DBG, "[%s]: t=%d '", _Parser_TokenNames[type], size);
-    if(start == NULL || end == NULL) DBG(DO_LEXER_TOKEN_DBG, "<NULL>");
-    else for(const char* i=start; i<end; ++i) DBG(DO_LEXER_TOKEN_DBG, "%c", *i);
-    DBG(DO_LEXER_TOKEN_DBG, "'\n");
-
-    if(TOKEN_ALLOC_NEEDED(type) && start != NULL && end != NULL) {
-        // Allocate
-        int32_t* token_buf = token_cp_buffer_init(tok);
-        if(token_buf == NULL) RETURN_NOMEM();
-
-        // Fill
-        struct unicode _uc;
-        int32_t* _cp = &_uc.cp;
-        _uc.curr = _uc.buf = start;
-        _uc.end = end;
-
-        while(READ_CP(&_uc) == SUCCESS && *_cp != EOF) {
-            DBG(DO_LEXER_TOKEN_FILL_DBG, "Filling token with: '%s' (U+%04X)\n", CP_TO_ENCODING(*_cp), *_cp);
-            token_buf = token_push_cp(tok, *_cp);
-            if(token_buf == NULL) RETURN_NOMEM();
-            ++token->len;
-        }
-
-        token_buf = token_trim_cp_buffer(tok);
-        if(token_buf == NULL) RETURN_NOMEM();
-
-        token->cps = token_buf;
-    }
-
-    return type; 
-}
-
-#define MAKE_TOKEN(token_type) _Lexer_token_setup(tok, token, token_type, p_start, p_end)
 
 void tok_state_init(struct tok_state* tok) {
     for(unint i=0; i<MAX_INDENT; ++i) tok->altindstack[i] = tok->indstack[i] = 0;
+    for(unint i=0; i<MAX_PARENTHESES_LEVEL; ++i) tok->parencolstack[i] = tok->parenlinenostack[i] = tok->parenstack[0] = 0;
+
     tok->lineno = tok->first_lineno = tok->implicit_newline = tok->level = tok->starting_col_offset = tok->col_offset = tok->pendin = tok->indent = 0;
     tok->atbol = 1;
     tok->multi_line_start = tok->inp = tok->line_start = tok->source = tok->start = tok->end = NULL;
@@ -489,6 +435,83 @@ unint _Tokenizer_indenterror(struct tok_state *tok) {
 
 /* ----------- */
 
+unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type, const char *start, const char *end) {
+    token->level = tok->level;
+    if (ISSTRINGLIT(type)) {
+        token->lineno = tok->first_lineno;
+    }
+    else {
+        token->lineno = tok->lineno;
+    }
+    token->end_lineno = tok->lineno;
+    token->col_offset = token->end_col_offset = -1;
+    token->start = start;
+    token->end = end;
+    token->cps = NULL;
+    token->len = 0;
+
+    if (start != NULL && end != NULL) {
+        token->col_offset = tok->starting_col_offset;
+        token->end_col_offset = tok->col_offset;
+    }
+
+    unint size = end - start;
+
+    DBG(DO_LEXER_TOKEN_DBG, "[%s]: %d bytes '", _Parser_TokenNames[type], size);
+    if(start == NULL || end == NULL) DBG(DO_LEXER_TOKEN_DBG, "<NULL>");
+    else for(const char* i=start; i<end; ++i) DBG(DO_LEXER_TOKEN_DBG, "%c", *i);
+    DBG(DO_LEXER_TOKEN_DBG, "'\n");
+
+    if(start == NULL || end == NULL) return type;
+
+    int32_t* token_buf = NULL;
+
+    if(TOKEN_ALLOC_NEEDED(type) && start != NULL && end != NULL) {
+        // Allocate
+        token_buf = token_cp_buffer_init(tok);
+        if(token_buf == NULL) RETURN_NOMEM();
+
+        // Fill
+        struct unicode _uc;
+        int32_t* _cp = &_uc.cp;
+        _uc.curr = _uc.buf = start;
+        _uc.end = end;
+
+        while(READ_CP(&_uc) == SUCCESS && *_cp != EOF) {
+            DBG(DO_LEXER_TOKEN_FILL_DBG, "Filling token with: '%s' (U+%04X)\n", CP_TO_ENCODING(*_cp), *_cp);
+            token_buf = token_push_cp(tok, *_cp);
+            if(token_buf == NULL) RETURN_NOMEM();
+            ++token->len;
+        }
+
+        token_buf = token_trim_cp_buffer(tok);
+        if(token_buf == NULL) RETURN_NOMEM();
+
+        token->cps = token_buf;
+    }
+
+    // Normalization for names
+    if(type == NAME) {
+        nint _len = NORMALIZE_CP(token->cps, token->len);
+        if(_len < 0) return _Tokenizer_syntaxerror(tok, "error normalizing token");
+
+        // Normalization was needed
+        if(_len != 0) {
+            token->len = _len;
+
+            // Manually override
+            tok->token_cp_buffer_idx = _len;
+            token_buf = token_trim_cp_buffer(tok);
+            if(token_buf == NULL) RETURN_NOMEM();
+        }
+    }
+
+    return type; 
+}
+
+#define MAKE_TOKEN(token_type) _Lexer_token_setup(tok, token, token_type, p_start, p_end)
+
+
 /*
   Tries to read the next code point
   Python uses a system where a line is stored in a buffer and when the buffer is at the end it is replaced(tok->underflow) with the next line.
@@ -552,7 +575,7 @@ void next_cp(struct tok_state* tok) {
             }
             
             prev = *_cp;
-            if (*_cp == EOF) break;
+            if (*_cp == EOF) { tok->done = E_EOF; break; }
             if (*_cp == '\n') break;
             if (*_cp == '\r') continue;
         }
@@ -1028,7 +1051,7 @@ _loop:
 
     // Python checks if tok->cur == NULL to see if there was an error, we check if tok->done is not E_OK
     // We don't need it for now
-    tok->start = tok->uc.curr == NULL ? NULL : tok->uc.curr - 1;
+    tok->start = tok->uc.curr == NULL ? NULL : tok->uc.curr - tok->uc.nread;
     tok->starting_col_offset = tok->col_offset - 1;
 
     // Comments (#)
@@ -1109,14 +1132,13 @@ _loop:
 
     // EOF or unicode errors
     if(*cp == EOF) {
-        DBG(1, "could be EOF\n");
+        DBG(DO_LEXER_EOF_DBG, "Could be EOF\n");
         if(tok->level) return MAKE_TOKEN(ERRORTOKEN);
-        if (tok->uc.err == UNICODE_OK) {
-            DBG(1, "It is EOF\n");
+        if (tok->done == E_EOF) {
+            DBG(DO_LEXER_EOF_DBG, "It is EOF\n");
             return MAKE_TOKEN(ENDMARKER);
         }
 
-        _Tokenizer_syntaxerror(tok, "Unicode error");
         return MAKE_TOKEN(ERRORTOKEN);
     }
 
@@ -1272,7 +1294,8 @@ _loop:
             }
 
             // No suport for old-style so just read the number as a decimal
-            else goto decimal;
+            else { backup_cp(tok); goto decimal; }
+ 
         }
         // Decimal or Float / Double
         else {
@@ -1413,16 +1436,18 @@ fraction:
                     (opening == '(' && *cp == ')') ||
                     (opening == '[' && *cp == ']')
                 )) {
+                    unsigned char buf1[CP_ENCODING_BUF];
+                    unsigned char buf2[CP_ENCODING_BUF];
                     if (tok->parenlinenostack[tok->level] != tok->lineno) 
                         return MAKE_TOKEN(_Tokenizer_syntaxerror(tok,
                                 "closing parenthesis '%s' does not match "
                                 "opening parenthesis '%s' on line %d",
-                                CP_TO_ENCODING(*cp), CP_TO_ENCODING(opening), tok->parenlinenostack[tok->level]));
+                                CP_TO_ENCODING_BUF(*cp, buf1), CP_TO_ENCODING_BUF(opening, buf2), tok->parenlinenostack[tok->level]));
                     else
                         return MAKE_TOKEN(_Tokenizer_syntaxerror(tok,
                                 "closing parenthesis '%s' does not match "
                                 "opening parenthesis '%s'",
-                                CP_TO_ENCODING(*cp), CP_TO_ENCODING(opening)));
+                                CP_TO_ENCODING_BUF(*cp, buf1), CP_TO_ENCODING_BUF(opening, buf2)));
                 }
 
             }

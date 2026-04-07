@@ -5,6 +5,8 @@
 #include "config.h"
 #include "./utf8/utf8proc.h"
 
+#define __CP_ENCODING_BUF 4+1
+
 // Errors provided by unicode implementation
 #define UNICODE_OK 0
 #define UNICODE_ERR_CODEPOINT -1
@@ -65,5 +67,9 @@ unint codepoint_width(int32_t cp);
 unsigned char* codepoint_to_encoding(int32_t cp);
 
 unint write_implicit_newline(char* buf);
+
+unsigned char* codepoint_to_encoding_buf(int32_t cp, unsigned char* buf);
+
+nint normalize_codepoints(int32_t* cps, unint len);
 
 #endif

@@ -144,17 +144,24 @@ unint codepoint_width(int32_t cp) {
     a pointer to the encoded codepoint
 */
 unsigned char* codepoint_to_encoding(int32_t cp) {
-    static unsigned char __unicode_to_encoding[5];
+    static unsigned char __unicode_to_encoding[__CP_ENCODING_BUF];
+    return codepoint_to_encoding_buf(cp, __unicode_to_encoding);
+}
 
+unsigned char* codepoint_to_encoding_buf(int32_t cp, unsigned char* buf) {
     unint len = utf8proc_codepoint_valid(cp) ?
-        utf8proc_encode_char(cp, __unicode_to_encoding) :
-        utf8proc_encode_char(0xFFFD, __unicode_to_encoding);
+        utf8proc_encode_char(cp, buf) :
+        utf8proc_encode_char(0xFFFD, buf);
 
-    __unicode_to_encoding[len] = '\0';
-    return __unicode_to_encoding;
+    buf[len] = '\0';
+    return buf;
 }
 
 unint write_implicit_newline(char* buf) {
     *buf = '\n';
     return SIZEOF_IMPLICIT_NEWLINE;
+}
+
+nint normalize_codepoints(int32_t* cps, unint len) {
+    return utf8proc_normalize_utf32(cps, len, UTF8PROC_COMPOSE);
 }

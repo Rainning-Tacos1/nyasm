@@ -30,7 +30,7 @@ nbool assemble(char* code, unint len) {
     } while(_tok != ERRORTOKEN && _tok != ENDMARKER);
 
     (_tok == ERRORTOKEN) ?
-        DBG(1, "Error\n") :
+        DBG(1, "Error: %d\n", tok.done) :
         DBG(1, "End\n");
     
     return SUCCESS;
