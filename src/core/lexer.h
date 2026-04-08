@@ -24,12 +24,15 @@
 #define DO_ERRTOKEN(stmt) ((stmt), ERRORTOKEN)
 
 struct token {
+    unint type;
     unint level;
     unint lineno, end_lineno;
     nint col_offset, end_col_offset;
     const char *start, *end;
     int32_t* cps;
     unint len;
+
+    struct token* next;
 };
 
 struct tok_state {
@@ -83,6 +86,11 @@ struct tok_state {
 
 };
 
-void tok_state_init(struct tok_state* tok);
+struct tok_state* _Tokenizer_tok_new();
 unint tokenize(struct tok_state* tok, struct token* token);
+
+// Syntax errors
+void _format_syntax_error(const char* stype, const char* msg, const char* filename, nint* lineno, nint* offset, nint* end_lineno, nint* end_offset, const char* text, const char* end, va_list vargs);
+unint _syntaxerror_range(struct tok_state *tok, const char *format, nint lineno, nint end_lineno, nint col_offset, nint end_col_offset, va_list vargs);
+unint _Tokenizer_syntaxerror_known_range(struct tok_state *tok, nint col_offset, nint end_col_offset, const char *format, ...);
 #endif

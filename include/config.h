@@ -16,6 +16,8 @@
 #define DO_LEXER_TOKEN_FILL_DBG 0
 #define DO_LEXER_EOF_DBG 0
 
+#define ERROR_TYPE_MESSAGE "Error"
+
 #define MAX_PARENTHESES_LEVEL 100
 
 #define MEM_ALIGN 8

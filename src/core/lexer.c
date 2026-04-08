@@ -120,7 +120,7 @@ const char * const _Parser_TokenNames[] = {
 int32_t* token_cp_buffer_init(struct tok_state* tok) {
     tok->token_cp_buffer_idx = 0;
     tok->token_cp_buffer_size = TOKEN_CP_BUFFER_INIT_SIZE;
-    return (int32_t*)MEM_ALLOC(TOKEN_CP_BUFFER_INIT_SIZE * sizeof(int32_t), "token");
+    return (int32_t*)MEM_ALLOC(TOKEN_CP_BUFFER_INIT_SIZE * sizeof(int32_t), "token data");
 }
 
 /*
@@ -158,7 +158,11 @@ int32_t* token_trim_cp_buffer(struct tok_state* tok) {
     return (int32_t*)MEM_RESIZE_LAST(tok->token_cp_buffer_idx * sizeof(int32_t));
 }
 
-void tok_state_init(struct tok_state* tok) {
+struct tok_state* _Tokenizer_tok_new() {
+
+    struct tok_state* tok = MEM_ALLOC(sizeof(struct tok_state), "tokenizer");
+    if(tok == NULL) return NULL;
+
     for(unint i=0; i<MAX_INDENT; ++i) tok->altindstack[i] = tok->indstack[i] = 0;
     for(unint i=0; i<MAX_PARENTHESES_LEVEL; ++i) tok->parencolstack[i] = tok->parenlinenostack[i] = tok->parenstack[0] = 0;
 
@@ -167,6 +171,8 @@ void tok_state_init(struct tok_state* tok) {
     tok->multi_line_start = tok->inp = tok->line_start = tok->source = tok->start = tok->end = NULL;
     tok->done = E_OK;
     UNICODE_INIT(&tok->uc);
+
+    return tok;
 }
 
 /*
@@ -375,7 +381,9 @@ void _format_syntax_error(const char* stype, const char* msg, const char* filena
     LOG("\n");
 }
 
-unint _syntaxerror_range(struct tok_state *tok, const char *format, nint col_offset, nint end_col_offset, va_list vargs) {
+
+
+unint _syntaxerror_range(struct tok_state *tok, const char *format, nint lineno, nint end_lineno, nint col_offset, nint end_col_offset, va_list vargs) {
     // Not needed for now
     if (tok->done == E_ERROR) {
         return ERRORTOKEN;
@@ -404,7 +412,7 @@ unint _syntaxerror_range(struct tok_state *tok, const char *format, nint col_off
     if (end_col_offset == -1) end_col_offset = col_offset;
 
     // call func
-    _format_syntax_error("SyntaxError", format, tok->source, &tok->lineno, &col_offset, &tok->lineno, &end_col_offset, tok->line_start, _uc.curr - _uc.nread, vargs);
+    _format_syntax_error(ERROR_TYPE_MESSAGE, format, tok->source, &lineno, &col_offset, &end_lineno, &end_col_offset, tok->line_start, _uc.curr - _uc.nread, vargs);
 
     tok->done = E_ERROR;
     return ERRORTOKEN;
@@ -413,7 +421,7 @@ unint _syntaxerror_range(struct tok_state *tok, const char *format, nint col_off
 unint _Tokenizer_syntaxerror(struct tok_state *tok, const char *format, ...) {
     va_list vargs;
     va_start(vargs, format);
-    unint ret = _syntaxerror_range(tok, format, -1, -1, vargs);
+    unint ret = _syntaxerror_range(tok, format, tok->lineno, tok->lineno, -1, -1, vargs);
     va_end(vargs);
     return ret;
 }
@@ -421,7 +429,7 @@ unint _Tokenizer_syntaxerror(struct tok_state *tok, const char *format, ...) {
 unint _Tokenizer_syntaxerror_known_range(struct tok_state *tok, nint col_offset, nint end_col_offset, const char *format, ...) {
     va_list vargs;
     va_start(vargs, format);
-    unint ret = _syntaxerror_range(tok, format, col_offset, end_col_offset, vargs);
+    unint ret = _syntaxerror_range(tok, format, tok->lineno, tok->lineno, col_offset, end_col_offset, vargs);
     va_end(vargs);
     return ret;
 }
@@ -436,6 +444,10 @@ unint _Tokenizer_indenterror(struct tok_state *tok) {
 /* ----------- */
 
 unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type, const char *start, const char *end) {
+    
+    token->next = NULL;
+    token->type = type;
+
     token->level = tok->level;
     if (ISSTRINGLIT(type)) {
         token->lineno = tok->first_lineno;
@@ -1185,6 +1197,7 @@ _loop:
 
     // Fallthrough or just a new line
     if (*cp == '\n') {
+        tok->atbol = 1;
         if (blankline || tok->level > 0) goto nextline;
 
         p_start = tok->start;

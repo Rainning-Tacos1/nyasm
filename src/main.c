@@ -24,10 +24,6 @@
 
 #define EXIT_FAIL() \
     do { exit(EXIT_FAILURE); } while(0)
-#define ERROR(msg, ...) \
-    do { \
-        fprintf(stderr, msg, ##__VA_ARGS__); \
-    } while(0)
 #define FATAL(msg, ...) \
     do { \
         ERROR("Error: "msg, ##__VA_ARGS__); \
@@ -154,20 +150,11 @@ int main(int argc, const char** argv) {
     char* memory = MEM_INIT(memory_size);
     if(!memory) FATAL("Failed to allocate %"_UN" bytes of memory\n", memory_size);
 
-    unint len = 0;
-    char* file = LOAD_FILE(input, &len);
-
-    // Make room for a potential implicit new line
-    if(file != NULL) file = MEM_RESIZE_LAST(len + SIZEOF_IMPLICIT_NEWLINE);
-
-    if(!file) 
-        FATAL("Error loading input file into memory\n");
-
       /////////////
      // Testing //
     /////////////
 
-    ASSEMBLE(file, len);
+    ASSEMBLE(input);
 
     MEM_DBG();
     DBG(1, "-------------------------\n");

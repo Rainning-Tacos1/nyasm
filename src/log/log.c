@@ -8,9 +8,19 @@
   Prints a formated string
 */
 void _printf(const char* __format, ...) {
+  va_list vargs;
+  va_start(vargs, __format);
+  vprintf(__format, vargs);
+  va_end(vargs);
+}
+
+/*
+  Prints an error message
+*/
+void _error(const char* __format, ...) {
     va_list vargs;
     va_start(vargs, __format);
-    vprintf(__format, vargs);
+    vfprintf(stderr, __format, vargs);
     va_end(vargs);
 }
 

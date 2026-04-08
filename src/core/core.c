@@ -3,35 +3,50 @@
 #include "types.h"
 
 #include "api/unicode.h"
+#include "api/file.h"
 #include "api/log.h"
 #include "api/memory.h"
 #include "api/debug.h"
 
+#include "parser.h"
 #include "lexer.h"
 #include "token.h"
 #include "err.h"
 
-nbool assemble(char* code, unint len) {
-    struct tok_state tok;
-    tok_state_init(&tok);
+nbool assemble(char* path) {
 
-    tok.uc.curr = tok.uc.buf = code;
-    tok.inp = tok.uc.curr; // Trigger an underflow/verification
-    tok.uc.end = code+len; // There is still space for an implicite newline
-    tok.source = "main";
+    // File
+    unint len = 0;
+    char* file = LOAD_FILE(path, &len);
 
-    struct token token;
-    unint _tok;
+    // Make room for a potential implicit new line
+    if(file != NULL) file = MEM_RESIZE_LAST(len + SIZEOF_IMPLICIT_NEWLINE);
 
+    if(!file) {
+        ERROR("Error loading input file (%s) into memory\n", path);
+        return FAIL;
+    }
+
+    // Tokenizer
+    struct tok_state* tok = _Tokenizer_tok_new();
+    if(tok == NULL) {
+        LOG("Error allocating space for the tokenizer");
+        return FAIL;
+    }
+
+    tok->uc.curr = tok->uc.buf = file;
+    tok->inp = tok->uc.curr; // Trigger an underflow/verification
+    tok->uc.end = file+len; // There is still space for an implicit newline
+    tok->source = path;
+
+    // Parser
+    struct Parser* p = _Parser_New(tok);
+    if(p == NULL) {
+        LOG("Error allocating space for the parser");
+        return FAIL;
+    }
     DBG(1, "Start!\n");
-    do {
-        _tok = tokenize(&tok, &token);
-        
-    } while(_tok != ERRORTOKEN && _tok != ENDMARKER);
-
-    (_tok == ERRORTOKEN) ?
-        DBG(1, "Error: %d\n", tok.done) :
-        DBG(1, "End\n");
+    _run_parser(p);
     
     return SUCCESS;
 }
