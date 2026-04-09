@@ -9,6 +9,9 @@
 #include "api/log.h"
 #include "api/debug.h"
 
+#define IF_IDENTIDIER ((int32_t[]){'i', 'f', -1})
+#define INCLUDE_IDENTIFIER ((int32_t[]){'i', 'n', 'c', 'l', 'u', 'd', 'e', -1})
+
 void _error_no_err_line(struct Parser* p, const char* errmsg, ...) {
     va_list va;
     va_start(va, errmsg);
@@ -38,10 +41,10 @@ unint _fill_token(struct Parser* p) {
     unint type = tokenize(p->tok, new_token);
 
     // Skip comments
-    while (type == COMMENT || type == NEWLINE) {
-        type = tokenize(p->tok, new_token);
-        if(type == ERRORTOKEN && p->tok->done == E_NOMEM) { memory_error(); return -1; }
-    }
+    //while (type == COMMENT || type == NEWLINE) {
+    //    type = tokenize(p->tok, new_token);
+    //    if(type == ERRORTOKEN && p->tok->done == E_NOMEM) { memory_error(); return -1; }
+    //}
 
     // Link
     if(p->last_token != NULL) p->last_token->next = new_token;
@@ -94,7 +97,39 @@ struct Parser* _Parser_New(struct tok_state* tok) {
     return p;
 }
 
+unint is_at_identifier(struct Parser* p, int32_t* identifier) {
+    // Reject if its not an identifier
+    if(p->last_token->type != NAME) return FAIL;
+
+    // Get the len of the identifier
+    unint identifier_len = 0;
+    while (identifier[identifier_len] != -1) ++identifier_len;
+
+    // First size check
+    if(p->last_token->len < identifier_len + 1) return FAIL;
+
+    // Check for @
+    if(p->last_token->cps[0] != '@') return FAIL;
+
+    for(unint i=0; i<(identifier_len); ++i) if(p->last_token->cps[i+1] != identifier[i]) return FAIL;
+    return SUCCESS;
+}
+
 void* _run_parser(struct Parser* p) {
+
+    void* ast = NULL;
+    unint suc = 0;
+
+    // Skip comments && new lines
+    while((suc = _fill_token(p)) == SUCCESS && (p->last_token->type == COMMENT || p->last_token->type == NEWLINE));
+    if(suc == FAIL) return NULL;
+
+    DBG(1, "DONE SKIPING\n");
+
+    if(is_at_identifier(p, IF_IDENTIDIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
+    else if (is_at_identifier(p, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
+    
+
     while(_fill_token(p) == SUCCESS && p->last_token->type != ENDMARKER);
     return NULL;
 }

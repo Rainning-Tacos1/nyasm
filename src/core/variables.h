@@ -1,0 +1,43 @@
+#ifndef VARIABLES_H
+#define VARIABLES_H
+
+#include "types.h"
+
+enum ValueTypes {
+    VALUE_INT,
+    VALUE_STR,
+    VALUE_CHARACTER,
+    VALUE_DOUBLE,
+    VALUE_ARRAY
+};
+
+struct String {
+    int32_t* str;
+    unint len;
+};
+
+struct ArrayElement {
+    struct Value* this;
+    struct ArrayElement* next;
+};
+
+struct Array {
+    struct ArrayElement* head;
+    struct ArrayElement* tail;
+    unint len;
+};
+
+struct Value {
+    unint type;
+
+    union {
+        nint number;
+        struct String string;
+        int32_t character; // Only a single codepoit
+        double flt;
+        struct Array arr;
+
+    } val;
+};
+
+#endif

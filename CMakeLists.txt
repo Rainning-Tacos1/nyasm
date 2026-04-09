@@ -8,6 +8,7 @@ project(nyasm C)
 
 # Static lib for the core
 add_library(core STATIC
+"src/core/variables.c"
 "src/core/core.c"
 "src/core/parser.c"
 "src/core/lexer.c"
