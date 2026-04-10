@@ -764,41 +764,41 @@ unint is_identifier_continue(int32_t cp) {
 
         (cp >= '0' && cp <= '9') ||
 
-        cat == UTF8PROC_CATEGORY_LU ||
-        cat == UTF8PROC_CATEGORY_LL ||
-        cat == UTF8PROC_CATEGORY_LT ||
-        cat == UTF8PROC_CATEGORY_LM ||
-        cat == UTF8PROC_CATEGORY_LO ||
+        cat == UNICODE_CATEGORY_LU ||
+        cat == UNICODE_CATEGORY_LL ||
+        cat == UNICODE_CATEGORY_LT ||
+        cat == UNICODE_CATEGORY_LM ||
+        cat == UNICODE_CATEGORY_LO ||
 
-        cat == UTF8PROC_CATEGORY_MN ||
-        cat == UTF8PROC_CATEGORY_MC
+        cat == UNICODE_CATEGORY_MN ||
+        cat == UNICODE_CATEGORY_MC
     ) {
         return SUCCESS;
     }
     else if (
-        cat == UTF8PROC_CATEGORY_ME ||
-        cat == UTF8PROC_CATEGORY_ND ||
-        cat == UTF8PROC_CATEGORY_NL ||
-        cat == UTF8PROC_CATEGORY_NO ||
-        cat == UTF8PROC_CATEGORY_PC ||
-        cat == UTF8PROC_CATEGORY_PD ||
-        cat == UTF8PROC_CATEGORY_PS ||
-        cat == UTF8PROC_CATEGORY_PE ||
-        cat == UTF8PROC_CATEGORY_PI ||
-        cat == UTF8PROC_CATEGORY_PF ||
-        cat == UTF8PROC_CATEGORY_PO ||
-        cat == UTF8PROC_CATEGORY_SM ||
-        cat == UTF8PROC_CATEGORY_SC ||
-        cat == UTF8PROC_CATEGORY_SK ||
-        cat == UTF8PROC_CATEGORY_SO ||
-        cat == UTF8PROC_CATEGORY_ZS ||
-        cat == UTF8PROC_CATEGORY_ZL ||
-        cat == UTF8PROC_CATEGORY_ZP ||
-        cat == UTF8PROC_CATEGORY_CC ||
-        cat == UTF8PROC_CATEGORY_CF ||
-        cat == UTF8PROC_CATEGORY_CS ||
-        cat == UTF8PROC_CATEGORY_CO ||
-        cat == UTF8PROC_CATEGORY_CN
+        cat == UNICODE_CATEGORY_ME ||
+        cat == UNICODE_CATEGORY_ND ||
+        cat == UNICODE_CATEGORY_NL ||
+        cat == UNICODE_CATEGORY_NO ||
+        cat == UNICODE_CATEGORY_PC ||
+        cat == UNICODE_CATEGORY_PD ||
+        cat == UNICODE_CATEGORY_PS ||
+        cat == UNICODE_CATEGORY_PE ||
+        cat == UNICODE_CATEGORY_PI ||
+        cat == UNICODE_CATEGORY_PF ||
+        cat == UNICODE_CATEGORY_PO ||
+        cat == UNICODE_CATEGORY_SM ||
+        cat == UNICODE_CATEGORY_SC ||
+        cat == UNICODE_CATEGORY_SK ||
+        cat == UNICODE_CATEGORY_SO ||
+        cat == UNICODE_CATEGORY_ZS ||
+        cat == UNICODE_CATEGORY_ZL ||
+        cat == UNICODE_CATEGORY_ZP ||
+        cat == UNICODE_CATEGORY_CC ||
+        cat == UNICODE_CATEGORY_CF ||
+        cat == UNICODE_CATEGORY_CS ||
+        cat == UNICODE_CATEGORY_CO ||
+        cat == UNICODE_CATEGORY_CN
     ) {
         return FAIL;
     }
@@ -1018,6 +1018,7 @@ unint tokenize(struct tok_state* tok, struct token* token) {
     (void)nread; // Unused for now
 
     unint blankline = 0;
+    unint is_at_identifier = 0;
 
     const char *p_start = NULL;
     const char *p_end = NULL;
@@ -1116,8 +1117,8 @@ _loop:
                 }
 
                 // New line
-                if(*cp == '\n')
-                    tok->atbol = 1;
+                //if(*cp == '\n')
+                //    tok->atbol = 1; // I dont remember if this is needed here
 
                 if (prev == '*' && *cp == '/') {
                     next_cp(tok);
@@ -1125,15 +1126,18 @@ _loop:
                     // No need to check for errors as '\n' is on the same line as "*/" so next_cp already check for malformed characters on that line
                     
                     // Exit?
-                    if(*cp == '\n')
+                    if((*cp == '\n' && tok->starting_col_offset == 0) || (tok->starting_col_offset != 0))
                         break;
 
-                    _Tokenizer_syntaxerror(tok, "Multi-line comments must end on a new line ('\\n')");
+                    _Tokenizer_syntaxerror(tok, "Multi-line comments at the begining of lines must end on a new line ('\\n')");
                     return MAKE_TOKEN(ERRORTOKEN);
                 }
                 prev = *cp;
             }
             backup_cp(tok); /* don't eat the newline or EOF */
+
+            // Do not generate multi-line comments inside parenthesis
+            if(tok->level) goto nextline;
 
             p_start = tok->start;
             p_end = tok->uc.curr;
@@ -1158,7 +1162,7 @@ _loop:
     // All ASCII validation is done with `is_potential_identifier_start` and `is_potential_identifier_char`
     // Unicode validation is done with XID_start and XID_continue
 
-    if(*cp == '@') next_cp(tok);
+    if(*cp == '@') { next_cp(tok); is_at_identifier = 1; }
     if(is_potential_identifier_start(*cp)) {
 
         // ASCII validation is done on the while condition but Unicode validation isnt so do it here
@@ -1191,6 +1195,12 @@ _loop:
 
         return MAKE_TOKEN(NAME);
     }
+    
+    // It's an @ identifier but its not followed by a valid identifier
+    else if(is_at_identifier) {
+        _Tokenizer_syntaxerror(tok, "Invalid identifier name after '@'");
+        return MAKE_TOKEN(ERRORTOKEN);
+    } 
 
     // Carriage Return
     if (*cp == '\r') next_cp(tok);

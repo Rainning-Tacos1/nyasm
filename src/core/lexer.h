@@ -26,7 +26,7 @@
 struct token {
     unint type;
     unint level;
-    unint lineno, end_lineno;
+    nint lineno, end_lineno;
     nint col_offset, end_col_offset;
     const char *start, *end;
     int32_t* cps;

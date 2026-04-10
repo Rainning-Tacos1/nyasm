@@ -61,6 +61,14 @@ unint append_array(struct Value* arr, struct Value* val) {
     return SUCCESS;
 }
 
-// Integers
+// Integers / Doubles
+struct Value* new_number(int32_t* cps, unint len) {
+    struct Value* number = (struct Value*)MEM_ALLOC(sizeof(struct Value), "number value");
+    if(number == NULL) return NULL;
 
-// Doubles
+    // Parse the number
+    number->val.number = 0xc0ffe; // For now
+    number->type = VALUE_INT;
+    
+    return number;
+}

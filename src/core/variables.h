@@ -40,4 +40,11 @@ struct Value {
     } val;
 };
 
+struct Value* new_string(int32_t* cps, unint len);
+struct Value* new_number(int32_t* cps, unint len);
+struct Value* new_character(int32_t cp);
+
+struct Value* new_array();
+unint append_array(struct Value* arr, struct Value* val);
+
 #endif

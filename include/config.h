@@ -17,6 +17,8 @@
 #define DO_LEXER_EOF_DBG 0
 
 #define ERROR_TYPE_MESSAGE "Error"
+#define ERROR_TYPE_MEMORY "MemoryError"
+#define ERROR_TYPE_EXPRESSION "ExpressionError"
 
 #define MAX_PARENTHESES_LEVEL 100
 

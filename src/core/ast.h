@@ -4,6 +4,8 @@
 #include "types.h"
 #include "variables.h"
 
+struct Parser; 
+
 enum AST_types {
     INCLUDE_NODE,
     BINOP_NODE,
@@ -16,6 +18,14 @@ enum AST_types {
 
 struct AstInclude {
     struct Ast_node* path;
+};
+
+enum BinOps {
+    OP_ADD,
+    OP_SUB,
+    OP_DIV,
+    OP_MUL,
+    OP_NEG,
 };
 
 struct AstBinOp {
@@ -72,5 +82,9 @@ struct Ast_node {
     } node;
 
 };
+
+unint new_ast(struct Parser* p);
+struct Ast_node* new_ast_string(int32_t *cps, unint len);
+struct Ast_node* new_ast_number(int32_t *cps, unint len);
 
 #endif
