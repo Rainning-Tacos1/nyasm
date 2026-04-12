@@ -14,13 +14,15 @@
 #define IF_IDENTIDIER ((int32_t[]){'i', 'f', -1})
 #define INCLUDE_IDENTIFIER ((int32_t[]){'i', 'n', 'c', 'l', 'u', 'd', 'e', -1})
 
+// Errors
+
 // Do not call on multiline comment tokens
 void _error_from_token(struct Parser* p, struct token* _token, const char *stype, const char *format, ...) {
     va_list va;
     va_start(va, format);
-    nint col_offset = 1;
-    nint end_col_offset = _token->end_col_offset - _token->col_offset + 1;
-    _format_syntax_error(stype, format, p->tok->source, &_token->lineno, &col_offset, &_token->end_lineno, &end_col_offset, _token->start, _token->end, va);
+    //DBG(1, "col_offset = %d | end_col_offset = %d\n", _token->col_offset, _token->end_col_offset);
+    _syntaxerror_range_with_type(p->tok, stype, format, _token->lineno, _token->end_lineno, _token->col_offset+1, _token->end_col_offset+1, va);
+    //_format_syntax_error(stype, format, p->tok->source, &_token->lineno, &col_offset, &_token->end_lineno, &end_col_offset, _token->start, _token->end, va);
     va_end(va);
 }
 
@@ -45,6 +47,8 @@ void memory_error(struct Parser* p, const char* format, ...) {
     va_end(va);
 }
 
+// Token
+
 unint _fill_token(struct Parser* p) {
     // Allocate
     struct token* new_token = (struct token*)MEM_ALLOC(sizeof(struct token), "token struct");
@@ -63,7 +67,7 @@ unint _fill_token(struct Parser* p) {
     if(p->head == NULL) p->head = new_token;
 
     // Check for errors
-    if (type == ERRORTOKEN && p->tok->done == E_DECODE) return -1;
+    if (type == ERRORTOKEN && p->tok->done == E_DECODE) return FAIL;
     const char *msg = NULL;
     if(type == ERRORTOKEN) {
         switch(p->tok->done) {
@@ -137,6 +141,10 @@ struct token* _peek_token(struct Parser* p) {
     return (p->peek = p->tail);
 }
 
+void _reset_peek(struct Parser* p) {
+    p->peek = p->last_token;
+}
+
 struct Parser* _Parser_New(struct tok_state* tok) {
     struct Parser* p = MEM_ALLOC(sizeof(struct Parser), "parser");
     if(p == NULL) return NULL;
@@ -165,6 +173,21 @@ unint is_at_identifier(struct token* _token, int32_t* identifier) {
     return SUCCESS;
 }
 
+// Pratt Parsing
+
+unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
+    switch(type) {
+        case PLUS:  { *lbp = 10; *rbp = 11; return SUCCESS; }
+        case MINUS: { *lbp = 10; *rbp = 11; return SUCCESS; }
+
+        case STAR:  { *lbp = 20; *rbp = 21; return SUCCESS; }
+        case SLASH: { *lbp = 20; *rbp = 21; return SUCCESS; }
+    }
+    return FAIL;
+}
+
+struct Ast_node* _parse_expr(struct Parser* p, unint min_bp);
+
 // Will return NULL or an AST
 struct Ast_node* _parse_expr_prefix(struct Parser* p) {
     // Request a token
@@ -173,20 +196,29 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
 
     switch(_token->type) {
         case STRING:
+            DBG(1, "Expr pref is string\n");
             struct Ast_node* str = new_ast_string(_token->cps, _token->len);
             if(str == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the string");
             return str;
         case NUMBER:
-            struct Ast_node* number = new_ast_string(_token->cps, _token->len);
+            DBG(1, "Expr pref is number\n");
+            struct Ast_node* number = new_ast_number(_token->cps, _token->len);
             if(number == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the number");
             return number;
-        case NAME:
-            // TODO
-            break;
+        case MINUS:
+        case PLUS:
+            (_token->type == MINUS) ?
+                DBG(1, "Expr pref is a negation\n") : 
+                DBG(1, "Expr pref is a positive-ation\n");
 
-        case PLUS: break;
-        case MINUS : break;
+            unint lbp, rbp;
+            _expr_get_binding_power(_token->type, &lbp, &rbp);
+            struct Ast_node* node = _parse_expr(p, rbp);
+            if(node == NULL) return NULL;
 
+            struct Ast_node* unary = new_ast_binop(_token->type, node, NULL);
+            return unary;
+            
         default:
             _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "invalid token for expression");
             return NULL;
@@ -195,21 +227,52 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
     return NULL;
 }
 
-struct Ast_node* _parse_expr(struct Parser* p, unint min_prec) {
+#define IS_BINOP(type) ((type) == PLUS || (type) == MINUS || (type) == SLASH || (type) == STAR)
+
+struct Ast_node* _parse_expr(struct Parser* p, unint min_bp) {
+    DBG(1, "parsing expre\n");
     // Prefix
     struct Ast_node* left = _parse_expr_prefix(p);
     if(left == NULL) return NULL;
-
+    
+    unint lbp, rbp;
     while(true) {
         struct token* op = _peek_token(p);
         if(op == NULL) return NULL;
+        DBG(1, "peeked Operator token is: %d\n", op->type);
 
-        if(op->type == ENDMARKER) break;
+        if(op->type == ENDMARKER || op->type == NEWLINE) break;
 
-        // ...
+        if(!IS_BINOP(op->type)) {
+            break;
+            // _error_from_token(p, op, ERROR_TYPE_EXPRESSION, "binop invalid token for expression: %d", op->type);
+            // return NULL;
+        }
 
+
+        unint suc = _expr_get_binding_power(op->type, &lbp, &rbp);
+        if(suc == FAIL) {
+            DBG(1, "_expr_get_binding_power failed\n");
+            return NULL;
+        }
+
+        DBG(1, "lbp = %d min_bp = %d\n", lbp, min_bp);
+        if(lbp < min_bp) break;
+
+        op = _read_token(p);
+        if(op == NULL) return NULL;
+        DBG(1, "READ\n");
+
+        struct Ast_node* right = _parse_expr(p, rbp);
+        if(right == NULL) return NULL;
+
+        // build the AST node
+        left = new_ast_binop(op->type, left, right);
+        if(left == NULL) return NULL;
     }
-
+    DBG(1, "Broke\n");
+    // reset the peek so it doesnt keep peeking forward
+    _reset_peek(p);
     return left;
 }
 
@@ -227,15 +290,22 @@ void* _run_parser(struct Parser* p) {
         return NULL;
     }
 
+    struct Ast_node* expr = _parse_expr(p, (unint)(0));
+    if(expr == NULL) {
+        DBG(1, "Error building expression\n");
+        return NULL;
+    }
+
+    dbg_ast(expr);
+
     // Skip comments && new lines
     while((_token = _read_token(p)) != NULL && (_token->type == COMMENT || _token->type == NEWLINE));
     if(_token == NULL) return NULL;
 
     DBG(1, "DONE SKIPING\n");
 
-    if(is_at_identifier(p, IF_IDENTIDIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
-    else if (is_at_identifier(p, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
-    
+    if(is_at_identifier(_token, IF_IDENTIDIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
+    else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
 
     while((_token = _read_token(p)) != NULL && _token->type != ENDMARKER);
     return NULL;

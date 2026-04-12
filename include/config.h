@@ -16,7 +16,7 @@
 #define DO_LEXER_TOKEN_FILL_DBG 0
 #define DO_LEXER_EOF_DBG 0
 
-#define ERROR_TYPE_MESSAGE "Error"
+#define ERROR_TYPE_MESSAGE "SyntaxError"
 #define ERROR_TYPE_MEMORY "MemoryError"
 #define ERROR_TYPE_EXPRESSION "ExpressionError"
 

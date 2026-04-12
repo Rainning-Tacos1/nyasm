@@ -20,16 +20,9 @@ struct AstInclude {
     struct Ast_node* path;
 };
 
-enum BinOps {
-    OP_ADD,
-    OP_SUB,
-    OP_DIV,
-    OP_MUL,
-    OP_NEG,
-};
-
+// An AstBinOp with token type MINUS and right == NULL is the same as negation: -a
 struct AstBinOp {
-    unint op;
+    unint op; // Uses the token type
     struct Ast_node* left;
     struct Ast_node* right;
 };
@@ -73,7 +66,7 @@ struct Ast_node {
         struct AstDeclareVariable var_declare;
 
         // Math & Numbers
-        struct AstBinOp op;
+        struct AstBinOp binop;
         struct AstLiteral literal;
 
         // Ast
@@ -86,5 +79,7 @@ struct Ast_node {
 unint new_ast(struct Parser* p);
 struct Ast_node* new_ast_string(int32_t *cps, unint len);
 struct Ast_node* new_ast_number(int32_t *cps, unint len);
+struct Ast_node* new_ast_binop(unint op, struct Ast_node* left, struct Ast_node* right);
+void dbg_ast(struct Ast_node* ast);
 
 #endif

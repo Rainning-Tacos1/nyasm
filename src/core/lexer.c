@@ -381,9 +381,7 @@ void _format_syntax_error(const char* stype, const char* msg, const char* filena
     LOG("\n");
 }
 
-
-
-unint _syntaxerror_range(struct tok_state *tok, const char *format, nint lineno, nint end_lineno, nint col_offset, nint end_col_offset, va_list vargs) {
+unint _syntaxerror_range_with_type(struct tok_state *tok, const char* stype, const char *format, nint lineno, nint end_lineno, nint col_offset, nint end_col_offset, va_list vargs) {
     // Not needed for now
     if (tok->done == E_ERROR) {
         return ERRORTOKEN;
@@ -412,10 +410,14 @@ unint _syntaxerror_range(struct tok_state *tok, const char *format, nint lineno,
     if (end_col_offset == -1) end_col_offset = col_offset;
 
     // call func
-    _format_syntax_error(ERROR_TYPE_MESSAGE, format, tok->source, &lineno, &col_offset, &end_lineno, &end_col_offset, tok->line_start, _uc.curr - _uc.nread, vargs);
+    _format_syntax_error(stype, format, tok->source, &lineno, &col_offset, &end_lineno, &end_col_offset, tok->line_start, _uc.curr - _uc.nread, vargs);
 
     tok->done = E_ERROR;
     return ERRORTOKEN;
+}
+
+unint _syntaxerror_range(struct tok_state *tok, const char *format, nint lineno, nint end_lineno, nint col_offset, nint end_col_offset, va_list vargs) { 
+    return _syntaxerror_range_with_type(tok, ERROR_TYPE_MESSAGE, format, lineno, end_lineno, col_offset, end_col_offset, vargs);
 }
 
 unint _Tokenizer_syntaxerror(struct tok_state *tok, const char *format, ...) {
@@ -469,7 +471,7 @@ unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type,
 
     unint size = end - start;
 
-    DBG(DO_LEXER_TOKEN_DBG, "[%s]: %d bytes '", _Parser_TokenNames[type], size);
+    DBG(DO_LEXER_TOKEN_DBG, "[%s]: %d bytes, col:%d-%d '", _Parser_TokenNames[type], size, token->col_offset, token->end_col_offset);
     if(start == NULL || end == NULL) DBG(DO_LEXER_TOKEN_DBG, "<NULL>");
     else for(const char* i=start; i<end; ++i) DBG(DO_LEXER_TOKEN_DBG, "%c", *i);
     DBG(DO_LEXER_TOKEN_DBG, "'\n");
@@ -908,7 +910,7 @@ unint _Token_TwoChars(int32_t c1, int32_t c2) {
     case '-':
         switch (c2) {
         case '=': return MINEQUAL;
-        case '>': return RARROW;
+        // case '>': return RARROW;
         }
         break;
     case '/':
@@ -917,11 +919,11 @@ unint _Token_TwoChars(int32_t c1, int32_t c2) {
         case '=': return SLASHEQUAL;
         }
         break;
-    case ':':
-        switch (c2) {
-        case '=': return COLONEQUAL;
-        }
-        break;
+    // case ':':
+    //     switch (c2) {
+    //     case '=': return COLONEQUAL;
+    //     }
+    //     break;
     case '<':
         switch (c2) {
         case '<': return LEFTSHIFT;
@@ -1143,6 +1145,8 @@ _loop:
             p_end = tok->uc.curr;
             return MAKE_TOKEN(COMMENT);
         }
+        p_start = tok->start;
+        p_end = tok->uc.curr - tok->uc.nread;
         return MAKE_TOKEN(SLASH);
     }
 
@@ -1211,7 +1215,7 @@ _loop:
         if (blankline || tok->level > 0) goto nextline;
 
         p_start = tok->start;
-        p_end = tok->uc.curr - tok->uc.nread;
+        p_end = tok->uc.curr;// - tok->uc.nread;
         return MAKE_TOKEN(NEWLINE);
     }
 
