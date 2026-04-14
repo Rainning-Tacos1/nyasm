@@ -1,13 +1,14 @@
 #include "api/memory.h"
+#include "api/log.h"
 #include "api/debug.h"
 
-
-#include "types.h"
 #include "ast.h"
 #include "parser.h"
-#include "lexer.h"
-#include "token.h"
 #include "variables.h"
+
+#include "types.h"
+#include "token.h"
+
 
 struct Ast_node* new_ast_node() {
     return (struct Ast_node*)MEM_ALLOC(sizeof(struct Ast_node), "AST node");
@@ -59,12 +60,23 @@ struct Ast_node* new_ast_binop(unint op, struct Ast_node* left, struct Ast_node*
     return node;
 }
 
+struct Ast_node* new_ast_variable(struct Variable* var) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) return NULL;
+    
+    node->type = VAR_NODE;
+
+    node->node.var = *var;
+    return node;
+}
+
 void dbg_ast_recur(struct Ast_node* ast, unint level) {
     for(unint i=0; i<level; ++i) LOG("\t");
     LOG("[");
     switch(ast->type) {
         case BINOP_NODE: { LOG("BINOP_NODE"); break; }
         case LITERAL_NODE: { LOG("LITERAL_NODE"); break; }
+        case VAR_NODE: { LOG("VARIABLE_NODE"); break; }
         default: { LOG("INVALID_NODE"); break; }
     }
     LOG("] ");
@@ -73,10 +85,36 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case BINOP_NODE:
             LOG("Op: '");
             switch(ast->node.binop.op) {
-                case PLUS: { LOG("+"); break; }
-                case MINUS: { LOG("-"); break; }
-                case SLASH: { LOG("/"); break; }
-                case STAR: { LOG("*"); break; }
+                case NOTEQUAL:     { LOG("!="); break; }
+                case GREATER:      { LOG(">"); break; }
+                case GREATEREQUAL: { LOG(">="); break; }
+                case EQEQUAL:      { LOG("=="); break; }
+                case LESS:         { LOG("<"); break; }
+                case LESSEQUAL:    { LOG("<="); break; }
+
+                case VBAR:         { LOG("|"); break; }
+                case CIRCUMFLEX:   { LOG("^"); break; }
+                case AMPER:        { LOG("&"); break; }
+
+                case LEFTSHIFT:    { LOG("<<"); break; }
+                case RIGHTSHIFT:   { LOG(">>"); break; }
+
+                case PLUS:         { LOG("+"); break; }
+                case MINUS:        { LOG("-"); break; }
+
+                case SLASH:        { LOG("/"); break; }
+                case DOUBLESLASH:  { LOG("//"); break; }
+                case PERCENT:      { LOG("%%"); break; }
+                case STAR:         { LOG("*"); break; }
+
+                case TILDE:        { LOG("~"); break; }
+                case EXCLAMATION:  { LOG("!"); break; }
+
+                case DOUBLESTAR:   { LOG("**"); break; }
+
+                case DOUBLEVBAR:   { LOG("||"); break; }
+                case DOUBLEAMPER:  { LOG("&&"); break; }
+
                 default: { LOG("X"); break; }
             };
             LOG("'\n");
@@ -95,6 +133,10 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             LOG("]\n");
             break;
         
+        case VAR_NODE:
+            for(unint i=0; i<ast->node.var.var.len; ++i) DBG_CP(1, ast->node.var.var.cps[i]);
+            LOG("\n");
+            break;
         default: { LOG("INVALID_NODE"); break; }
     }
 }

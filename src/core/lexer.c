@@ -108,6 +108,8 @@ const char * const _Parser_TokenNames[] = {
     "<ERRORTOKEN>",
     "<ENCODING>",
     "<N_TOKENS>",
+    "DOUBLEVBAR",
+    "DOUBLEAMPER",
 };
 
 
@@ -894,6 +896,7 @@ unint _Token_TwoChars(int32_t c1, int32_t c2) {
     case '&':
         switch (c2) {
         case '=': return AMPEREQUAL;
+        case '&': return DOUBLEAMPER;
         }
         break;
     case '*':
@@ -955,6 +958,7 @@ unint _Token_TwoChars(int32_t c1, int32_t c2) {
     case '|':
         switch (c2) {
         case '=': return VBAREQUAL;
+        case '|': return DOUBLEVBAR;
         }
         break;
     }

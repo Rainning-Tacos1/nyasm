@@ -3,6 +3,10 @@
 
 #include "types.h"
 
+struct Value;
+struct AstIdentifier;
+struct Variable;
+
 enum ValueTypes {
     VALUE_INT,
     VALUE_STR,
@@ -47,4 +51,7 @@ struct Value* new_character(int32_t cp);
 struct Value* new_array();
 unint append_array(struct Value* arr, struct Value* val);
 
+struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len);
+struct Variable* get_variable(struct Parser* p, int32_t* cps, unint len);
+unint is_variable_declared(struct Parser* p, int32_t* cps, unint len);
 #endif

@@ -1,9 +1,16 @@
+#include "api/memory.h"
+#include "api/debug.h"
+
+#include "parser.h"
+#include "ast.h"
 #include "variables.h"
+
+
 #include "types.h"
 
-#include "api/memory.h"
-
+#ifndef NULL
 #define NULL ((void*)0)
+#endif
 
 // Strings
 struct Value* new_string(int32_t* cps, unint len) {
@@ -71,4 +78,42 @@ struct Value* new_number(int32_t* cps, unint len) {
     number->type = VALUE_INT;
     
     return number;
+}
+
+struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len) {
+    struct Variable* var = (struct Variable*)MEM_ALLOC(sizeof(struct Variable), "new variable");
+    if(var == NULL) return NULL;
+
+    // Fill
+    var->var.len = len;
+    var->var.cps = cps;
+    var->next = NULL;
+
+    // First Variable
+    if(p->variables == NULL) p->variables = var;
+
+    // Link the new variable
+    if(p->variables_tail != NULL) p->variables_tail->next = var;
+    p->variables_tail = var;
+
+    return var;
+}
+
+struct Variable* get_variable(struct Parser* p, int32_t* cps, unint len) {
+    if(p == NULL || p->variables == NULL) return NULL;
+
+    for(struct Variable* var = p->variables; var != NULL; var = var->next) {
+        if(var->var.len != len) continue;
+
+        unint i;
+        for(i = 0; i < len; ++i) if(var->var.cps[i] != cps[i]) break;
+        
+        // Full match
+        if(i == len) return var;
+    }
+    return NULL;
+}
+
+unint is_variable_declared(struct Parser* p, int32_t* cps, unint len) {
+    return (get_variable(p, cps, len) == NULL) ? FAIL : SUCCESS;
 }

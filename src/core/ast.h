@@ -2,16 +2,16 @@
 #define AST_H
 
 #include "types.h"
-#include "variables.h"
 
-struct Parser; 
+struct Parser;
+struct Value;
 
 enum AST_types {
     INCLUDE_NODE,
     BINOP_NODE,
     LITERAL_NODE,
+    VAR_NODE,
     ASSIGN_VAR_NODE,
-    DECLARE_VAR_NODE,
     STATEMENTS_NODE,
     MODULE_NODE,
 };
@@ -33,17 +33,17 @@ struct AstLiteral {
 
 // Used to hold variable names/pure text
 struct AstIdentifier {
-    int32_t* str;
+    int32_t* cps;
     unint len; 
 };
 
-struct AstAssignVariable {
-    struct AstIdentifier name;
-    struct Ast_node* value;
+struct Variable {
+    struct AstIdentifier var;
+    struct Variable* next;
 };
 
-struct AstDeclareVariable {
-    struct AstIdentifier name;
+struct AstAssignVariable {
+    struct AstIdentifier* name;
     struct Ast_node* value;
 };
 
@@ -63,11 +63,13 @@ struct Ast_node {
         struct AstInclude include;
 
         struct AstAssignVariable var_assign;
-        struct AstDeclareVariable var_declare;
 
         // Math & Numbers
         struct AstBinOp binop;
         struct AstLiteral literal;
+
+        // Variable
+        struct Variable var;
 
         // Ast
         struct Statements statements;
@@ -80,6 +82,8 @@ unint new_ast(struct Parser* p);
 struct Ast_node* new_ast_string(int32_t *cps, unint len);
 struct Ast_node* new_ast_number(int32_t *cps, unint len);
 struct Ast_node* new_ast_binop(unint op, struct Ast_node* left, struct Ast_node* right);
+struct Ast_node* new_ast_variable(struct Variable* var);
+
 void dbg_ast(struct Ast_node* ast);
 
 #endif

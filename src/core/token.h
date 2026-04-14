@@ -74,4 +74,7 @@
 #define N_TOKENS        69
 #define NT_OFFSET       256
 
+#define DOUBLEVBAR 70
+#define DOUBLEAMPER 71
+
 #endif

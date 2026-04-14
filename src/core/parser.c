@@ -1,18 +1,22 @@
 #include <stdarg.h>
-#include "types.h"
-#include "parser.h"
-#include "lexer.h"
-#include "token.h"
-#include "err.h"
-#include "ast.h"
-#include "variables.h"
-
 #include "api/memory.h"
 #include "api/log.h"
 #include "api/debug.h"
 
+#include "token.h"
+#include "err.h"
+
+#include "lexer.h"
+#include "parser.h"
+#include "ast.h"
+#include "variables.h"
+
+#include "types.h"
+
 #define IF_IDENTIDIER ((int32_t[]){'i', 'f', -1})
 #define INCLUDE_IDENTIFIER ((int32_t[]){'i', 'n', 'c', 'l', 'u', 'd', 'e', -1})
+#define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
+#define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
 
 // Errors
 
@@ -150,6 +154,7 @@ struct Parser* _Parser_New(struct tok_state* tok) {
     if(p == NULL) return NULL;
 
     p->tok = tok;
+    p->variables = p->variables_tail = NULL;
     p->head = p->tokens = p->last_token = p->peek = p->tail = NULL;
 
     return p;
@@ -158,6 +163,12 @@ struct Parser* _Parser_New(struct tok_state* tok) {
 unint is_at_identifier(struct token* _token, int32_t* identifier) {
     // Reject if its not an identifier
     if(_token->type != NAME) return FAIL;
+
+    // Just check if it starts with @
+    if(identifier == NULL) {
+        if(_token->len < 1) return FAIL;
+        return (_token->cps[0] == '@') ? SUCCESS : FAIL;
+    }
 
     // Get the len of the identifier
     unint identifier_len = 0;
@@ -174,16 +185,39 @@ unint is_at_identifier(struct token* _token, int32_t* identifier) {
 }
 
 // Pratt Parsing
+#define UNARY_BP 120
 
 unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
     switch(type) {
-        case PLUS:  { *lbp = 10; *rbp = 11; return SUCCESS; }
-        case MINUS: { *lbp = 10; *rbp = 11; return SUCCESS; }
+        case DOUBLEVBAR: { *lbp = 10; *rbp = 11; break; }
+        case DOUBLEAMPER:  { *lbp = 20; *rbp = 21; break; }
 
-        case STAR:  { *lbp = 20; *rbp = 21; return SUCCESS; }
-        case SLASH: { *lbp = 20; *rbp = 21; return SUCCESS; }
+        case NOTEQUAL:
+        case GREATER:
+        case GREATEREQUAL:
+        case EQEQUAL:
+        case LESS:
+        case LESSEQUAL: { *lbp = 30; *rbp = 31; break; }
+
+        case VBAR: { *lbp = 40; *rbp = 41; break; }
+        case CIRCUMFLEX: { *lbp = 50; *rbp = 51; break; }
+        case AMPER: { *lbp = 60; *rbp = 61; break; }
+
+        case LEFTSHIFT:
+        case RIGHTSHIFT: { *lbp = 70; *rbp = 71; break; }
+
+        case PLUS:
+        case MINUS: { *lbp = 100; *rbp = 101; break; }
+
+        case SLASH:
+        case DOUBLESLASH:
+        case PERCENT:
+        case STAR: { *lbp = 110; *rbp = 111; break; }
+
+        case DOUBLESTAR: { *lbp = 140; *rbp = 130; break; }
+        default : return FAIL;
     }
-    return FAIL;
+    return SUCCESS;
 }
 
 struct Ast_node* _parse_expr(struct Parser* p, unint min_bp);
@@ -195,6 +229,16 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
     if(_token == NULL) return NULL;
 
     switch(_token->type) {
+        case LPAR:
+            struct Ast_node* left = _parse_expr(p, 0);
+
+            struct token * rpar = _read_token(p);
+            if(rpar == NULL || rpar->type != RPAR) {
+                DBG(1, "does not end on ')'\n");
+                return NULL;
+            }
+            
+            return left;
         case STRING:
             DBG(1, "Expr pref is string\n");
             struct Ast_node* str = new_ast_string(_token->cps, _token->len);
@@ -207,18 +251,30 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
             return number;
         case MINUS:
         case PLUS:
-            (_token->type == MINUS) ?
-                DBG(1, "Expr pref is a negation\n") : 
-                DBG(1, "Expr pref is a positive-ation\n");
-
-            unint lbp, rbp;
-            _expr_get_binding_power(_token->type, &lbp, &rbp);
-            struct Ast_node* node = _parse_expr(p, rbp);
+        case TILDE:
+        case EXCLAMATION:
+            struct Ast_node* node = _parse_expr(p, UNARY_BP);
             if(node == NULL) return NULL;
 
             struct Ast_node* unary = new_ast_binop(_token->type, node, NULL);
+            if(unary == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for unary expression");
             return unary;
-            
+
+        case NAME:
+            if(is_at_identifier(_token, NULL) == SUCCESS) {
+                _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "@ identifiers are not allowed on expressions");
+                return NULL;
+            }
+
+            struct Variable* var = get_variable(p, _token->cps, _token->len);
+            if(var == NULL) {
+                _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "variable is not declared");
+                return NULL;
+            }
+
+            struct Ast_node* var_node = new_ast_variable(var);
+            if(var_node == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the variable");
+            return var_node;
         default:
             _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "invalid token for expression");
             return NULL;
@@ -227,41 +283,28 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
     return NULL;
 }
 
-#define IS_BINOP(type) ((type) == PLUS || (type) == MINUS || (type) == SLASH || (type) == STAR)
-
 struct Ast_node* _parse_expr(struct Parser* p, unint min_bp) {
-    DBG(1, "parsing expre\n");
     // Prefix
     struct Ast_node* left = _parse_expr_prefix(p);
     if(left == NULL) return NULL;
-    
+
     unint lbp, rbp;
     while(true) {
         struct token* op = _peek_token(p);
         if(op == NULL) return NULL;
-        DBG(1, "peeked Operator token is: %d\n", op->type);
 
-        if(op->type == ENDMARKER || op->type == NEWLINE) break;
-
-        if(!IS_BINOP(op->type)) {
-            break;
-            // _error_from_token(p, op, ERROR_TYPE_EXPRESSION, "binop invalid token for expression: %d", op->type);
-            // return NULL;
-        }
-
+        if(op->type == ENDMARKER || op->type == NEWLINE || op->type == RPAR) break;
 
         unint suc = _expr_get_binding_power(op->type, &lbp, &rbp);
         if(suc == FAIL) {
-            DBG(1, "_expr_get_binding_power failed\n");
+            _error_from_token(p, op, ERROR_TYPE_EXPRESSION, "Invalid operator in expression");
             return NULL;
         }
 
-        DBG(1, "lbp = %d min_bp = %d\n", lbp, min_bp);
         if(lbp < min_bp) break;
 
         op = _read_token(p);
         if(op == NULL) return NULL;
-        DBG(1, "READ\n");
 
         struct Ast_node* right = _parse_expr(p, rbp);
         if(right == NULL) return NULL;
@@ -270,7 +313,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp) {
         left = new_ast_binop(op->type, left, right);
         if(left == NULL) return NULL;
     }
-    DBG(1, "Broke\n");
+
     // reset the peek so it doesnt keep peeking forward
     _reset_peek(p);
     return left;
@@ -286,17 +329,30 @@ void* _run_parser(struct Parser* p) {
 
     // Create the first AST node
     if(new_ast(p) == FAIL) {
-        memory_error(p, "no available memory for AST's root node");
+        memory_error(p, "No available memory for AST's root node");
         return NULL;
     }
+
+    struct Variable* var = new_variable(p, (int32_t[]){'h','e','l','l','o','_','w','o','r','l','d'}, 11);
+    if(var == NULL) {
+        DBG(1, "Error building variable\n");
+        return NULL;
+    }
+
+    (is_variable_declared(p, (int32_t[]){'h', 'i'}, 2) == SUCCESS) ?
+        DBG(1, "Variable is declared\n") :
+        DBG(1, "Variable is NOT declared\n");
 
     struct Ast_node* expr = _parse_expr(p, (unint)(0));
     if(expr == NULL) {
         DBG(1, "Error building expression\n");
         return NULL;
     }
-
+    
+    DBG(1, "#################################\n");
     dbg_ast(expr);
+
+    DBG(1, "#################################\n");
 
     // Skip comments && new lines
     while((_token = _read_token(p)) != NULL && (_token->type == COMMENT || _token->type == NEWLINE));
@@ -306,6 +362,8 @@ void* _run_parser(struct Parser* p) {
 
     if(is_at_identifier(_token, IF_IDENTIDIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
     else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
+    else if (is_at_identifier(_token, EXTERN_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXTER\n");
+    else if (is_at_identifier(_token, EXPORT_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXPORT\n");
 
     while((_token = _read_token(p)) != NULL && _token->type != ENDMARKER);
     return NULL;

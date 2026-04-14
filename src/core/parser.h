@@ -3,9 +3,11 @@
 
 #include "types.h"
 #include "config.h"
-#include "lexer.h"
 
+struct tok_state;
+struct token;
 struct Ast_node;
+struct Variable;
 
 struct Parser {
     struct tok_state* tok;
@@ -17,6 +19,9 @@ struct Parser {
     struct token* tail;
 
     struct Ast_node* ast;
+
+    struct Variable* variables;
+    struct Variable* variables_tail;
 };
 
 struct Parser* _Parser_New(struct tok_state* tok);
