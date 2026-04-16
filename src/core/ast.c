@@ -115,6 +115,9 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                 case DOUBLEVBAR:   { LOG("||"); break; }
                 case DOUBLEAMPER:  { LOG("&&"); break; }
 
+                case LSQB:         { LOG("idx"); break; }
+                case DOT:          { LOG("concat"); break; }
+
                 default: { LOG("X"); break; }
             };
             LOG("'\n");

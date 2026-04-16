@@ -18,6 +18,8 @@
 #define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
 #define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
 
+extern const char * const _Parser_TokenNames[];
+
 // Errors
 
 // Do not call on multiline comment tokens
@@ -110,7 +112,7 @@ unint _fill_token(struct Parser* p) {
 struct token* _read_token(struct Parser* p) {
     // Advance if we already have tokens
     if (p->last_token && p->last_token != p->tail)
-        return (p->last_token = p->last_token->next);
+        return (p->peek = p->last_token = p->last_token->next);
 
     // Ensure we have tokens
     if (!p->last_token) {
@@ -186,6 +188,7 @@ unint is_at_identifier(struct token* _token, int32_t* identifier) {
 
 // Pratt Parsing
 #define UNARY_BP 120
+#define INDEX_BP 130
 
 unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
     switch(type) {
@@ -206,6 +209,8 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
         case LEFTSHIFT:
         case RIGHTSHIFT: { *lbp = 70; *rbp = 71; break; }
 
+        case DOT: { *lbp = 90; *rbp = 80; break; }
+
         case PLUS:
         case MINUS: { *lbp = 100; *rbp = 101; break; }
 
@@ -220,7 +225,7 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
     return SUCCESS;
 }
 
-struct Ast_node* _parse_expr(struct Parser* p, unint min_bp);
+struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma);
 
 // Will return NULL or an AST
 struct Ast_node* _parse_expr_prefix(struct Parser* p) {
@@ -230,14 +235,17 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
 
     switch(_token->type) {
         case LPAR:
-            struct Ast_node* left = _parse_expr(p, 0);
+            struct Ast_node* left = _parse_expr(p, 0, 0); // Do not allow commas
+            if(left == NULL) return NULL;
 
             struct token * rpar = _read_token(p);
-            if(rpar == NULL || rpar->type != RPAR) {
+            if(rpar == NULL) return NULL;
+
+            if(rpar->type != RPAR) {
                 DBG(1, "does not end on ')'\n");
                 return NULL;
             }
-            
+            DBG(1, "BACKTRACKING\n");
             return left;
         case STRING:
             DBG(1, "Expr pref is string\n");
@@ -253,7 +261,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
         case PLUS:
         case TILDE:
         case EXCLAMATION:
-            struct Ast_node* node = _parse_expr(p, UNARY_BP);
+            struct Ast_node* node = _parse_expr(p, UNARY_BP, 0);
             if(node == NULL) return NULL;
 
             struct Ast_node* unary = new_ast_binop(_token->type, node, NULL);
@@ -275,6 +283,43 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
             struct Ast_node* var_node = new_ast_variable(var);
             if(var_node == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the variable");
             return var_node;
+        case LSQB:
+
+            if((_token = _peek_token(p)) == NULL || _token->type == COMMA) {
+                _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "expected a value before the comma");
+                return NULL;
+            }
+            _reset_peek(p); // Reset so it does not consume any valid start
+
+            // Create Array
+
+            while(true) {
+                // Finished
+                if(_token->type == RSQB) break;
+
+                // parse the expression
+                DBG(1, "STARTED PARSING ELEMENT\n");
+                struct Ast_node* el = _parse_expr(p, 0, 1); // Do stop on commas
+                if(el == NULL) return NULL;
+                DBG(1, "-------------------- ELEMENT APPENDED P=%p\n", el);
+
+                // Read possibly the next comma or ]
+                if((_token = _read_token(p)) == NULL) return NULL;
+                if(_token->type == COMMA) {
+                    struct token* rsqb = _peek_token(p);
+                    if(rsqb == NULL) return NULL;
+
+                    if(rsqb->type == RSQB) {
+                        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "expected a value after the comma");
+                        return NULL;
+                    }
+                    _reset_peek(p);
+                }
+            }
+
+            // Return Array
+            _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "array not implemented yet");
+            return NULL;
         default:
             _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "invalid token for expression");
             return NULL;
@@ -283,8 +328,9 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
     return NULL;
 }
 
-struct Ast_node* _parse_expr(struct Parser* p, unint min_bp) {
+struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma) {
     // Prefix
+    // On an array, _parse_expr will never be called when _parse_expr_prefix is a comma, no need to do checks
     struct Ast_node* left = _parse_expr_prefix(p);
     if(left == NULL) return NULL;
 
@@ -293,8 +339,30 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp) {
         struct token* op = _peek_token(p);
         if(op == NULL) return NULL;
 
-        if(op->type == ENDMARKER || op->type == NEWLINE || op->type == RPAR) break;
+        if(op->type == ENDMARKER || op->type == NEWLINE || op->type == RPAR || op->type == RSQB || (stop_on_comma && op->type == COMMA)) break;
 
+        // Postfix operator
+        if(op->type == LSQB) {
+
+            op = _read_token(p);
+            if(op == NULL) return NULL;
+            
+            struct Ast_node* right = _parse_expr(p, 0, 0); // Do not allow commas
+            if(right == NULL) return NULL;
+
+            struct token * rsqb = _read_token(p);
+            if(rsqb == NULL) return NULL;
+            if(rsqb->type != RSQB) {
+                DBG(1, "does not end on ']'\n");
+                return NULL;
+            }
+
+            DBG(1, "Creating LSQB NODE\n");
+            left = new_ast_binop(LSQB, left, right);
+            continue;
+        }
+
+        
         unint suc = _expr_get_binding_power(op->type, &lbp, &rbp);
         if(suc == FAIL) {
             _error_from_token(p, op, ERROR_TYPE_EXPRESSION, "Invalid operator in expression");
@@ -306,7 +374,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp) {
         op = _read_token(p);
         if(op == NULL) return NULL;
 
-        struct Ast_node* right = _parse_expr(p, rbp);
+        struct Ast_node* right = _parse_expr(p, rbp, stop_on_comma); // Propagate the setting used to the other nodes
         if(right == NULL) return NULL;
 
         // build the AST node
@@ -318,8 +386,6 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp) {
     _reset_peek(p);
     return left;
 }
-
-extern const char * const _Parser_TokenNames[];
 
 void* _run_parser(struct Parser* p) {
 
@@ -343,7 +409,7 @@ void* _run_parser(struct Parser* p) {
         DBG(1, "Variable is declared\n") :
         DBG(1, "Variable is NOT declared\n");
 
-    struct Ast_node* expr = _parse_expr(p, (unint)(0));
+    struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
     if(expr == NULL) {
         DBG(1, "Error building expression\n");
         return NULL;
@@ -352,7 +418,8 @@ void* _run_parser(struct Parser* p) {
     DBG(1, "#################################\n");
     dbg_ast(expr);
 
-    DBG(1, "#################################\n");
+    DBG(1, "#################################\n");    
+
 
     // Skip comments && new lines
     while((_token = _read_token(p)) != NULL && (_token->type == COMMENT || _token->type == NEWLINE));

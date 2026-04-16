@@ -1206,6 +1206,7 @@ _loop:
     
     // It's an @ identifier but its not followed by a valid identifier
     else if(is_at_identifier) {
+        backup_cp(tok);
         _Tokenizer_syntaxerror(tok, "Invalid identifier name after '@'");
         return MAKE_TOKEN(ERRORTOKEN);
     } 
