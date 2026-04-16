@@ -2,9 +2,9 @@
 #include "api/log.h"
 #include "api/debug.h"
 
-#include "ast.h"
 #include "parser.h"
 #include "variables.h"
+#include "ast.h"
 
 #include "types.h"
 #include "token.h"
@@ -70,6 +70,16 @@ struct Ast_node* new_ast_variable(struct Variable* var) {
     return node;
 }
 
+struct Ast_node* new_ast_array(struct Value* var) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) return NULL;
+    
+    node->type = LITERAL_NODE;
+
+    node->node.literal.value = var;
+    return node;
+}
+
 void dbg_ast_recur(struct Ast_node* ast, unint level) {
     for(unint i=0; i<level; ++i) LOG("\t");
     LOG("[");
@@ -129,8 +139,12 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case LITERAL_NODE:
             LOG("[");
             switch(ast->node.literal.value->type) {
-                case VALUE_INT: { LOG("INTEGER"); break; }
-                case VALUE_STR: { LOG("STRING"); break; }
+                case VALUE_INT:    { LOG("INTEGER"); break; }
+                case VALUE_STR:    { LOG("STRING"); break; }
+                case VALUE_DOUBLE: { LOG("DOUBLE"); break; }
+                case VALUE_ARRAY:  { LOG("ARRAY"); break; }
+
+                default:           { LOG("UNKNOWN"); break; }
 
             }
             LOG("]\n");

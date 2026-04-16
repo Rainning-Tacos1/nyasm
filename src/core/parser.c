@@ -8,8 +8,8 @@
 
 #include "lexer.h"
 #include "parser.h"
-#include "ast.h"
 #include "variables.h"
+#include "ast.h"
 
 #include "types.h"
 
@@ -226,6 +226,7 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
 }
 
 struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma);
+unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val);
 
 // Will return NULL or an AST
 struct Ast_node* _parse_expr_prefix(struct Parser* p) {
@@ -245,17 +246,19 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
                 DBG(1, "does not end on ')'\n");
                 return NULL;
             }
-            DBG(1, "BACKTRACKING\n");
+
             return left;
         case STRING:
             DBG(1, "Expr pref is string\n");
             struct Ast_node* str = new_ast_string(_token->cps, _token->len);
             if(str == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the string");
+
             return str;
         case NUMBER:
             DBG(1, "Expr pref is number\n");
             struct Ast_node* number = new_ast_number(_token->cps, _token->len);
             if(number == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the number");
+
             return number;
         case MINUS:
         case PLUS:
@@ -266,6 +269,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
 
             struct Ast_node* unary = new_ast_binop(_token->type, node, NULL);
             if(unary == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for unary expression");
+
             return unary;
 
         case NAME:
@@ -282,6 +286,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
 
             struct Ast_node* var_node = new_ast_variable(var);
             if(var_node == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the variable");
+
             return var_node;
         case LSQB:
 
@@ -292,6 +297,8 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
             _reset_peek(p); // Reset so it does not consume any valid start
 
             // Create Array
+            struct Value* arr = new_array();
+            if(arr == NULL) return NULL;
 
             while(true) {
                 // Finished
@@ -301,6 +308,18 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
                 DBG(1, "STARTED PARSING ELEMENT\n");
                 struct Ast_node* el = _parse_expr(p, 0, 1); // Do stop on commas
                 if(el == NULL) return NULL;
+
+                // Eval the expression
+                struct Value val;
+                unint suc = _eval_expr(p, el, &val);
+                if(suc == FAIL) return NULL;
+
+                // Append to the array
+                if(append_array(arr, &val) == FAIL) {
+                    DBG(1, "Error appending to array");
+                    return NULL;
+                }
+
                 DBG(1, "-------------------- ELEMENT APPENDED P=%p\n", el);
 
                 // Read possibly the next comma or ]
@@ -318,8 +337,10 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
             }
 
             // Return Array
-            _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "array not implemented yet");
-            return NULL;
+            struct Ast_node* arr_node = new_ast_array(arr);
+            if(arr_node == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the array");
+
+            return arr_node;
         default:
             _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "invalid token for expression");
             return NULL;
@@ -387,6 +408,74 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
     return left;
 }
 
+unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
+    switch(expr->type) {
+        case LITERAL_NODE:
+            *val = *expr->node.literal.value;
+            return SUCCESS;
+        case VAR_NODE:
+            *val = expr->node.var.val;
+            return SUCCESS;
+        case BINOP_NODE:
+            struct Value vleft, vright;
+            if(_eval_expr(p, expr->node.binop.left, &vleft) == FAIL) return FAIL;
+            // May not exist depending on the operator
+            if(expr->node.binop.right && _eval_expr(p, expr->node.binop.right, &vright) == FAIL) return FAIL;
+
+            // Check for possible type errors
+
+            // Concatnation only allowed on Strings/characters
+            unint op = expr->node.binop.op;
+            if(op == DOT && ( 
+                (vleft.type != VALUE_CHARACTER && vleft.type != VALUE_STR) ||
+                (vright.type != VALUE_CHARACTER && vright.type != VALUE_STR)
+            )) {
+                // Use token later
+                DBG(1, "Can only perform concatnation on strings types\n");
+                return FAIL;
+            }
+
+            // Arithmetic only on ints/floats
+            if (op == PLUS && ( 
+                (vleft.type != VALUE_INT && vleft.type != VALUE_DOUBLE) ||
+                (expr->node.binop.right &&
+                    (vright.type != VALUE_INT && vright.type != VALUE_DOUBLE)
+                ) 
+            )) {
+                // Use token later
+                DBG(1, "Can only perform arithmetic operations on integer/decimal types\n");
+                return FAIL;
+            }
+
+            switch(expr->node.binop.op) {
+                case PLUS:
+                    // unary plus, if right is not present, preserve the original type
+                    if(!expr->node.binop.right) { *val = vleft; return SUCCESS; }
+
+                    val->type = LITERAL_NODE;
+                    // Convert types
+                    if(vleft.type == VALUE_INT && vright.type == VALUE_INT) {
+                        val->type = VALUE_INT;
+                        // Check for overflows
+                        val->val.number = vleft.val.number + vright.val.number;
+                        return SUCCESS;
+                    }
+
+                    // Promote to flt
+                    double l = (vleft.type == VALUE_INT) ?  (double)vleft.val.number  : vleft.val.flt;
+                    double r = (vright.type == VALUE_INT) ? (double)vright.val.number : vright.val.flt;
+
+                    val->type = VALUE_DOUBLE;
+                    val->val.flt = l + r;
+                    return SUCCESS;
+                default:
+                    return FAIL;
+            }
+        default:
+            return FAIL;
+    }
+}
+
 void* _run_parser(struct Parser* p) {
 
     struct token* _token;
@@ -399,7 +488,11 @@ void* _run_parser(struct Parser* p) {
         return NULL;
     }
 
-    struct Variable* var = new_variable(p, (int32_t[]){'h','e','l','l','o','_','w','o','r','l','d'}, 11);
+    struct Variable* var = new_variable(p, (int32_t[]){'h','e','l','l','o','_','w','o','r','l','d'}, 11, &(struct Value){
+        .type = VALUE_INT,
+        .val.number = 0x10
+    });
+
     if(var == NULL) {
         DBG(1, "Error building variable\n");
         return NULL;
@@ -420,6 +513,16 @@ void* _run_parser(struct Parser* p) {
 
     DBG(1, "#################################\n");    
 
+    struct Value out;
+    suc = _eval_expr(p, expr, &out);
+    if(suc == FAIL) {
+        DBG(1, "Error evaluating expression\n");
+        return NULL;
+    }
+
+    DBG(1, "*********************************\n");
+    print_value(&out);
+    DBG(1, "*********************************\n");   
 
     // Skip comments && new lines
     while((_token = _read_token(p)) != NULL && (_token->type == COMMENT || _token->type == NEWLINE));

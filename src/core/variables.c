@@ -2,8 +2,8 @@
 #include "api/debug.h"
 
 #include "parser.h"
-#include "ast.h"
 #include "variables.h"
+#include "ast.h"
 
 
 #include "types.h"
@@ -55,12 +55,15 @@ unint append_array(struct Value* arr, struct Value* val) {
     struct ArrayElement* arr_el = (struct ArrayElement*)MEM_ALLOC(sizeof(struct ArrayElement), "array element value");
     if(arr_el == NULL) return FAIL;
 
+    // 1st time
+    if(arr->val.arr.head == NULL) arr->val.arr.head = arr_el;
+
     // Link
     if(arr->val.arr.tail != NULL) arr->val.arr.tail->next = arr_el;
     arr->val.arr.tail = arr_el;
     
     // Value
-    arr->val.arr.tail->this = val;
+    arr->val.arr.tail->this = *val;
 
     // Update Len
     arr->val.arr.len += 1;
@@ -74,13 +77,16 @@ struct Value* new_number(int32_t* cps, unint len) {
     if(number == NULL) return NULL;
 
     // Parse the number
+    // May also be float
+    // May be binary
+    // May be decimal
     number->val.number = 0xc0ffe; // For now
     number->type = VALUE_INT;
     
     return number;
 }
 
-struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len) {
+struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len, struct Value* val) {
     struct Variable* var = (struct Variable*)MEM_ALLOC(sizeof(struct Variable), "new variable");
     if(var == NULL) return NULL;
 
@@ -88,6 +94,9 @@ struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len) {
     var->var.len = len;
     var->var.cps = cps;
     var->next = NULL;
+
+    // Copy
+    var->val = *val;
 
     // First Variable
     if(p->variables == NULL) p->variables = var;
@@ -117,3 +126,40 @@ struct Variable* get_variable(struct Parser* p, int32_t* cps, unint len) {
 unint is_variable_declared(struct Parser* p, int32_t* cps, unint len) {
     return (get_variable(p, cps, len) == NULL) ? FAIL : SUCCESS;
 }
+
+void print_value_recur(struct Value* val, unint level) {
+    for(unint i=0; i<level; ++i) LOG("\t");
+    switch(val->type) {
+        case VALUE_INT: 
+            LOG("Number: %d", val->val.number);
+            break;
+        case VALUE_DOUBLE:
+            LOG("Float: %f", val->val.flt);
+            break;
+        case VALUE_STR:
+            LOG("Strong: '");
+            for(unint i=0; i<val->val.string.len; ++i) LOG_CP(val->val.string.str[i]);
+            LOG("'");
+            break;
+        case VALUE_ARRAY:
+            LOG("[\n");
+            struct ArrayElement* el = val->val.arr.head;
+            while(el) {
+                print_value_recur(&el->this, level+1);
+                el = el->next;
+            }
+            for(unint i=0; i<level; ++i) LOG("\t");
+            LOG("]");
+            break;
+        default:
+            LOG("Invalid variable type");
+    }
+    LOG("\n");
+    return;
+}
+
+void print_value(struct Value* val) {
+    print_value_recur(val, 0);
+}
+
+// Get Variable number

@@ -19,6 +19,7 @@
 #define ERROR_TYPE_MESSAGE "SyntaxError"
 #define ERROR_TYPE_MEMORY "MemoryError"
 #define ERROR_TYPE_EXPRESSION "ExpressionError"
+#define ERROR_TYPE_TYPE "TypeError"
 
 #define MAX_PARENTHESES_LEVEL 100
 

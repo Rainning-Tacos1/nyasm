@@ -39,6 +39,7 @@ struct AstIdentifier {
 
 struct Variable {
     struct AstIdentifier var;
+    struct Value val;
     struct Variable* next;
 };
 
@@ -83,6 +84,7 @@ struct Ast_node* new_ast_string(int32_t *cps, unint len);
 struct Ast_node* new_ast_number(int32_t *cps, unint len);
 struct Ast_node* new_ast_binop(unint op, struct Ast_node* left, struct Ast_node* right);
 struct Ast_node* new_ast_variable(struct Variable* var);
+struct Ast_node* new_ast_array(struct Value* var);
 
 void dbg_ast(struct Ast_node* ast);
 

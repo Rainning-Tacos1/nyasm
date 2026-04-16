@@ -3,9 +3,10 @@
 
 #include "types.h"
 
-struct Value;
 struct AstIdentifier;
 struct Variable;
+struct ArrayElement;
+
 
 enum ValueTypes {
     VALUE_INT,
@@ -20,11 +21,6 @@ struct String {
     unint len;
 };
 
-struct ArrayElement {
-    struct Value* this;
-    struct ArrayElement* next;
-};
-
 struct Array {
     struct ArrayElement* head;
     struct ArrayElement* tail;
@@ -37,11 +33,15 @@ struct Value {
     union {
         nint number;
         struct String string;
-        int32_t character; // Only a single codepoit
+        int32_t character;
         double flt;
         struct Array arr;
-
     } val;
+};
+
+struct ArrayElement {
+    struct Value this;
+    struct ArrayElement* next;
 };
 
 struct Value* new_string(int32_t* cps, unint len);
@@ -51,7 +51,9 @@ struct Value* new_character(int32_t cp);
 struct Value* new_array();
 unint append_array(struct Value* arr, struct Value* val);
 
-struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len);
+struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len, struct Value* val);
 struct Variable* get_variable(struct Parser* p, int32_t* cps, unint len);
 unint is_variable_declared(struct Parser* p, int32_t* cps, unint len);
+
+void print_value(struct Value* val);
 #endif
