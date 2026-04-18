@@ -229,7 +229,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
 unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val);
 
 // Will return NULL or an AST
-struct Ast_node* _parse_expr_prefix(struct Parser* p) {
+struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
     // Request a token
     struct token* _token = _read_token(p);
     if(_token == NULL) return NULL;
@@ -264,10 +264,14 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
         case PLUS:
         case TILDE:
         case EXCLAMATION:
-            struct Ast_node* node = _parse_expr(p, UNARY_BP, 0);
+            /*
+                It doesnt really matter to pass stop_on_comma or 0 to the _parse_expr as the expression being parsed is just one token
+                and expression_prefix does not allow ',' so ...
+            */
+            struct Ast_node* node = _parse_expr(p, UNARY_BP, stop_on_comma);
             if(node == NULL) return NULL;
 
-            struct Ast_node* unary = new_ast_binop(_token->type, node, NULL);
+            struct Ast_node* unary = new_ast_binop(_token->type, node, NULL, _token);
             if(unary == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for unary expression");
 
             return unary;
@@ -352,7 +356,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p) {
 struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma) {
     // Prefix
     // On an array, _parse_expr will never be called when _parse_expr_prefix is a comma, no need to do checks
-    struct Ast_node* left = _parse_expr_prefix(p);
+    struct Ast_node* left = _parse_expr_prefix(p, stop_on_comma);
     if(left == NULL) return NULL;
 
     unint lbp, rbp;
@@ -365,8 +369,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
         // Postfix operator
         if(op->type == LSQB) {
 
-            op = _read_token(p);
-            if(op == NULL) return NULL;
+            if(_read_token(p) == NULL) return NULL;
             
             struct Ast_node* right = _parse_expr(p, 0, 0); // Do not allow commas
             if(right == NULL) return NULL;
@@ -379,7 +382,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
             }
 
             DBG(1, "Creating LSQB NODE\n");
-            left = new_ast_binop(LSQB, left, right);
+            left = new_ast_binop(LSQB, left, right, op);
             continue;
         }
 
@@ -399,7 +402,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
         if(right == NULL) return NULL;
 
         // build the AST node
-        left = new_ast_binop(op->type, left, right);
+        left = new_ast_binop(op->type, left, right, op);
         if(left == NULL) return NULL;
     }
 
@@ -424,14 +427,15 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
 
             // Check for possible type errors
 
-            // Concatnation only allowed on Strings/characters
             unint op = expr->node.binop.op;
+            struct token* op_token = expr->node.binop.op_token;
+            
+            // Concatnation only allowed on Strings/characters
             if(op == DOT && ( 
                 (vleft.type != VALUE_CHARACTER && vleft.type != VALUE_STR) ||
                 (vright.type != VALUE_CHARACTER && vright.type != VALUE_STR)
             )) {
-                // Use token later
-                DBG(1, "Can only perform concatnation on strings types\n");
+                _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform concatnation on strings types");
                 return FAIL;
             }
 
@@ -443,7 +447,7 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                 ) 
             )) {
                 // Use token later
-                DBG(1, "Can only perform arithmetic operations on integer/decimal types\n");
+                _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform arithmetic operations on integer/decimal types");
                 return FAIL;
             }
 
@@ -469,6 +473,7 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                     val->val.flt = l + r;
                     return SUCCESS;
                 default:
+                    _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Evaluation of that operator hasn't been implemented");
                     return FAIL;
             }
         default:

@@ -1,6 +1,7 @@
 #ifndef AST_H
 #define AST_H
 
+#include "lexer.h"
 #include "types.h"
 
 struct Parser;
@@ -25,6 +26,8 @@ struct AstBinOp {
     unint op; // Uses the token type
     struct Ast_node* left;
     struct Ast_node* right;
+
+    struct token* op_token;
 };
 
 struct AstLiteral {
@@ -82,7 +85,7 @@ struct Ast_node {
 unint new_ast(struct Parser* p);
 struct Ast_node* new_ast_string(int32_t *cps, unint len);
 struct Ast_node* new_ast_number(int32_t *cps, unint len);
-struct Ast_node* new_ast_binop(unint op, struct Ast_node* left, struct Ast_node* right);
+struct Ast_node* new_ast_binop(unint op, struct Ast_node* left, struct Ast_node* right, struct token* op_token);
 struct Ast_node* new_ast_variable(struct Variable* var);
 struct Ast_node* new_ast_array(struct Value* var);
 

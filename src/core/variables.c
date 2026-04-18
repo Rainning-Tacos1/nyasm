@@ -1,11 +1,12 @@
 #include "api/memory.h"
 #include "api/debug.h"
 
+
 #include "parser.h"
 #include "variables.h"
 #include "ast.h"
 
-
+#include "ctype.h"
 #include "types.h"
 
 #ifndef NULL
@@ -71,6 +72,290 @@ unint append_array(struct Value* arr, struct Value* val) {
     return SUCCESS;
 }
 
+static unint __errno;
+
+#define	ERANGE 34	/* Result too large */
+#define ABS_NINT_MIN (0-(unint)(NINT_MIN))
+
+/* Static overflow check values for bases 2 through 36.
+ * smallmax[base] is the largest unsigned long i such that
+ * i * base doesn't overflow unsigned long.
+ */
+static const unint smallmax[] = {
+    0, /* bases 0 and 1 are invalid */
+    0,
+    UNINT_MAX / 2,
+    UNINT_MAX / 3,
+    UNINT_MAX / 4,
+    UNINT_MAX / 5,
+    UNINT_MAX / 6,
+    UNINT_MAX / 7,
+    UNINT_MAX / 8,
+    UNINT_MAX / 9,
+    UNINT_MAX / 10,
+    UNINT_MAX / 11,
+    UNINT_MAX / 12,
+    UNINT_MAX / 13,
+    UNINT_MAX / 14,
+    UNINT_MAX / 15,
+    UNINT_MAX / 16,
+    UNINT_MAX / 17,
+    UNINT_MAX / 18,
+    UNINT_MAX / 19,
+    UNINT_MAX / 20,
+    UNINT_MAX / 21,
+    UNINT_MAX / 22,
+    UNINT_MAX / 23,
+    UNINT_MAX / 24,
+    UNINT_MAX / 25,
+    UNINT_MAX / 26,
+    UNINT_MAX / 27,
+    UNINT_MAX / 28,
+    UNINT_MAX / 29,
+    UNINT_MAX / 30,
+    UNINT_MAX / 31,
+    UNINT_MAX / 32,
+    UNINT_MAX / 33,
+    UNINT_MAX / 34,
+    UNINT_MAX / 35,
+    UNINT_MAX / 36,
+};
+
+#if ARCH == 32
+static const nint digitlimit[] = {
+    0,  0, 32, 20, 16, 13, 12, 11, 10, 10,  /*  0 -  9 */
+    9,  9,  8,  8,  8,  8,  8,  7,  7,  7,  /* 10 - 19 */
+    7,  7,  7,  7,  6,  6,  6,  6,  6,  6,  /* 20 - 29 */
+    6,  6,  6,  6,  6,  6,  6};             /* 30 - 36 */
+#elif ARCH == 64
+/* [int(math.floor(math.log(2**64, i))) for i in range(2, 37)] */
+static const nint digitlimit[] = {
+         0,   0, 64, 40, 32, 27, 24, 22, 21, 20,  /*  0 -  9 */
+    19,  18, 17, 17, 16, 16, 16, 15, 15, 15,  /* 10 - 19 */
+    14,  14, 14, 14, 13, 13, 13, 13, 13, 13,  /* 20 - 29 */
+    13,  12, 12, 12, 12, 12, 12};             /* 30 - 36 */
+#else
+#  error "Need table for ARCH"
+#endif
+
+unsigned char _PyLong_DigitValue[256] = {
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  37, 37, 37, 37, 37, 37,
+    37, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+    25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 37, 37, 37, 37,
+    37, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+    25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+};
+
+unint _strtul(int32_t** ptr, int32_t* str, unint len, unint base) {
+    nint c;
+    nint ovlimit;
+    unint result = 0;
+
+    /* skip leading white space */
+    while (len && ISSPACE(*str)) {
+        ++str;
+        --len;
+    }
+
+    if (len == 0) {
+        if (ptr) *ptr = (int32_t*)str;
+        return 0;
+    }
+
+    switch(base) {
+        case 0:
+            if (len && *str == '0') {
+                ++str; --len;
+
+                if (len && (*str == 'x' || *str == 'X')) {
+                    /* must have at least one valid hex digit */
+                    if (len < 2 ||
+                        !ISASCII(str[1]) ||
+                        _PyLong_DigitValue[CHARMASK(str[1])] >= 16) {
+                        if (ptr) *ptr = (int32_t*)str;
+                        return 0;
+                    }
+                    ++str; --len;
+                    base = 16;
+                } else if (len && (*str == 'o' || *str == 'O')) {
+                    if (len < 2 ||
+                        !ISASCII(str[1]) ||
+                        _PyLong_DigitValue[CHARMASK(str[1])] >= 8) {
+                        if (ptr) *ptr = (int32_t*)str;
+                        return 0;
+                    }
+                    ++str; --len;
+                    base = 8;
+                } else if (len && (*str == 'b' || *str == 'B')) {
+                    if (len < 2 ||
+                        !ISASCII(str[1]) ||
+                        _PyLong_DigitValue[CHARMASK(str[1])] >= 2) {
+                        if (ptr) *ptr = (int32_t*)str;
+                        return 0;
+                    }
+                    ++str; --len;
+                    base = 2;
+                } else {
+                    /* skip all zeroes */
+                    while (len && *str == '0') {
+                        ++str;
+                        --len;
+                    }
+                    if (ptr) *ptr = (int32_t*)str;
+                    return 0;
+                }
+            } else {
+                base = 10;
+            }
+            break;
+
+        case 16:
+            if (len && *str == '0') {
+                ++str; --len;
+                if (len && (*str == 'x' || *str == 'X')) {
+                    if (len < 2 ||
+                        !ISASCII(str[1]) ||
+                        _PyLong_DigitValue[CHARMASK(str[1])] >= 16) {
+                        if (ptr) *ptr = (int32_t*)str;
+                        return 0;
+                    }
+                    ++str; --len;
+                }
+            }
+            break;
+
+        case 8:
+            if (len && *str == '0') {
+                ++str; --len;
+                if (len && (*str == 'o' || *str == 'O')) {
+                    if (len < 2 ||
+                        !ISASCII(str[1]) ||
+                        _PyLong_DigitValue[CHARMASK(str[1])] >= 8) {
+                        if (ptr) *ptr = (int32_t*)str;
+                        return 0;
+                    }
+                    ++str; --len;
+                }
+            }
+            break;
+
+        case 2:
+            if (len && *str == '0') {
+                ++str; --len;
+                if (len && (*str == 'b' || *str == 'B')) {
+                    if (len < 2 ||
+                        !ISASCII(str[1]) ||
+                        _PyLong_DigitValue[CHARMASK(str[1])] >= 2) {
+                        if (ptr) *ptr = (int32_t*)str;
+                        return 0;
+                    }
+                    ++str; --len;
+                }
+            }
+            break;
+    }
+
+    /* catch invalid bases */
+    if (base < 2 || base > 36) {
+        if (ptr) *ptr = (int32_t*)str;
+        return 0;
+    }
+
+    /* skip leading zeroes */
+    while (len && *str == '0') {
+        ++str;
+        --len;
+    }
+
+    ovlimit = digitlimit[base];
+
+    /* main conversion loop */
+    while (len &&
+           ISASCII(*str) &&
+           ((c = _PyLong_DigitValue[CHARMASK(*str)]) < base)) {
+
+        if (ovlimit > 0) {
+            result = result * base + c;
+        } else {
+            unint temp_result;
+
+            if (ovlimit < 0)
+                goto overflowed;
+
+            if (result > smallmax[base])
+                goto overflowed;
+
+            result *= base;
+
+            temp_result = result + c;
+            if (temp_result < result)
+                goto overflowed;
+
+            result = temp_result;
+        }
+
+        ++str;
+        --len;
+        --ovlimit;
+    }
+
+    if (ptr) *ptr = (int32_t*)str;
+    return result;
+
+overflowed:
+    if (ptr) {
+        while (len &&
+               ISASCII(*str) &&
+               _PyLong_DigitValue[CHARMASK(*str)] < base) {
+            ++str;
+            --len;
+        }
+        *ptr = (int32_t*)str;
+    }
+    __errno = ERANGE;
+    return (unint)-1;
+}
+
+nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base) {
+
+    int32_t sign;
+    unint uresult;
+    nint result;
+
+    /* skip leading white space */
+    while (len && ISSPACE(*str)) {
+        ++str;
+        --len;
+    }
+
+    sign = *str;
+    if (sign == '+' || sign == '-') str++;
+
+    uresult = _strtul(ptr, str, len, base);
+
+    if(uresult <= (unint)NINT_MAX) {
+        result = (nint)uresult;
+        if(sign == '-') result = -result;
+    }
+    else if(sign == '-' && uresult == ABS_NINT_MIN) result = NINT_MIN;
+    else {
+        __errno == ERANGE;
+        result = NINT_MAX;
+    }
+    return result;
+}
+
 // Integers / Doubles
 struct Value* new_number(int32_t* cps, unint len) {
     struct Value* number = (struct Value*)MEM_ALLOC(sizeof(struct Value), "number value");
@@ -130,7 +415,7 @@ unint is_variable_declared(struct Parser* p, int32_t* cps, unint len) {
 void print_value_recur(struct Value* val, unint level) {
     for(unint i=0; i<level; ++i) LOG("\t");
     switch(val->type) {
-        case VALUE_INT: 
+        case VALUE_INT:
             LOG("Number: %d", val->val.number);
             break;
         case VALUE_DOUBLE:

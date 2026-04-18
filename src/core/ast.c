@@ -2,6 +2,7 @@
 #include "api/log.h"
 #include "api/debug.h"
 
+#include "lexer.h"
 #include "parser.h"
 #include "variables.h"
 #include "ast.h"
@@ -47,12 +48,13 @@ struct Ast_node* new_ast_number(int32_t *cps, unint len) {
 }
 
 
-struct Ast_node* new_ast_binop(unint op, struct Ast_node* left, struct Ast_node* right) {
+struct Ast_node* new_ast_binop(unint op, struct Ast_node* left, struct Ast_node* right, struct token* op_token) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) return NULL;
 
     node->type = BINOP_NODE;
 
+    node->node.binop.op_token = op_token;
     node->node.binop.op = op;
     node->node.binop.left = left;
     node->node.binop.right = right;

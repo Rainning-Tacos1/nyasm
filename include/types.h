@@ -23,6 +23,8 @@ typedef unint nbool;
 
 // General Purpose
 #define NINT_MAX INT32_MAX
+#define NINT_MIN INT32_MIN
+
 #define UNINT_MAX UINT32_MAX
 
 #else
@@ -34,6 +36,8 @@ typedef unint nbool;
 
 // General Purpose
 #define NINT_MAX INT64_MAX
+#define NINT_MIN INT64_MIN
+
 #define UNINT_MAX UINT64_MAX
 #endif
 
