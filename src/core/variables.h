@@ -11,7 +11,6 @@ struct ArrayElement;
 enum ValueTypes {
     VALUE_INT,
     VALUE_STR,
-    VALUE_CHARACTER,
     VALUE_DOUBLE,
     VALUE_ARRAY
 };
@@ -33,7 +32,6 @@ struct Value {
     union {
         nint number;
         struct String string;
-        int32_t character;
         double flt;
         struct Array arr;
     } val;
@@ -44,16 +42,22 @@ struct ArrayElement {
     struct ArrayElement* next;
 };
 
-struct Value* new_string(int32_t* cps, unint len);
-struct Value* new_number(int32_t* cps, unint len);
-struct Value* new_character(int32_t cp);
+struct Value* new_string(struct Parser* p, struct token* _token);
+struct Value* new_number(struct Parser* p, struct token* _token);
 
-struct Value* new_array();
-unint append_array(struct Value* arr, struct Value* val);
+struct Value* new_array(struct Parser* p, struct token* _token);
+unint append_array(struct Parser* p, struct token* _token, struct Value* arr, struct Value* val);
 
 struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len, struct Value* val);
 struct Variable* get_variable(struct Parser* p, int32_t* cps, unint len);
 unint is_variable_declared(struct Parser* p, int32_t* cps, unint len);
 
 void print_value(struct Value* val);
+
+#define	ERANGE 34	/* Result too large */
+
+extern unint __errno;
+unint _strtoul(int32_t** ptr, int32_t* str, unint len, unint base);
+nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base);
+
 #endif

@@ -27,4 +27,6 @@ struct Parser {
 struct Parser* _Parser_New(struct tok_state* tok);
 void* _run_parser(struct Parser* p);
 
+void _error_from_token(struct Parser* p, struct token* _token, const char *stype, const char *format, ...);
+
 #endif

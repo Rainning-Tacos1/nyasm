@@ -250,16 +250,10 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
             return left;
         case STRING:
             DBG(1, "Expr pref is string\n");
-            struct Ast_node* str = new_ast_string(_token->cps, _token->len);
-            if(str == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the string");
-
-            return str;
+            return new_ast_string(p, _token);
         case NUMBER:
             DBG(1, "Expr pref is number\n");
-            struct Ast_node* number = new_ast_number(_token->cps, _token->len);
-            if(number == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the number");
-
-            return number;
+            return new_ast_number(p, _token);
         case MINUS:
         case PLUS:
         case TILDE:
@@ -271,10 +265,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
             struct Ast_node* node = _parse_expr(p, UNARY_BP, stop_on_comma);
             if(node == NULL) return NULL;
 
-            struct Ast_node* unary = new_ast_binop(_token->type, node, NULL, _token);
-            if(unary == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for unary expression");
-
-            return unary;
+            return new_ast_binop(p, _token, _token->type, node, NULL);
 
         case NAME:
             if(is_at_identifier(_token, NULL) == SUCCESS) {
@@ -288,10 +279,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
                 return NULL;
             }
 
-            struct Ast_node* var_node = new_ast_variable(var);
-            if(var_node == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the variable");
-
-            return var_node;
+            return new_ast_variable(p, _token, var);
         case LSQB:
 
             if((_token = _peek_token(p)) == NULL || _token->type == COMMA) {
@@ -301,7 +289,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
             _reset_peek(p); // Reset so it does not consume any valid start
 
             // Create Array
-            struct Value* arr = new_array();
+            struct Value* arr = new_array(p, _token);
             if(arr == NULL) return NULL;
 
             while(true) {
@@ -319,10 +307,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
                 if(suc == FAIL) return NULL;
 
                 // Append to the array
-                if(append_array(arr, &val) == FAIL) {
-                    DBG(1, "Error appending to array");
-                    return NULL;
-                }
+                if(append_array(p, _token, arr, &val) == FAIL) return NULL;
 
                 DBG(1, "-------------------- ELEMENT APPENDED P=%p\n", el);
 
@@ -340,11 +325,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
                 }
             }
 
-            // Return Array
-            struct Ast_node* arr_node = new_ast_array(arr);
-            if(arr_node == NULL) _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the array");
-
-            return arr_node;
+            return new_ast_array(p, _token, arr);
         default:
             _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "invalid token for expression");
             return NULL;
@@ -382,7 +363,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
             }
 
             DBG(1, "Creating LSQB NODE\n");
-            left = new_ast_binop(LSQB, left, right, op);
+            left = new_ast_binop(p, op, LSQB, left, right);
             continue;
         }
 
@@ -402,7 +383,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
         if(right == NULL) return NULL;
 
         // build the AST node
-        left = new_ast_binop(op->type, left, right, op);
+        left = new_ast_binop(p, op, op->type, left, right);
         if(left == NULL) return NULL;
     }
 
@@ -432,8 +413,8 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             
             // Concatnation only allowed on Strings/characters
             if(op == DOT && ( 
-                (vleft.type != VALUE_CHARACTER && vleft.type != VALUE_STR) ||
-                (vright.type != VALUE_CHARACTER && vright.type != VALUE_STR)
+                (vleft.type != VALUE_STR) ||
+                (vright.type != VALUE_STR)
             )) {
                 _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform concatnation on strings types");
                 return FAIL;

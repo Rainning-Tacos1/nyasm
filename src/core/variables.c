@@ -14,32 +14,28 @@
 #endif
 
 // Strings
-struct Value* new_string(int32_t* cps, unint len) {
+struct Value* new_string(struct Parser* p, struct token* _token) {
     struct Value* string = (struct Value*)MEM_ALLOC(sizeof(struct Value), "string value");
-    if(string == NULL) return NULL;
+    if(string == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the string");
+        return NULL;
+    }
 
-    string->val.string.str = cps;
-    string->val.string.len = len;
+    string->val.string.str = _token->cps;
+    string->val.string.len = _token->len;
 
     string->type = VALUE_STR;
     return string;
 }
 
-// Characters
-struct Value* new_character(int32_t cp) {
-    struct Value* character = (struct Value*)MEM_ALLOC(sizeof(struct Value), "character value");
-    if(character == NULL) return NULL;
-
-    character->val.character = cp;
-
-    character->type = VALUE_CHARACTER;
-    return character;
-}
 
 // Arrays
-struct Value* new_array() {
+struct Value* new_array(struct Parser* p, struct token* _token) {
     struct Value* array = (struct Value*)MEM_ALLOC(sizeof(struct Value), "array value");
-    if(array == NULL) return NULL;
+    if(array == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the array");
+        return NULL;
+    }
 
     array->val.arr.head = NULL;
     array->val.arr.tail = NULL;
@@ -49,12 +45,15 @@ struct Value* new_array() {
     return array;
 }
 
-unint append_array(struct Value* arr, struct Value* val) {
+unint append_array(struct Parser* p, struct token* _token, struct Value* arr, struct Value* val) {
     if(arr->type != VALUE_ARRAY) return FAIL;
 
     // Array Element
     struct ArrayElement* arr_el = (struct ArrayElement*)MEM_ALLOC(sizeof(struct ArrayElement), "array element value");
-    if(arr_el == NULL) return FAIL;
+    if(arr_el == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the array element");
+        return FAIL;
+    }
 
     // 1st time
     if(arr->val.arr.head == NULL) arr->val.arr.head = arr_el;
@@ -72,9 +71,8 @@ unint append_array(struct Value* arr, struct Value* val) {
     return SUCCESS;
 }
 
-static unint __errno;
+unint __errno;
 
-#define	ERANGE 34	/* Result too large */
 #define ABS_NINT_MIN (0-(unint)(NINT_MIN))
 
 /* Static overflow check values for bases 2 through 36.
@@ -157,7 +155,7 @@ unsigned char _PyLong_DigitValue[256] = {
     37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
 };
 
-unint _strtul(int32_t** ptr, int32_t* str, unint len, unint base) {
+unint _strtoul(int32_t** ptr, int32_t* str, unint len, unint base) {
     nint c;
     nint ovlimit;
     unint result = 0;
@@ -342,7 +340,7 @@ nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base) {
     sign = *str;
     if (sign == '+' || sign == '-') str++;
 
-    uresult = _strtul(ptr, str, len, base);
+    uresult = _strtoul(ptr, str, len, base);
 
     if(uresult <= (unint)NINT_MAX) {
         result = (nint)uresult;
@@ -350,22 +348,45 @@ nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base) {
     }
     else if(sign == '-' && uresult == ABS_NINT_MIN) result = NINT_MIN;
     else {
-        __errno == ERANGE;
+        __errno = ERANGE;
         result = NINT_MAX;
     }
     return result;
 }
 
 // Integers / Doubles
-struct Value* new_number(int32_t* cps, unint len) {
+struct Value* new_number(struct Parser* p, struct token* _token) {
     struct Value* number = (struct Value*)MEM_ALLOC(sizeof(struct Value), "number value");
-    if(number == NULL) return NULL;
+    if(number == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the number");
+        return NULL;
+    }
 
     // Parse the number
     // May also be float
-    // May be binary
-    // May be decimal
-    number->val.number = 0xc0ffe; // For now
+
+    __errno = 0;
+    int32_t* endptr;
+    nint num = _strtol(&endptr, _token->cps, _token->len, 0);
+
+    if(__errno == ERANGE) {
+        _error_from_token(p, _token, ERROR_TYPE_OVERFLOW, "number overflowed");
+        return NULL;
+    }
+    else if(num == 0 && endptr == _token->cps) {
+        // Invalid literal
+        // Also handled in lexer
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "(parser) invalid number literal");
+        return NULL;
+    }
+    else if((endptr - _token->cps) != _token->len) {
+        // Invalid literal
+        // Also handled in lexer
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "(parser) invalid number literal");
+        return NULL;
+    }
+
+    number->val.number = num;
     number->type = VALUE_INT;
     
     return number;
