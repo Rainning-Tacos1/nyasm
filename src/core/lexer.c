@@ -1142,12 +1142,12 @@ _loop:
             }
             backup_cp(tok); /* don't eat the newline or EOF */
 
-            // Do not generate multi-line comments inside parenthesis
-            if(tok->level) goto nextline;
+            // Do not generate multi-line comments --inside parenthesis--
+            goto nextline;
 
-            p_start = tok->start;
-            p_end = tok->uc.curr;
-            return MAKE_TOKEN(COMMENT);
+            //p_start = tok->start;
+            //p_end = tok->uc.curr;
+            //return MAKE_TOKEN(COMMENT);
         }
         p_start = tok->start;
         p_end = tok->uc.curr - tok->uc.nread;

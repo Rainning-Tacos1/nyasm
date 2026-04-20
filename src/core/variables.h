@@ -43,7 +43,7 @@ struct ArrayElement {
 };
 
 struct Value* new_string(struct Parser* p, struct token* _token);
-struct Value* new_number(struct Parser* p, struct token* _token);
+struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg);
 
 struct Value* new_array(struct Parser* p, struct token* _token);
 unint append_array(struct Parser* p, struct token* _token, struct Value* arr, struct Value* val);
@@ -58,6 +58,6 @@ void print_value(struct Value* val);
 
 extern unint __errno;
 unint _strtoul(int32_t** ptr, int32_t* str, unint len, unint base);
-nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base);
+nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base, unint is_neg);
 
 #endif

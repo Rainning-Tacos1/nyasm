@@ -40,7 +40,7 @@ struct Ast_node* new_ast_string(struct Parser* p, struct token* _token) {
     return (node->node.literal.value != NULL) ? node : NULL;
 }
 
-struct Ast_node* new_ast_number(struct Parser* p, struct token* _token) {
+struct Ast_node* new_ast_number(struct Parser* p, struct token* _token, unint is_neg) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the AST number");
@@ -48,7 +48,7 @@ struct Ast_node* new_ast_number(struct Parser* p, struct token* _token) {
     }
 
     node->type = LITERAL_NODE;
-    node->node.literal.value = new_number(p, _token);
+    node->node.literal.value = new_number(p, _token, is_neg);
 
     return (node->node.literal.value != NULL) ? node : NULL;   
 }

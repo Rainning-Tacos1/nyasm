@@ -253,8 +253,25 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
             return new_ast_string(p, _token);
         case NUMBER:
             DBG(1, "Expr pref is number\n");
-            return new_ast_number(p, _token);
+            return new_ast_number(p, _token, 0);
         case MINUS:
+            // might be a negation or a negative number
+            struct token* _peek = _peek_token(p);
+            if(_peek == NULL) return NULL;
+
+            // Handle the number
+            if(_peek->type == NUMBER) {
+                DBG(1, "Expr pref is negative number\n");
+
+                // Eat the number
+                _token = _read_token(p);
+                if(_token == NULL) return NULL;
+
+                return new_ast_number(p, _token, 1);
+            }
+
+            // Reset the peek and treat the token as unary
+            _reset_peek(p);
         case PLUS:
         case TILDE:
         case EXCLAMATION:
@@ -420,8 +437,8 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                 return FAIL;
             }
 
-            // Arithmetic only on ints/floats
-            if (op == PLUS && ( 
+            // Arithmetic only on ints/floats 
+            if ((op == PLUS || op == MINUS || op == SLASH || op == STAR) && ( 
                 (vleft.type != VALUE_INT && vleft.type != VALUE_DOUBLE) ||
                 (expr->node.binop.right &&
                     (vright.type != VALUE_INT && vright.type != VALUE_DOUBLE)
@@ -431,27 +448,88 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                 _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform arithmetic operations on integer/decimal types");
                 return FAIL;
             }
+            /*
+                                if(vleft.type != VALUE_INT || vright.type != VALUE_INT) {
+                        
+                    }
+            */
+
+            nint a, b;
+            double da, db;
 
             switch(expr->node.binop.op) {
                 case PLUS:
                     // unary plus, if right is not present, preserve the original type
                     if(!expr->node.binop.right) { *val = vleft; return SUCCESS; }
 
-                    val->type = LITERAL_NODE;
                     // Convert types
                     if(vleft.type == VALUE_INT && vright.type == VALUE_INT) {
                         val->type = VALUE_INT;
                         // Check for overflows
-                        val->val.number = vleft.val.number + vright.val.number;
+                        
+                        a = vleft.val.number;
+                        b = vright.val.number;
+
+                        // Overflow?
+                        if ((b > 0 && a > NINT_MAX - b) ||
+                            (b < 0 && a < NINT_MIN - b)) {
+                            _error_from_token(p, op_token, ERROR_TYPE_OVERFLOW, "integer overflow in addition");
+                            return FAIL;
+                        }
+
+                        val->type = VALUE_INT;
+                        val->val.number = a + b;
                         return SUCCESS;
                     }
 
                     // Promote to flt
-                    double l = (vleft.type == VALUE_INT) ?  (double)vleft.val.number  : vleft.val.flt;
-                    double r = (vright.type == VALUE_INT) ? (double)vright.val.number : vright.val.flt;
+                    da = (vleft.type == VALUE_INT)  ? (double)vleft.val.number  : vleft.val.flt;
+                    db = (vright.type == VALUE_INT) ? (double)vright.val.number : vright.val.flt;
 
                     val->type = VALUE_DOUBLE;
-                    val->val.flt = l + r;
+                    val->val.flt = da + db;
+                    return SUCCESS;
+
+                case MINUS:
+                    if(vleft.type == VALUE_INT || (vleft.type == VALUE_INT && (expr->node.binop.right && vright.type == VALUE_INT))) {
+
+                        a = expr->node.binop.right ? vleft.val.number : 0;
+                        b = expr->node.binop.right ? vright.val.number : vleft.val.number;
+
+                        if ((b < 0 && a > NINT_MAX + b) ||
+                            (b > 0 && a < NINT_MIN + b)) {
+                            _error_from_token(p, op_token, ERROR_TYPE_OVERFLOW, "integer overflow in subtraction");
+                            return FAIL;
+                        }
+
+                        val->type = VALUE_INT;
+                        val->val.number = a - b;
+                        return SUCCESS;
+                    }
+
+                    // Promote to flt
+                    da = expr->node.binop.right ? (
+                        (vleft.type == VALUE_INT) ?  (double)vleft.val.number : vleft.val.flt
+                    ) : (
+                        (vleft.type == VALUE_INT) ? 0 : (double)0.0
+                    );
+                    db = expr->node.binop.right ? (
+                        (vright.type == VALUE_INT) ? (double)vright.val.number : vright.val.flt
+                    ) : (
+                        (vleft.type == VALUE_INT) ?  (double)vleft.val.number : vleft.val.flt
+                    );
+                    
+                    val->type = VALUE_DOUBLE;
+                    val->val.flt = da - db;
+                    return SUCCESS;
+
+                case LEFTSHIFT:
+                    val->type = VALUE_INT;
+                    val->val.number = vleft.val.number << vright.val.number;
+                    return SUCCESS;
+                case RIGHTSHIFT:
+                    val->type = VALUE_INT;
+                    val->val.number = vleft.val.number >> vright.val.number;
                     return SUCCESS;
                 default:
                     _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Evaluation of that operator hasn't been implemented");

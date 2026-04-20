@@ -325,7 +325,7 @@ overflowed:
     return (unint)-1;
 }
 
-nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base) {
+nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base, unint is_neg) {
 
     int32_t sign;
     unint uresult;
@@ -338,15 +338,15 @@ nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base) {
     }
 
     sign = *str;
-    if (sign == '+' || sign == '-') str++;
+    if (sign == '+') str++;
 
     uresult = _strtoul(ptr, str, len, base);
 
     if(uresult <= (unint)NINT_MAX) {
         result = (nint)uresult;
-        if(sign == '-') result = -result;
+        if(is_neg) result = -result;
     }
-    else if(sign == '-' && uresult == ABS_NINT_MIN) result = NINT_MIN;
+    else if(is_neg && uresult == ABS_NINT_MIN) result = NINT_MIN;
     else {
         __errno = ERANGE;
         result = NINT_MAX;
@@ -355,7 +355,7 @@ nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base) {
 }
 
 // Integers / Doubles
-struct Value* new_number(struct Parser* p, struct token* _token) {
+struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg) {
     struct Value* number = (struct Value*)MEM_ALLOC(sizeof(struct Value), "number value");
     if(number == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the number");
@@ -367,7 +367,7 @@ struct Value* new_number(struct Parser* p, struct token* _token) {
 
     __errno = 0;
     int32_t* endptr;
-    nint num = _strtol(&endptr, _token->cps, _token->len, 0);
+    nint num = _strtol(&endptr, _token->cps, _token->len, 0, is_neg);
 
     if(__errno == ERANGE) {
         _error_from_token(p, _token, ERROR_TYPE_OVERFLOW, "number overflowed");
@@ -437,7 +437,7 @@ void print_value_recur(struct Value* val, unint level) {
     for(unint i=0; i<level; ++i) LOG("\t");
     switch(val->type) {
         case VALUE_INT:
-            LOG("Number: %d", val->val.number);
+            LOG("Number: %lld", val->val.number);
             break;
         case VALUE_DOUBLE:
             LOG("Float: %f", val->val.flt);

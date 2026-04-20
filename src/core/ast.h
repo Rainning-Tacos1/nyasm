@@ -85,7 +85,7 @@ struct Ast_node {
 unint new_ast(struct Parser* p);
 
 struct Ast_node* new_ast_string(struct Parser* p, struct token* _token);
-struct Ast_node* new_ast_number(struct Parser* p, struct token* _token);
+struct Ast_node* new_ast_number(struct Parser* p, struct token* _token, unint is_neg);
 struct Ast_node* new_ast_binop(struct Parser* p, struct token* op_token, unint op, struct Ast_node* left, struct Ast_node* right);
 struct Ast_node* new_ast_variable(struct Parser* p, struct token* _token, struct Variable* var);
 struct Ast_node* new_ast_array(struct Parser* p, struct token* _token, struct Value* var);
