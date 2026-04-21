@@ -77,6 +77,7 @@ add_subdirectory(langs/6502)
 target_link_libraries(nyasm PRIVATE
     core
     impl
+    m
     "-Wl,--whole-archive" x86 _6502 "-Wl,--no-whole-archive"
 )
 

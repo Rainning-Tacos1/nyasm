@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <math.h>
 #include "api/memory.h"
 #include "api/log.h"
 #include "api/debug.h"
@@ -207,16 +208,15 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
         case AMPER: { *lbp = 60; *rbp = 61; break; }
 
         case LEFTSHIFT:
-        case RIGHTSHIFT: { *lbp = 70; *rbp = 71; break; }
+        case RIGHTSHIFT: { *lbp = 70; *rbp = 71; break; } // Done
 
         case DOT: { *lbp = 90; *rbp = 80; break; }
 
         case PLUS:
-        case MINUS: { *lbp = 100; *rbp = 101; break; }
+        case MINUS: { *lbp = 100; *rbp = 101; break; } // Done
 
         case SLASH:
-        case DOUBLESLASH:
-        case PERCENT:
+        case PERCENT:      // Done
         case STAR: { *lbp = 110; *rbp = 111; break; }
 
         case DOUBLESTAR: { *lbp = 140; *rbp = 130; break; }
@@ -438,7 +438,7 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             }
 
             // Arithmetic only on ints/floats 
-            if ((op == PLUS || op == MINUS || op == SLASH || op == STAR) && ( 
+            if ((op == PLUS || op == MINUS || op == SLASH || op == STAR || op == PERCENT) && ( 
                 (vleft.type != VALUE_INT && vleft.type != VALUE_DOUBLE) ||
                 (expr->node.binop.right &&
                     (vright.type != VALUE_INT && vright.type != VALUE_DOUBLE)
@@ -448,11 +448,7 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                 _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform arithmetic operations on integer/decimal types");
                 return FAIL;
             }
-            /*
-                                if(vleft.type != VALUE_INT || vright.type != VALUE_INT) {
-                        
-                    }
-            */
+
 
             nint a, b;
             double da, db;
@@ -531,6 +527,92 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                     val->type = VALUE_INT;
                     val->val.number = vleft.val.number >> vright.val.number;
                     return SUCCESS;
+                
+                case PERCENT:
+                    if( (vright.type == VALUE_DOUBLE && vright.val.flt == (double)0.0) || (vright.type == VALUE_INT && vright.val.number == 0) ) {
+                        _error_from_token(p, op_token, ERROR_TYPE_DIVISION_ERROR, "modulo by 0");
+                        return FAIL;
+                    }
+                    // if one is float, promote all to float
+                    if(vleft.type == VALUE_DOUBLE || vright.type == VALUE_DOUBLE) {
+                        da = (vleft.type == VALUE_DOUBLE) ? vleft.val.flt : (double)vleft.val.flt;
+                        db = (vright.type == VALUE_DOUBLE) ? vright.val.flt : (double)vright.val.flt;
+
+                        val->type = VALUE_DOUBLE;
+                        val->val.flt = fmod( fmod(da, db) + db, db);
+                        return SUCCESS;
+                    }
+
+                    a = vleft.val.number;
+                    b = vright.val.number;
+
+                    val->type = VALUE_INT;
+                    val->val.number = ((a % b) + b) % b;
+                    return SUCCESS;
+                    
+                case SLASH:
+                    if( (vright.type == VALUE_DOUBLE && vright.val.flt == (double)0.0) || (vright.type == VALUE_INT && vright.val.number == 0) ) {
+                        _error_from_token(p, op_token, ERROR_TYPE_DIVISION_ERROR, "division by 0");
+                        return FAIL;
+                    }
+                    // if one is float, promote all to float
+                    if(vleft.type == VALUE_DOUBLE || vright.type == VALUE_DOUBLE) {
+
+                        da = (vleft.type == VALUE_DOUBLE) ? vleft.val.flt : (double)vleft.val.number;
+                        db = (vright.type == VALUE_DOUBLE) ? vright.val.flt : (double)vright.val.number;
+
+                        val->type = VALUE_DOUBLE;
+                        val->val.flt = da / db;
+                        return SUCCESS;
+                    }
+
+                    a = vleft.val.number;
+                    b = vright.val.number;
+
+                    if(a == NINT_MIN && b == -1) {
+                        _error_from_token(p, op_token, ERROR_TYPE_OVERFLOW, "integer overflow in division");
+                        return FAIL;
+                    }
+                    val->type = VALUE_INT;
+                    val->val.number = a / b;
+                    return SUCCESS;
+
+                case STAR:
+                    // if one is float, promote all to float
+                    if(vleft.type == VALUE_DOUBLE || vright.type == VALUE_DOUBLE) {
+
+                        da = (vleft.type == VALUE_DOUBLE) ? vleft.val.flt : (double)vleft.val.number;
+                        db = (vright.type == VALUE_DOUBLE) ? vright.val.flt : (double)vright.val.number;
+
+                        val->type = VALUE_DOUBLE;
+                        val->val.flt = da * db;
+                        return SUCCESS;
+                    }
+
+                    a = vleft.val.number;
+                    b = vright.val.number;
+
+                    if (a > 0) {
+                        if (b > 0) {
+                            if (a > NINT_MAX / b) goto mul_overflow;
+                        } else {
+                            if (b < NINT_MIN / a) goto mul_overflow;
+                        }
+                    } else {
+                        if (b > 0) {
+                            if (a < NINT_MIN / b) goto mul_overflow;
+                        } else {
+                            if (a != 0 && b < NINT_MAX / a) goto mul_overflow;
+                        }
+                    }
+
+                    val->type = VALUE_INT;
+                    val->val.number = a * b;
+                    return SUCCESS;
+mul_overflow:
+                    _error_from_token(p, op_token, ERROR_TYPE_OVERFLOW, "integer overflow in multiplication");
+                    return FAIL;
+
                 default:
                     _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Evaluation of that operator hasn't been implemented");
                     return FAIL;

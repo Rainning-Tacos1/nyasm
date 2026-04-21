@@ -21,6 +21,7 @@
 #define ERROR_TYPE_EXPRESSION "ExpressionError"
 #define ERROR_TYPE_TYPE "TypeError"
 #define ERROR_TYPE_OVERFLOW "OverflowError"
+#define ERROR_TYPE_DIVISION_ERROR "ZeroDivisionError"
 
 #define MAX_PARENTHESES_LEVEL 100
 

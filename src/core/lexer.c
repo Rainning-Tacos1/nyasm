@@ -1149,8 +1149,10 @@ _loop:
             //p_end = tok->uc.curr;
             //return MAKE_TOKEN(COMMENT);
         }
+        backup_cp(tok);
         p_start = tok->start;
-        p_end = tok->uc.curr - tok->uc.nread;
+        p_end = tok->uc.curr;
+
         return MAKE_TOKEN(SLASH);
     }
 
