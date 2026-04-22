@@ -418,20 +418,31 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             *val = expr->node.var.val;
             return SUCCESS;
         case BINOP_NODE:
-            struct Value vleft, vright;
-            if(_eval_expr(p, expr->node.binop.left, &vleft) == FAIL) return FAIL;
-            // May not exist depending on the operator
-            if(expr->node.binop.right && _eval_expr(p, expr->node.binop.right, &vright) == FAIL) return FAIL;
-
-            // Check for possible type errors
-
-            unint op = expr->node.binop.op;
-            struct token* op_token = expr->node.binop.op_token;
+            struct AstBinOp* binop = &expr->node.binop;
+            struct Ast_node* pleft = binop->left;
+            struct Ast_node* pright = binop->right;
+            struct token* op_token = binop->op_token;
+            unint op = binop->op;
             
+            struct Value vleft, vright;
+            unint tcleft = 0, tcright = 0;
+
+            if(pleft->type == LITERAL_NODE || pleft->type == VAR_NODE){
+                if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
+                tcleft = 1;
+            }
+
+            if(pright && (pright->type == LITERAL_NODE || pright->type == VAR_NODE)) {
+                if(_eval_expr(p, pright, &vright) == FAIL) return FAIL;
+                tcright = 1;
+            }
+
+            // Type checks
+
             // Concatnation only allowed on Strings/characters
             if(op == DOT && ( 
-                (vleft.type != VALUE_STR) ||
-                (vright.type != VALUE_STR)
+                (tcleft && (vleft.type != VALUE_STR)) ||
+                (tcright && (vright.type != VALUE_STR))
             )) {
                 _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform concatnation on strings types");
                 return FAIL;
@@ -439,24 +450,28 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
 
             // Arithmetic only on ints/floats 
             if ((op == PLUS || op == MINUS || op == SLASH || op == STAR || op == PERCENT) && ( 
-                (vleft.type != VALUE_INT && vleft.type != VALUE_DOUBLE) ||
-                (expr->node.binop.right &&
-                    (vright.type != VALUE_INT && vright.type != VALUE_DOUBLE)
-                ) 
+                (tcleft && (vleft.type != VALUE_INT && vleft.type != VALUE_DOUBLE)) ||
+                (tcright && (vright.type != VALUE_INT && vright.type != VALUE_DOUBLE)) 
             )) {
                 // Use token later
                 _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform arithmetic operations on integer/decimal types");
                 return FAIL;
             }
 
+            // Evaluate
+            if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
+
+            // May not exist depending on the operator
+            if(pright && _eval_expr(p, pright, &vright) == FAIL) return FAIL;
 
             nint a, b;
             double da, db;
 
-            switch(expr->node.binop.op) {
+            // Eval operators
+            switch(binop->op) {
                 case PLUS:
                     // unary plus, if right is not present, preserve the original type
-                    if(!expr->node.binop.right) { *val = vleft; return SUCCESS; }
+                    if(!pright) { *val = vleft; return SUCCESS; }
 
                     // Convert types
                     if(vleft.type == VALUE_INT && vright.type == VALUE_INT) {
@@ -618,7 +633,7 @@ mul_overflow:
                     return FAIL;
             }
         default:
-            return FAIL;
+            return FAIL;  
     }
 }
 
