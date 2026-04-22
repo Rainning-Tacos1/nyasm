@@ -430,11 +430,13 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             if(pleft->type == LITERAL_NODE || pleft->type == VAR_NODE){
                 if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
                 tcleft = 1;
+                // TYPE CHECK NEEDED
             }
 
             if(pright && (pright->type == LITERAL_NODE || pright->type == VAR_NODE)) {
                 if(_eval_expr(p, pright, &vright) == FAIL) return FAIL;
                 tcright = 1;
+                // TYPE CHECK NEEDED
             }
 
             // Type checks
@@ -453,8 +455,23 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                 (tcleft && (vleft.type != VALUE_INT && vleft.type != VALUE_DOUBLE)) ||
                 (tcright && (vright.type != VALUE_INT && vright.type != VALUE_DOUBLE)) 
             )) {
-                // Use token later
                 _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform arithmetic operations on integer/decimal types");
+                return FAIL;
+            }
+
+            // Indexation only on array types
+            if(op == LSQB && 
+                (tcleft && vleft.type != VALUE_ARRAY)
+            ) {
+                _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Can only perform indexation on array types");
+                return FAIL;
+            }
+
+            // Invalid index
+            if(op == LSQB &&
+                (tcright && vright.type != VALUE_INT)
+            ) {
+                _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Indices can only by of integer type");
                 return FAIL;
             }
 
@@ -627,6 +644,23 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
 mul_overflow:
                     _error_from_token(p, op_token, ERROR_TYPE_OVERFLOW, "integer overflow in multiplication");
                     return FAIL;
+
+                case LSQB:
+                    // Valid index?
+                    nint index = vright.val.number;
+                    unint len = vleft.val.arr.len;
+                    if(index < 0) index = len + index;
+
+                    if(index < 0 || index >= len) {
+                        _error_from_token(p, op_token, ERROR_TYPE_INDEX_ERROR, "Index out of range");
+                        return FAIL;
+                    }
+
+                    struct ArrayElement* el = vleft.val.arr.head;
+                    for(nint i=0; i<index; ++i) el = el->next;
+
+                    *val = el->this;
+                    return SUCCESS;
 
                 default:
                     _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Evaluation of that operator hasn't been implemented");
