@@ -210,14 +210,14 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
         case LEFTSHIFT:
         case RIGHTSHIFT: { *lbp = 70; *rbp = 71; break; } // Done
 
-        case DOT: { *lbp = 90; *rbp = 80; break; }
+        case DOT: { *lbp = 90; *rbp = 80; break; } // Done
 
         case PLUS:
         case MINUS: { *lbp = 100; *rbp = 101; break; } // Done
 
         case SLASH:
-        case PERCENT:      // Done
-        case STAR: { *lbp = 110; *rbp = 111; break; }
+        case PERCENT:
+        case STAR: { *lbp = 110; *rbp = 111; break; } // Done
 
         case DOUBLESTAR: { *lbp = 140; *rbp = 130; break; }
         default : return FAIL;
@@ -409,6 +409,53 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
     return left;
 }
 
+unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val);
+
+unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft, struct Value* vright, unint tcleft, unint tcright) {
+    struct token* op_token = binop->op_token;
+    unint op = binop->op;
+
+    // Type checks
+
+    // Concatnation only allowed on Strings/characters
+    if(op == DOT && ( 
+        (tcleft && (vleft->type != VALUE_STR)) ||
+        (tcright && (vright->type != VALUE_STR))
+    )) {
+        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform concatnation on strings types");
+        return FAIL;
+    }
+
+    // Arithmetic only on ints/floats 
+    if ((op == PLUS || op == MINUS || op == SLASH || op == STAR || op == PERCENT) && ( 
+        (tcleft && (vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE)) ||
+        (tcright && (vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)) 
+    )) {
+        // Use token later
+        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform arithmetic operations on integer/decimal types");
+        return FAIL;
+    }
+
+    // Indexation only on array types
+    if(op == LSQB && 
+        (tcleft && vleft->type != VALUE_ARRAY)
+    ) {
+        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Can only perform indexation on array types");
+        return FAIL;
+    }
+
+    // Invalid index
+    if(op == LSQB &&
+        (tcright && vright->type != VALUE_INT)
+    ) {
+        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Indices can only by of integer type");
+        return FAIL;
+    }
+    
+    return SUCCESS;
+}
+
+
 unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
     switch(expr->type) {
         case LITERAL_NODE:
@@ -422,64 +469,33 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             struct Ast_node* pleft = binop->left;
             struct Ast_node* pright = binop->right;
             struct token* op_token = binop->op_token;
-            unint op = binop->op;
             
             struct Value vleft, vright;
+
+            // Early type check
             unint tcleft = 0, tcright = 0;
 
             if(pleft->type == LITERAL_NODE || pleft->type == VAR_NODE){
                 if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
                 tcleft = 1;
-                // TYPE CHECK NEEDED
             }
 
             if(pright && (pright->type == LITERAL_NODE || pright->type == VAR_NODE)) {
                 if(_eval_expr(p, pright, &vright) == FAIL) return FAIL;
                 tcright = 1;
-                // TYPE CHECK NEEDED
             }
 
-            // Type checks
-
-            // Concatnation only allowed on Strings/characters
-            if(op == DOT && ( 
-                (tcleft && (vleft.type != VALUE_STR)) ||
-                (tcright && (vright.type != VALUE_STR))
-            )) {
-                _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform concatnation on strings types");
-                return FAIL;
-            }
-
-            // Arithmetic only on ints/floats 
-            if ((op == PLUS || op == MINUS || op == SLASH || op == STAR || op == PERCENT) && ( 
-                (tcleft && (vleft.type != VALUE_INT && vleft.type != VALUE_DOUBLE)) ||
-                (tcright && (vright.type != VALUE_INT && vright.type != VALUE_DOUBLE)) 
-            )) {
-                _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform arithmetic operations on integer/decimal types");
-                return FAIL;
-            }
-
-            // Indexation only on array types
-            if(op == LSQB && 
-                (tcleft && vleft.type != VALUE_ARRAY)
-            ) {
-                _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Can only perform indexation on array types");
-                return FAIL;
-            }
-
-            // Invalid index
-            if(op == LSQB &&
-                (tcright && vright.type != VALUE_INT)
-            ) {
-                _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Indices can only by of integer type");
-                return FAIL;
-            }
+            if(_type_check(p, binop, &vleft, &vright, tcleft, tcright) == FAIL) return FAIL;
 
             // Evaluate
             if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
 
             // May not exist depending on the operator
             if(pright && _eval_expr(p, pright, &vright) == FAIL) return FAIL;
+
+
+            // Type check both again after evaluation
+            if(_type_check(p, binop, &vleft, &vright, 1, 1) == FAIL) return FAIL;
 
             nint a, b;
             double da, db;
@@ -662,6 +678,33 @@ mul_overflow:
                     *val = el->this;
                     return SUCCESS;
 
+                case DOT:
+                    struct Value* non_empty_str = NULL;
+                    unint alen = vleft.val.string.len;
+                    unint blen = vright.val.string.len;
+                    if(alen == 0) non_empty_str = &vright;
+                    else if(blen == 0) non_empty_str = &vleft;
+                    if(non_empty_str) {
+                        val->type = VALUE_STR;
+                        *val = *non_empty_str;
+                        return SUCCESS;
+                    }
+
+                    int32_t* cps = MEM_ALLOC((alen + blen) * sizeof(int32_t));
+                    if(cps == NULL) {
+                        _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "No available memory to concatnate the string");
+                        return FAIL;   
+                    }
+
+                    // Copy
+                    for(unint i=0; i<alen; ++i) cps[i] = vleft.val.string.str[i];
+                    for(unint i=0; i<blen; ++i) cps[alen+i] = vright.val.string.str[i];
+
+                    val->type = VALUE_STR;
+                    val->val.string.str = cps;
+                    val->val.string.len = (alen + blen);
+
+                    return SUCCESS;
                 default:
                     _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Evaluation of that operator hasn't been implemented");
                     return FAIL;

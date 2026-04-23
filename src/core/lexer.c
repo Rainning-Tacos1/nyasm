@@ -1413,6 +1413,7 @@ fraction:
                 return MAKE_TOKEN(STRING);
             }
             else {
+                // This is for line continuation
                 if(*cp == '\\') {
                     next_cp(tok);
                     if (*cp == '\r') next_cp(tok);

@@ -21,8 +21,8 @@ struct Value* new_string(struct Parser* p, struct token* _token) {
         return NULL;
     }
 
-    string->val.string.str = _token->cps;
-    string->val.string.len = _token->len;
+    string->val.string.str = _token->cps+1; // Skip the quote
+    string->val.string.len = _token->len-2; // Remove the quotes
 
     string->type = VALUE_STR;
     return string;
@@ -443,7 +443,7 @@ void print_value_recur(struct Value* val, unint level) {
             LOG("Float: %f", val->val.flt);
             break;
         case VALUE_STR:
-            LOG("Strong: '");
+            LOG("String: '");
             for(unint i=0; i<val->val.string.len; ++i) LOG_CP(val->val.string.str[i]);
             LOG("'");
             break;
