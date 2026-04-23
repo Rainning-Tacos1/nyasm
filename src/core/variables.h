@@ -60,4 +60,6 @@ extern unint __errno;
 unint _strtoul(int32_t** ptr, int32_t* str, unint len, unint base);
 nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base, unint is_neg);
 
+unint _strtod(struct Parser* parser, struct token* _token, unint is_neg, double* val);
+
 #endif

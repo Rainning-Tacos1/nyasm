@@ -1,3 +1,6 @@
+#include <locale.h>
+#include <errno.h>
+
 #include "api/memory.h"
 #include "api/debug.h"
 
@@ -8,6 +11,7 @@
 
 #include "ctype.h"
 #include "types.h"
+#include "token.h"
 
 #ifndef NULL
 #define NULL ((void*)0)
@@ -354,6 +358,74 @@ nint _strtol(int32_t** ptr, int32_t* str, unint len, unint base, unint is_neg) {
     return result;
 }
 
+unint _strtod(struct Parser* parser, struct token* _token, unint is_neg, double* val) {
+    if(_token->type != NUMBER) return FAIL; // Not a number token
+
+    int32_t* s = _token->cps;
+    unint orig_len = _token->len;
+
+    int32_t* p;
+    char *dup, *end;
+    int32_t prev;
+
+    // skip if there are no underscores
+
+    // Dupe the string
+    dup = MEM_ALLOC(orig_len * sizeof(int32_t) + 1 + 1); // +1 for a possible "-" sign and +1 for the null term
+    if(dup == NULL) {
+        _error_from_token(parser, _token, ERROR_TYPE_MEMORY, "no available memory to parse the float");
+        return FAIL;
+    }
+
+    end = dup;
+
+    if(is_neg) *end++ = '-';
+
+    prev = '\0'; // Can be anything that wont cause a parsing error
+
+    p = s;
+    for(unint i=0; i<orig_len; ++i, ++p) {
+        if(*p == '_') {
+            /* Underscores are only allowed after digits. */
+            if (!(prev >= '0' && prev <= '9')) goto error;
+        }
+        else {
+            *end++ = (char)*p; // Direct conversion to ASCII is allowed here
+            /* Underscores are only allowed before digits. */
+            if (prev == '_' && !(*p >= '0' && *p <= '9')) goto error;
+        }
+        prev = *p;
+    }
+
+    /* Underscores are not allowed at the end. */
+    if (prev == '_') goto error;
+    *end = '\0';
+
+    char* endptr;
+
+    setlocale(LC_NUMERIC, "C");
+    double x = strtod(dup, &endptr);
+
+    if (endptr == dup) goto error;
+    else if (*endptr != '\0') goto error;
+    else if (errno == ERANGE) {
+        _error_from_token(parser, _token, ERROR_TYPE_OVERFLOW, "decimal overflow");
+        goto fail;
+    }
+
+    *val = x;
+
+    MEM_FREE_LAST();
+    return SUCCESS;
+
+error:
+    _error_from_token(parser, _token, ERROR_TYPE_MESSAGE, "(parser) invalid float literal");
+fail:
+    MEM_FREE_LAST();
+    return FAIL;
+}
+
+
 // Integers / Doubles
 struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg) {
     struct Value* number = (struct Value*)MEM_ALLOC(sizeof(struct Value), "number value");
@@ -368,26 +440,23 @@ struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg) {
     __errno = 0;
     int32_t* endptr;
     nint num = _strtol(&endptr, _token->cps, _token->len, 0, is_neg);
+    if((endptr - _token->cps) == _token->len) {
+        if(__errno == ERANGE) {
+            _error_from_token(p, _token, ERROR_TYPE_OVERFLOW, "number overflow");
+            return NULL;
+        }
 
-    if(__errno == ERANGE) {
-        _error_from_token(p, _token, ERROR_TYPE_OVERFLOW, "number overflowed");
-        return NULL;
-    }
-    else if(num == 0 && endptr == _token->cps) {
-        // Invalid literal
-        // Also handled in lexer
-        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "(parser) invalid number literal");
-        return NULL;
-    }
-    else if((endptr - _token->cps) != _token->len) {
-        // Invalid literal
-        // Also handled in lexer
-        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "(parser) invalid number literal");
-        return NULL;
+        // Good integer
+        number->type = VALUE_INT;
+        number->val.number = num;
+    
+        return number;
     }
 
-    number->val.number = num;
-    number->type = VALUE_INT;
+    // Try to parse as float
+    if(_strtod(p, _token, is_neg, &number->val.flt) == FAIL) return NULL;
+
+    number->type = VALUE_DOUBLE;
     
     return number;
 }
@@ -458,7 +527,7 @@ void print_value_recur(struct Value* val, unint level) {
             LOG("]");
             break;
         default:
-            LOG("Invalid variable type");
+            LOG("Invalid variable type: %d\n", val->type);
     }
     LOG("\n");
     return;

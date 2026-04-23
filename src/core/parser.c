@@ -431,16 +431,30 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         (tcleft && (vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE)) ||
         (tcright && (vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)) 
     )) {
-        // Use token later
         _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform arithmetic operations on integer/decimal types");
+        return FAIL;
+    }
+
+    // Shifting only on ints
+    if((op == LEFTSHIFT || op == RIGHTSHIFT) && (
+        (tcleft && vleft->type != VALUE_INT)
+    )) {
+        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform shifting operations on integer types");
+        return FAIL;
+    }
+
+    if((op == LEFTSHIFT || op == RIGHTSHIFT) && (
+        (tcright && vright->type != VALUE_INT)
+    )) {
+        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only shift by integer types");
         return FAIL;
     }
 
     // Indexation only on array types
     if(op == LSQB && 
-        (tcleft && vleft->type != VALUE_ARRAY)
+        (tcleft && vleft->type != VALUE_ARRAY && vleft->type != VALUE_STR)
     ) {
-        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Can only perform indexation on array types");
+        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Can only perform indexation on array/string types");
         return FAIL;
     }
 
@@ -490,12 +504,12 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             // Evaluate
             if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
 
+            if(_type_check(p, binop, &vleft, &vright, 1, 0) == FAIL) return FAIL;
+
             // May not exist depending on the operator
             if(pright && _eval_expr(p, pright, &vright) == FAIL) return FAIL;
 
-
-            // Type check both again after evaluation
-            if(_type_check(p, binop, &vleft, &vright, 1, 1) == FAIL) return FAIL;
+            if(_type_check(p, binop, &vleft, &vright, 0, 1) == FAIL) return FAIL;
 
             nint a, b;
             double da, db;
@@ -664,7 +678,7 @@ mul_overflow:
                 case LSQB:
                     // Valid index?
                     nint index = vright.val.number;
-                    unint len = vleft.val.arr.len;
+                    unint len = (vleft.type == VALUE_ARRAY) ? vleft.val.arr.len : vleft.val.string.len;
                     if(index < 0) index = len + index;
 
                     if(index < 0 || index >= len) {
@@ -672,10 +686,25 @@ mul_overflow:
                         return FAIL;
                     }
 
-                    struct ArrayElement* el = vleft.val.arr.head;
-                    for(nint i=0; i<index; ++i) el = el->next;
+                    if(vleft.type == VALUE_ARRAY) {
+                        struct ArrayElement* el = vleft.val.arr.head;
+                        for(nint i=0; i<index; ++i) el = el->next;
 
-                    *val = el->this;
+                        *val = el->this;
+                    } else { // String
+                        int32_t* cp = MEM_ALLOC(sizeof(int32_t), "eval of string index");
+                        if(cp == NULL) {
+                            _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "No available memory to index the string");
+                            return FAIL;   
+                        }
+
+                        *cp = vleft.val.string.str[index];
+
+                        val->type = VALUE_STR;
+                        val->val.string.len = 1;
+                        val->val.string.str = cp;
+                    }
+
                     return SUCCESS;
 
                 case DOT:
@@ -685,12 +714,11 @@ mul_overflow:
                     if(alen == 0) non_empty_str = &vright;
                     else if(blen == 0) non_empty_str = &vleft;
                     if(non_empty_str) {
-                        val->type = VALUE_STR;
                         *val = *non_empty_str;
                         return SUCCESS;
                     }
 
-                    int32_t* cps = MEM_ALLOC((alen + blen) * sizeof(int32_t));
+                    int32_t* cps = MEM_ALLOC((alen + blen) * sizeof(int32_t), "eval of concatnation");
                     if(cps == NULL) {
                         _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "No available memory to concatnate the string");
                         return FAIL;   
