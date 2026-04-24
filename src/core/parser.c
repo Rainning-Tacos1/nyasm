@@ -193,19 +193,18 @@ unint is_at_identifier(struct token* _token, int32_t* identifier) {
 
 unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
     switch(type) {
-        case DOUBLEVBAR: { *lbp = 10; *rbp = 11; break; }
-        case DOUBLEAMPER:  { *lbp = 20; *rbp = 21; break; }
+        case DOUBLEVBAR: { *lbp = 10; *rbp = 11; break; } // Done
+        case DOUBLEAMPER:  { *lbp = 20; *rbp = 21; break; } // Done
 
-        case NOTEQUAL:
-        case GREATER:
+        case NOTEQUAL: // Done
+        case GREATER: // Done
         case GREATEREQUAL:
         case EQEQUAL:
         case LESS:
         case LESSEQUAL: { *lbp = 30; *rbp = 31; break; }
 
-        case VBAR: { *lbp = 40; *rbp = 41; break; }
-        case CIRCUMFLEX: { *lbp = 50; *rbp = 51; break; }
-        case AMPER: { *lbp = 60; *rbp = 61; break; }
+        case VBAR: { *lbp = 40; *rbp = 41; break; } // Done
+        case AMPER: { *lbp = 60; *rbp = 61; break; } // Done
 
         case LEFTSHIFT:
         case RIGHTSHIFT: { *lbp = 70; *rbp = 71; break; } // Done
@@ -219,7 +218,6 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
         case PERCENT:
         case STAR: { *lbp = 110; *rbp = 111; break; } // Done
 
-        case DOUBLESTAR: { *lbp = 140; *rbp = 130; break; }
         default : return FAIL;
     }
     return SUCCESS;
@@ -242,10 +240,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
             struct token * rpar = _read_token(p);
             if(rpar == NULL) return NULL;
 
-            if(rpar->type != RPAR) {
-                DBG(1, "does not end on ')'\n");
-                return NULL;
-            }
+            if(rpar->type != RPAR) return NULL;
 
             return left;
         case STRING:
@@ -314,7 +309,6 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
                 if(_token->type == RSQB) break;
 
                 // parse the expression
-                DBG(1, "STARTED PARSING ELEMENT\n");
                 struct Ast_node* el = _parse_expr(p, 0, 1); // Do stop on commas
                 if(el == NULL) return NULL;
 
@@ -325,8 +319,6 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
 
                 // Append to the array
                 if(append_array(p, _token, arr, &val) == FAIL) return NULL;
-
-                DBG(1, "-------------------- ELEMENT APPENDED P=%p\n", el);
 
                 // Read possibly the next comma or ]
                 if((_token = _read_token(p)) == NULL) return NULL;
@@ -374,12 +366,8 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
 
             struct token * rsqb = _read_token(p);
             if(rsqb == NULL) return NULL;
-            if(rsqb->type != RSQB) {
-                DBG(1, "does not end on ']'\n");
-                return NULL;
-            }
+            if(rsqb->type != RSQB) return NULL;
 
-            DBG(1, "Creating LSQB NODE\n");
             left = new_ast_binop(p, op, LSQB, left, right);
             continue;
         }
@@ -435,22 +423,27 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         return FAIL;
     }
 
-    // Shifting only on ints
-    if((op == LEFTSHIFT || op == RIGHTSHIFT) && (
-        (tcleft && vleft->type != VALUE_INT)
-    )) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform shifting operations on integer types");
-        return FAIL;
-    }
-
-    if((op == LEFTSHIFT || op == RIGHTSHIFT) && (
+    // Bitwise operators only on ints
+    if((op == LEFTSHIFT || op == RIGHTSHIFT || op == AMPER || op == VBAR || op == CIRCUMFLEX || op == TILDE) && (
+        (tcleft && vleft->type != VALUE_INT) ||
         (tcright && vright->type != VALUE_INT)
     )) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only shift by integer types");
+        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform bitwise operations on integer types");
         return FAIL;
     }
 
-    // Indexation only on array types
+    // Relational operators
+
+    // >= > <= < only to integers/floats
+    if((op == GREATER || op == GREATEREQUAL || op == LESS || op == LESSEQUAL) && (
+        (tcleft && vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE) ||
+        (tcright && vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)
+    )) {
+        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Can only perform comparison on integer/double types");
+        return FAIL;
+    }
+    
+    // Indexation only on array types or strings
     if(op == LSQB && 
         (tcleft && vleft->type != VALUE_ARRAY && vleft->type != VALUE_STR)
     ) {
@@ -458,7 +451,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         return FAIL;
     }
 
-    // Invalid index
+    // Index only with integer
     if(op == LSQB &&
         (tcright && vright->type != VALUE_INT)
     ) {
@@ -469,6 +462,79 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
     return SUCCESS;
 }
 
+
+unint bool_eval(struct Value* val) {
+    switch(val->type) {
+        case VALUE_INT:
+            return !!val->val.number;
+        case VALUE_STR:
+            return !!val->val.string.len;
+        case VALUE_DOUBLE:
+            return !!val->val.flt;
+        case VALUE_ARRAY:
+            return !!val->val.arr.len;
+        default:
+            return 0;
+    }
+}
+
+unint _equality_check(struct Value* vleft, unint op, struct Value* vright) {
+    // except for int and floats, if both types dont match, return false(==), or true(!=)
+    if((vleft->type == VALUE_DOUBLE || vleft->type == VALUE_INT) &&
+        (vright->type == VALUE_DOUBLE || vright->type == VALUE_INT)
+    ) {
+        // if one is float, promote all to float
+        if(vleft->type == VALUE_DOUBLE || vright->type == VALUE_DOUBLE) {
+
+            double da = (vleft->type == VALUE_DOUBLE) ? vleft->val.flt : (double)vleft->val.number;
+            double db = (vright->type == VALUE_DOUBLE) ? vright->val.flt : (double)vright->val.number;
+
+            return (op == EQEQUAL) ? (nint)(da == db) : (nint)(da != db);;
+        }
+
+        nint a = vleft->val.number;
+        nint b = vright->val.number;
+
+        return (op == EQEQUAL) ? (nint)(a == b) : (nint)(a != b);
+
+    }
+
+    // Do types miss-match?
+    if(vleft->type != vright->type) return !(op == EQEQUAL);
+
+    // types left: string == string and array == array
+    unint alen;
+    unint blen;
+
+    if(vleft->type == VALUE_STR) {
+        alen = vleft->val.string.len;
+        blen = vright->val.string.len;
+
+        if(alen != blen) return !(op == EQEQUAL);
+
+        for(unint i=0; i<alen; ++i) if(vleft->val.string.str[i] != vright->val.string.str[i]) return !(op == EQEQUAL);
+
+        // Strings match
+        return (op == EQEQUAL);
+    }
+
+    // Array:
+    alen = vleft->val.arr.len;
+    blen = vright->val.arr.len;
+
+    if(alen != blen) return !(op == EQEQUAL);
+
+    struct ArrayElement* tleft = vleft->val.arr.head;
+    struct ArrayElement* tright = vright->val.arr.head;
+    while(tleft != NULL) {
+        if(_equality_check(&tleft->this, NOTEQUAL, &tright->this)) return !(op == EQEQUAL);
+        tleft = tleft->next;
+        tright = tright->next;
+    }
+
+    // Arrays match
+    return (op == EQEQUAL);
+}
 
 unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
     switch(expr->type) {
@@ -579,15 +645,6 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                     
                     val->type = VALUE_DOUBLE;
                     val->val.flt = da - db;
-                    return SUCCESS;
-
-                case LEFTSHIFT:
-                    val->type = VALUE_INT;
-                    val->val.number = vleft.val.number << vright.val.number;
-                    return SUCCESS;
-                case RIGHTSHIFT:
-                    val->type = VALUE_INT;
-                    val->val.number = vleft.val.number >> vright.val.number;
                     return SUCCESS;
                 
                 case PERCENT:
@@ -733,6 +790,89 @@ mul_overflow:
                     val->val.string.len = (alen + blen);
 
                     return SUCCESS;
+                case LEFTSHIFT:
+                    val->type = VALUE_INT;
+                    val->val.number = vleft.val.number << vright.val.number;
+                    return SUCCESS;
+                case RIGHTSHIFT:
+                    val->type = VALUE_INT;
+                    val->val.number = vleft.val.number >> vright.val.number;
+                    return SUCCESS;
+
+                case AMPER:
+                    val->type = VALUE_INT;
+                    val->val.number = vleft.val.number & vright.val.number;
+                    return SUCCESS;
+
+                case VBAR:
+                    val->type = VALUE_INT;
+                    val->val.number = vleft.val.number | vright.val.number;
+                    return SUCCESS;
+
+                case CIRCUMFLEX:
+                    val->type = VALUE_INT;
+                    val->val.number = vleft.val.number ^ vright.val.number;
+                    return SUCCESS;
+
+                case TILDE:
+                    val->type = VALUE_INT;
+                    val->val.number = ~vleft.val.number;
+                    return SUCCESS;
+
+                case EXCLAMATION:
+                    val->type = VALUE_INT;
+                    val->val.number = !bool_eval(&vleft);
+                    return SUCCESS;
+                
+                case DOUBLEAMPER:
+                    val->type = VALUE_INT;
+                    val->val.number = bool_eval(&vleft) && bool_eval(&vright);
+                    return SUCCESS;
+
+                case DOUBLEVBAR:
+                    val->type = VALUE_INT;
+                    val->val.number = bool_eval(&vleft) || bool_eval(&vright);
+                    return SUCCESS;
+
+                case NOTEQUAL:
+                case EQEQUAL:
+                    val->type = VALUE_INT;
+                    val->val.number = _equality_check(&vleft, binop->op, &vright);
+                    return SUCCESS;
+
+                case GREATER:
+                case GREATEREQUAL:
+                case LESS:
+                case LESSEQUAL:
+                    // if one is float, promote all to float
+                    val->type = VALUE_INT;
+                    if(vleft.type == VALUE_DOUBLE || vright.type == VALUE_DOUBLE) {
+
+                        da = (vleft.type == VALUE_DOUBLE) ? vleft.val.flt : (double)vleft.val.number;
+                        db = (vright.type == VALUE_DOUBLE) ? vright.val.flt : (double)vright.val.number;
+
+                        switch(binop->op) {
+                            case GREATER:      { val->val.number = da >  db; break; }
+                            case GREATEREQUAL: { val->val.number = da >= db; break; }
+                            case LESS:         { val->val.number = da <  db; break; }
+                            case LESSEQUAL:    { val->val.number = da >= db; break; }
+                        }
+                        return SUCCESS;
+                    }
+
+                    a = vleft.val.number;
+                    b = vright.val.number;
+
+                    switch(binop->op) {
+                        case GREATER:      { val->val.number = a >  b; break; }
+                        case GREATEREQUAL: { val->val.number = a >= b; break; }
+                        case LESS:         { val->val.number = a <  b; break; }
+                        case LESSEQUAL:    { val->val.number = a >= b; break; }
+                    }
+                    return SUCCESS;
+
+                    
+
                 default:
                     _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Evaluation of that operator hasn't been implemented");
                     return FAIL;

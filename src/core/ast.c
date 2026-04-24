@@ -137,8 +137,6 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                 case TILDE:        { LOG("~"); break; }
                 case EXCLAMATION:  { LOG("!"); break; }
 
-                case DOUBLESTAR:   { LOG("**"); break; }
-
                 case DOUBLEVBAR:   { LOG("||"); break; }
                 case DOUBLEAMPER:  { LOG("&&"); break; }
 

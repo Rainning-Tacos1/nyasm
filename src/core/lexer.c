@@ -901,7 +901,6 @@ unint _Token_TwoChars(int32_t c1, int32_t c2) {
         break;
     case '*':
         switch (c2) {
-        case '*': return DOUBLESTAR;
         case '=': return STAREQUAL;
         }
         break;
@@ -967,15 +966,15 @@ unint _Token_TwoChars(int32_t c1, int32_t c2) {
 
 unint _Token_ThreeChars(int32_t c1, int32_t c2, int32_t c3) {
     switch (c1) {
-    case '*':
-        switch (c2) {
-        case '*':
-            switch (c3) {
-            case '=': return DOUBLESTAREQUAL;
-            }
-            break;
-        }
-        break;
+    // case '*':
+    //     switch (c2) {
+    //     case '*':
+    //         switch (c3) {
+    //         case '=': return DOUBLESTAREQUAL;
+    //         }
+    //         break;
+    //     }
+    //     break;
     // case '.':
     //     switch (c2) {
     //     case '.':
