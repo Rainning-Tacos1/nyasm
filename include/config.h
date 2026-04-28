@@ -23,6 +23,7 @@
 #define ERROR_TYPE_OVERFLOW "OverflowError"
 #define ERROR_TYPE_DIVISION_ERROR "ZeroDivisionError"
 #define ERROR_TYPE_INDEX_ERROR "IndexError"
+#define ERROR_TYPE_DECLARATION "DeclarationError"
 
 #define MAX_PARENTHESES_LEVEL 100
 

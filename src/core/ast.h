@@ -15,6 +15,7 @@ enum AST_types {
     ASSIGN_VAR_NODE,
     STATEMENTS_NODE,
     MODULE_NODE,
+    MACRO_DECL_NODE,
 };
 
 struct AstInclude {
@@ -60,10 +61,34 @@ struct AstModule {
     struct Statements* statements;
 };
 
+
+// Doesnt really need to appear on the AST.
+struct AstMacroDecl {
+    struct AstIdentifier name;
+};
+
+struct MacroArg {
+    unint is_variadic;
+    struct AstIdentifier arg_name;
+
+    struct MacroArg* next;
+};
+
+struct Macro {
+    struct AstIdentifier name;
+    struct MacroArg* args;
+    struct MacroArg* args_tail;
+    unint arg_len; // May be used for later
+
+    struct token* tokens;
+    unint tok_len;
+    struct Macro* next;
+};
+
 struct Ast_node {
     unint type;
 
-    union{
+    union {
         struct AstInclude include;
 
         struct AstAssignVariable var_assign;
@@ -75,6 +100,9 @@ struct Ast_node {
         // Variable
         struct Variable var;
 
+        // Macro declare
+        struct AstMacroDecl macro_decl;
+
         // Ast
         struct Statements statements;
         struct AstModule ast;
@@ -84,11 +112,14 @@ struct Ast_node {
 
 unint new_ast(struct Parser* p);
 
+struct Ast_node* new_ast_node();
+
 struct Ast_node* new_ast_string(struct Parser* p, struct token* _token);
 struct Ast_node* new_ast_number(struct Parser* p, struct token* _token, unint is_neg);
 struct Ast_node* new_ast_binop(struct Parser* p, struct token* op_token, unint op, struct Ast_node* left, struct Ast_node* right);
 struct Ast_node* new_ast_variable(struct Parser* p, struct token* _token, struct Variable* var);
 struct Ast_node* new_ast_array(struct Parser* p, struct token* _token, struct Value* var);
+struct Ast_node* new_ast_macro_decl(struct Parser* p, struct token* _token, int32_t* name, unint len);
 
 void dbg_ast(struct Ast_node* ast);
 

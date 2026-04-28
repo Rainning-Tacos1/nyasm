@@ -84,6 +84,21 @@ struct Ast_node* new_ast_variable(struct Parser* p, struct token* _token, struct
     return node;
 }
 
+struct Ast_node* new_ast_macro_decl(struct Parser* p, struct token* _token, int32_t* name, unint len) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the AST macro declaration");
+        return NULL;
+    }
+
+    node->type = MACRO_DECL_NODE;
+    node->node.macro_decl.name.cps = name;
+    node->node.macro_decl.name.len = len;
+
+    return node;
+}
+
+
 struct Ast_node* new_ast_array(struct Parser* p, struct token* _token, struct Value* var) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
@@ -104,6 +119,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case BINOP_NODE: { LOG("BINOP_NODE"); break; }
         case LITERAL_NODE: { LOG("LITERAL_NODE"); break; }
         case VAR_NODE: { LOG("VARIABLE_NODE"); break; }
+        case MACRO_DECL_NODE: { LOG("MACRO_DECL_NODE"); break; }
         default: { LOG("INVALID_NODE"); break; }
     }
     LOG("] ");
@@ -167,6 +183,11 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         
         case VAR_NODE:
             for(unint i=0; i<ast->node.var.var.len; ++i) DBG_CP(1, ast->node.var.var.cps[i]);
+            LOG("\n");
+            break;
+        
+        case MACRO_DECL_NODE:
+            for(unint i=0; i<ast->node.macro_decl.name.len; ++i) DBG_CP(1, ast->node.macro_decl.name.cps[i]);
             LOG("\n");
             break;
         default: { LOG("INVALID_NODE"); break; }

@@ -67,6 +67,7 @@ unint append_array(struct Parser* p, struct token* _token, struct Value* arr, st
     arr->val.arr.tail = arr_el;
     
     // Value
+    arr->val.arr.tail->next = NULL;
     arr->val.arr.tail->this = *val;
 
     // Update Len
@@ -433,9 +434,6 @@ struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the number");
         return NULL;
     }
-
-    // Parse the number
-    // May also be float
 
     __errno = 0;
     int32_t* endptr;

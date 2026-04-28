@@ -77,4 +77,6 @@
 #define DOUBLEVBAR 70
 #define DOUBLEAMPER 71
 
+#define AT_IDENTIFIER_TOKEN 80
+
 #endif

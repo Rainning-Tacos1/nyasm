@@ -14,12 +14,88 @@
 
 #include "types.h"
 
-#define IF_IDENTIDIER ((int32_t[]){'i', 'f', -1})
+#define MACRO_IDENTIDIER ((int32_t[]){'m', 'a', 'c', 'r', 'o', -1})
+#define IF_IDENTIFIER ((int32_t[]){'i', 'f', -1})
 #define INCLUDE_IDENTIFIER ((int32_t[]){'i', 'n', 'c', 'l', 'u', 'd', 'e', -1})
 #define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
 #define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
 
 extern const char * const _Parser_TokenNames[];
+
+const char * const _Parser_TokenSymbols[] = {
+    "<ENDMARKER>",     // ENDMARKER
+    "identifier",          // NAME
+    "number",        // NUMBER
+    "string",        // STRING
+    "\\n",              // NEWLINE
+    "indent",        // INDENT
+    "dedent",        // DEDENT
+    "(",               // LPAR
+    ")",               // RPAR
+    "[",               // LSQB
+    "]",               // RSQB
+    ":",               // COLON
+    ",",               // COMMA
+    ";",               // SEMI
+    "+",               // PLUS
+    "-",               // MINUS
+    "*",               // STAR
+    "/",               // SLASH
+    "|",               // VBAR
+    "&",               // AMPER
+    "<",               // LESS
+    ">",               // GREATER
+    "=",               // EQUAL
+    ".",               // DOT
+    "%",               // PERCENT
+    "{",               // LBRACE
+    "}",               // RBRACE
+    "==",              // EQEQUAL
+    "!=",              // NOTEQUAL
+    "<=",              // LESSEQUAL
+    ">=",              // GREATEREQUAL
+    "~",               // TILDE
+    "^",               // CIRCUMFLEX
+    "<<",              // LEFTSHIFT
+    ">>",              // RIGHTSHIFT
+    "**",              // DOUBLESTAR
+    "+=",              // PLUSEQUAL
+    "-=",              // MINEQUAL
+    "*=",              // STAREQUAL
+    "/=",              // SLASHEQUAL
+    "%=",              // PERCENTEQUAL
+    "&=",              // AMPEREQUAL
+    "|=",              // VBAREQUAL
+    "^=",              // CIRCUMFLEXEQUAL
+    "<<=",             // LEFTSHIFTEQUAL
+    ">>=",             // RIGHTSHIFTEQUAL
+    "**=",             // DOUBLESTAREQUAL
+    "//",              // DOUBLESLASH
+    "//=",             // DOUBLESLASHEQUAL
+    "@",               // AT
+    "@=",              // ATEQUAL
+    "->",              // RARROW
+    "...",             // ELLIPSIS
+    ":=",              // COLONEQUAL
+    "!",               // EXCLAMATION
+    "<OP>",            // OP (generic operator)
+    "<TYPE_IGNORE>",   // TYPE_IGNORE
+    "<TYPE_COMMENT>",  // TYPE_COMMENT
+    "<SOFT_KEYWORD>",  // SOFT_KEYWORD
+    "<FSTRING_START>", // FSTRING_START
+    "<FSTRING_MIDDLE>",// FSTRING_MIDDLE
+    "<FSTRING_END>",   // FSTRING_END
+    "<TSTRING_START>", // TSTRING_START
+    "<TSTRING_MIDDLE>",// TSTRING_MIDDLE
+    "<TSTRING_END>",   // TSTRING_END
+    "<COMMENT>",               // COMMENT
+    "\\n",              // NL
+    "<ERRORTOKEN>",    // <ERRORTOKEN>
+    "<ENCODING>",      // <ENCODING>
+    "<N_TOKENS>",      // <N_TOKENS>
+    "||",              // DOUBLEVBAR
+    "&&",              // DOUBLEAMPER
+};
 
 // Errors
 
@@ -159,6 +235,7 @@ struct Parser* _Parser_New(struct tok_state* tok) {
     p->tok = tok;
     p->variables = p->variables_tail = NULL;
     p->head = p->tokens = p->last_token = p->peek = p->tail = NULL;
+    p->macros = p->macros_tail = NULL;
 
     return p;
 }
@@ -186,6 +263,25 @@ unint is_at_identifier(struct token* _token, int32_t* identifier) {
     for(unint i=0; i<(identifier_len); ++i) if(_token->cps[i+1] != identifier[i]) return FAIL;
     return SUCCESS;
 }
+
+struct token* expect_token(struct Parser *p, unint token) {
+    struct token* _token = _read_token(p);
+    if(_token == NULL) return NULL;
+
+    if(_token->type == NAME && token == AT_IDENTIFIER_TOKEN) {
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "expected at-identifier");
+        return NULL;
+    } else if(is_at_identifier(_token, NULL) == SUCCESS && token == NAME) {
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "expected non-at-identifier"); 
+        return NULL;      
+    } else if(_token->type != token){
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "expected '%s'", _Parser_TokenSymbols[token]);
+        return NULL;
+    }
+
+    return _token;
+}
+
 
 // Pratt Parsing
 #define UNARY_BP 120
@@ -882,6 +978,94 @@ mul_overflow:
     }
 }
 
+// Macros
+
+struct Macro* get_macro(struct Parser* p, int32_t* cps, unint len) {
+    if(p == NULL || p->macros == NULL) return NULL;
+
+    // For now macros must have different names, later they can have repeated names and depending on the arguments a diferent macro is called
+    for(struct Macro* macro = p->macros; macro != NULL; macro = macro->next) {
+        if(macro->name.len != len) continue;
+
+        unint i;
+        for(i = 0; i < len; ++i) if(macro->name.cps[i] != cps[i]) break;
+        
+        // Full match
+        if(i == len) return macro;
+    }
+    return NULL;
+}
+
+unint is_macro_declared(struct Parser* p, int32_t* cps, unint len) {
+    return (get_macro(p, cps, len) == NULL) ? FAIL : SUCCESS;
+}
+
+struct Macro* new_empty_macro(struct Parser *p, struct token* _token, int32_t *cps, unint len) {
+    struct Macro* macro = (struct Macro*)MEM_ALLOC(sizeof(struct Macro), "new macro");
+    if(macro == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the macro initial structure");
+        return NULL;   
+    }
+
+    // Fill(Empty)
+    macro->args = NULL;
+    macro->name.cps = cps;
+    macro->name.len = len;
+    macro->tokens = NULL;
+    macro->arg_len = 0;
+    macro->tok_len = 0;
+
+    // First Macro
+    if(p->macros == NULL) p->macros = macro;
+
+    // Link the new variable
+    if(p->macros_tail != NULL) p->macros_tail->next = macro;
+    p->macros_tail = macro;
+
+    return macro;
+}
+
+unint append_macro_arg(struct Parser* p, struct token* _token, struct Macro* macro, int32_t* cps, unint len, unint is_variadic) {
+    struct MacroArg* arg = (struct MacroArg*)MEM_ALLOC(sizeof(struct MacroArg), "macro arg");
+    if(arg == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the macro argument declaration");
+        return FAIL;
+    }
+    
+    // 1st time
+    if(macro->args == NULL) macro->args = arg;
+
+    // Link
+    if(macro->args_tail != NULL) macro->args_tail->next = arg;
+    macro->args_tail = arg;
+    
+    // Value
+    arg->next = NULL;
+    arg->is_variadic = is_variadic;
+    arg->arg_name.cps = cps;
+    arg->arg_name.len = len;
+
+    // Update Len
+    macro->arg_len += 1;
+    return SUCCESS;
+}
+
+unint is_macro_arg(struct Macro* macro, int32_t* cps, unint len) {
+    if(macro == NULL) return FAIL;
+
+    for(struct MacroArg* arg = macro->args; arg != NULL; arg = arg->next) {
+        if(arg->arg_name.len != len) continue;
+
+        unint i;
+        for(i = 0; i < len; ++i) if(arg->arg_name.cps[i] != cps[i]) break;
+        
+        // Full match
+        if(i == len) return SUCCESS;
+    }
+    return FAIL; 
+}
+
+
 void* _run_parser(struct Parser* p) {
 
     struct token* _token;
@@ -934,9 +1118,115 @@ void* _run_parser(struct Parser* p) {
     while((_token = _read_token(p)) != NULL && (_token->type == COMMENT || _token->type == NEWLINE));
     if(_token == NULL) return NULL;
 
-    DBG(1, "DONE SKIPING\n");
+    DBG(1, "DONE SKIPING (using last)\n");
 
-    if(is_at_identifier(_token, IF_IDENTIDIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
+    // Macro declaration
+    if(is_at_identifier(_token, MACRO_IDENTIDIER) == SUCCESS) {
+        struct token* macro_name_token;
+
+        // @macro
+        if((macro_name_token = expect_token(p, NAME)) == NULL) return NULL;
+
+        // '('
+        if(expect_token(p, LPAR) == NULL) return NULL;
+
+        // Already declared?
+        if(is_macro_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
+            _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro is already declared");
+            return NULL;
+        }
+
+        // [AST] Init, create macro structure
+        struct Ast_node* macro_ast = new_ast_macro_decl(p, macro_name_token, macro_name_token->cps, macro_name_token->len);
+        if(macro_ast == NULL) return NULL;
+        
+        // Insert the macro on the tree
+
+        // [PARSER] Init/Append macro
+        struct Macro* macro = new_empty_macro(p, macro_name_token, macro_name_token->cps, macro_name_token->len);
+        if(macro == NULL) return NULL;
+
+        // Fill with the arguments
+        struct token* arg_token;
+        unint has_variadic_arg = 0;
+        unint is_variadic_arg = 0;
+        unint read_macro_args = 1;
+
+        // Easy end?
+        arg_token = _peek_token(p);
+        if(arg_token == NULL) return NULL;
+
+        if(arg_token->type == RPAR) read_macro_args = 0;
+
+        while(read_macro_args) {
+            DBG(1, "PEEKING TOKEN\n");
+            arg_token = _peek_token(p);
+            if(arg_token == NULL) return NULL;
+
+            if(arg_token->type == STAR) {
+                _read_token(p); // Consume the star
+                if(has_variadic_arg) {
+                    _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "macros can only have one variadic argument per macro");
+                    return NULL;
+                } else has_variadic_arg = 1;
+                
+                is_variadic_arg = 1;
+                if((arg_token = expect_token(p, NAME)) == NULL) return NULL;
+            } else {
+                if((arg_token = expect_token(p, NAME)) == NULL) return NULL;
+            }
+
+            // DO not allow repeated names
+            if(is_macro_arg(macro, arg_token->cps, arg_token->len) == SUCCESS) {
+                _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "duplicate argument in macro declaration");
+                return NULL;     
+            }
+            
+            // Store the arg name
+            if(append_macro_arg(p, arg_token, macro, arg_token->cps, arg_token->len, is_variadic_arg) == FAIL) return NULL;
+            
+            // Commas
+            DBG(1, "COMMAS?\n");
+            struct token* comma_token = _peek_token(p);
+            if(comma_token == NULL) return NULL;
+            _reset_peek(p);
+            // If we are not ending the macro, expect a comma
+            if(comma_token->type == RPAR) break;
+
+            if(expect_token(p, COMMA) == NULL) return NULL;
+        }
+
+        if(expect_token(p, RPAR) == NULL) return NULL;
+
+        DBG(1, "PARSING MACRO BLOCK\n");
+        // Read the new line, or expect it?
+        if(_read_token(p) == NULL) return NULL;
+
+        DBG(1, "READING\n");
+        // peek the indentation token
+        struct token* indentation = _peek_token(p);
+        if(indentation == NULL) return NULL;
+
+        if(indentation->type == INDENT) {
+            _read_token(p); // Consume indentation
+            // Store the begining of the macro
+            macro->tokens = p->last_token;
+
+            unint level = 1;
+            // Read tokens until indentation is back to the start
+            while(level != 0) {
+                indentation = _read_token(p);
+                if(indentation == NULL) return NULL;
+
+                if(indentation->type == INDENT) ++level;
+                else if(indentation->type == DEDENT) --level;
+                ++macro->tok_len;
+            }
+        }
+        DBG(1, "DONE PARSING MACRO BLOCK\n");
+        // blank macro
+    }
+    else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
     else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
     else if (is_at_identifier(_token, EXTERN_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXTER\n");
     else if (is_at_identifier(_token, EXPORT_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXPORT\n");

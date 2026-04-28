@@ -8,6 +8,7 @@ struct tok_state;
 struct token;
 struct Ast_node;
 struct Variable;
+struct Macro;
 
 struct Parser {
     struct tok_state* tok;
@@ -22,6 +23,9 @@ struct Parser {
 
     struct Variable* variables;
     struct Variable* variables_tail;
+
+    struct Macro* macros;
+    struct Macro* macros_tail;
 };
 
 struct Parser* _Parser_New(struct tok_state* tok);
