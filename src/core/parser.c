@@ -27,7 +27,7 @@ const char * const _Parser_TokenSymbols[] = {
     "identifier",          // NAME
     "number",        // NUMBER
     "string",        // STRING
-    "\\n",              // NEWLINE
+    "new line",              // NEWLINE
     "indent",        // INDENT
     "dedent",        // DEDENT
     "(",               // LPAR
@@ -130,26 +130,11 @@ void memory_error(struct Parser* p, const char* format, ...) {
     va_end(va);
 }
 
-// Token
+unint is_at_identifier(struct token* _token, int32_t* identifier);
+unint is_macro_declared(struct Parser* p, int32_t* cps, unint len);
+struct Macro* get_macro(struct Parser* p, int32_t* cps, unint len);
 
-unint _fill_token(struct Parser* p) {
-    // Allocate
-    struct token* new_token = (struct token*)MEM_ALLOC(sizeof(struct token), "token struct");
-    if(new_token == NULL) {
-        memory_error(p, "no available memory for token structure"); 
-        return FAIL;
-    }
-
-    unint type = tokenize(p->tok, new_token);
-
-    // Link
-    if(p->tail != NULL) p->tail->next = new_token;
-    p->tail = new_token;
-
-    // Firt token
-    if(p->head == NULL) p->head = new_token;
-
-    // Check for errors
+unint _fill_token_error_check(struct Parser* p, unint type) {
     if (type == ERRORTOKEN && p->tok->done == E_DECODE) return FAIL;
     const char *msg = NULL;
     if(type == ERRORTOKEN) {
@@ -182,11 +167,111 @@ unint _fill_token(struct Parser* p) {
         _error_known_location(p, p->tok->lineno, 0, p->tok->lineno, -1, msg);
         return FAIL;
     }
+    return SUCCESS;
+}
+
+unint _fill_token(struct Parser* p);
+
+nint _expand_macros(struct Parser* p) {
+    struct token* tail = p->tail;
+
+    if(p->is_inside_macro_decl) {
+        DBG(DO_MACRO_NOT_EXPANDING_DBG, "Not expanding macros\n");
+        return SUCCESS;
+    }
+
+    if(tail->type != NAME || is_at_identifier(tail, NULL) == SUCCESS || is_macro_declared(p, tail->cps, tail->len) == FAIL) {
+        return SUCCESS;
+    }
+    
+    // it is a macro
+    // peek for parameters
+    
+    // always expand the first token
+    struct Macro* macro = get_macro(p, tail->cps, tail->len);
+    DBG(DO_MACRO_EXPANSION_DBG, "Expanding macro '");
+    for(unint i=0; i<macro->name.len; ++i) DBG_CP(DO_MACRO_EXPANSION_DBG, macro->name.cps[i]);
+    DBG(DO_MACRO_EXPANSION_DBG, "' (%d tokens)\n", macro->tok_len);
+
+    if(macro->tok_len == 0) {
+        p->expanded_macro_is_blank = 1;
+        return SUCCESS;
+    }
+
+    if(macro->tok_len > 0) {
+        *tail = *macro->tokens; // Looses tail->next;
+        tail->next = NULL;
+
+        DBG(DO_MACRO_EXPANDED_TOKENS, "Macro expanded: %s\n", _Parser_TokenNames[tail->type]);
+        if(_expand_macros(p) == FAIL) return FAIL;
+        
+    }
+    // expand the rest
+    tail = macro->tokens->next;
+    for(unint i=1; i<macro->tok_len; ++i) {
+        // Allocate
+        struct token* t = (struct token*)MEM_ALLOC(sizeof(struct token), "macro exp. token struct");
+        if(t == NULL) {
+            memory_error(p, "no available memory for token structure when expanding macro"); 
+            return FAIL;
+        }
+
+        // Copy
+        *t = *tail;
+        DBG(DO_MACRO_EXPANDED_TOKENS, "Macro expanded: %s\n", _Parser_TokenNames[t->type]);
+
+        // Link
+        if(p->tail != NULL) p->tail->next = t;
+        p->tail = t;
+
+        // First token
+        if(p->head == NULL) p->head = t;
+
+        // Next token
+        tail = tail->next;
+        
+    }
+    p->tail->next = NULL;
 
     return SUCCESS;
 }
 
-struct token* _read_token(struct Parser* p) {
+// Token
+unint _fill_token(struct Parser* p) {
+    // Allocate
+    struct token* start_token = (struct token*)MEM_ALLOC(sizeof(struct token), "token struct");
+    if(start_token == NULL) {
+        memory_error(p, "no available memory for token structure"); 
+        return FAIL;
+    }
+
+    unint type = tokenize(p->tok, start_token);
+    if(_fill_token_error_check(p, type) == FAIL) return FAIL;
+
+    // Link
+    if(p->tail != NULL) p->tail->next = start_token;
+    p->tail = start_token;
+
+    // First token
+    if(p->head == NULL) p->head = start_token;
+
+    // expands macros
+    while(true) {
+        if(_expand_macros(p) == FAIL) return FAIL;
+
+        if(!p->expanded_macro_is_blank) break;
+
+        p->expanded_macro_is_blank = 0;
+        
+        type = tokenize(p->tok, start_token);
+        if(_fill_token_error_check(p, type) == FAIL) return FAIL;
+        // keep trying to find a non-blank macro
+    }
+
+    return SUCCESS;
+}
+
+struct token* _read_token_impl(struct Parser* p) {
     // Advance if we already have tokens
     if (p->last_token && p->last_token != p->tail)
         return (p->peek = p->last_token = p->last_token->next);
@@ -202,10 +287,27 @@ struct token* _read_token(struct Parser* p) {
     if (_fill_token(p) == FAIL)
         return NULL;
 
-    return (p->peek = p->last_token = p->tail);
+    return (p->peek = p->last_token = p->last_token->next);
 }
 
-struct token* _peek_token(struct Parser* p) {
+struct token* _read_token(struct Parser* p) {
+    struct token* token = _read_token_impl(p);
+    if(token == NULL) return NULL;
+
+    const char* start = token->start;
+    const char* end = token->end;
+    unint size = end - start;
+    (void)size;
+
+    DBG(DO_PARSER_READ_TOKEN_DBG, "Read: [%s]: %d bytes, col:%d-%d '", _Parser_TokenNames[token->type], size, token->col_offset, token->end_col_offset);
+    if(start == NULL || end == NULL) DBG(DO_PARSER_READ_TOKEN_DBG, "<NULL>");
+    else for(const char* i=start; i<end; ++i) DBG(DO_PARSER_READ_TOKEN_DBG, "%c", *i);
+    DBG(DO_PARSER_READ_TOKEN_DBG, "'\n");
+
+    return token;
+}
+
+struct token* _peek_token_impl(struct Parser* p) {
     // Advance if we already have tokens
     if (p->peek && p->peek != p->tail)
         return (p->peek = p->peek->next);
@@ -221,7 +323,24 @@ struct token* _peek_token(struct Parser* p) {
     if (_fill_token(p) == FAIL)
         return NULL;
 
-    return (p->peek = p->tail);
+    return (p->peek = p->peek->next);
+}
+
+struct token* _peek_token(struct Parser* p) {
+    struct token* token = _peek_token_impl(p);
+    if(token == NULL) return NULL;
+
+    const char* start = token->start;
+    const char* end = token->end;
+    unint size = end - start;
+    (void)size;
+
+    DBG(DO_PARSER_PEEK_TOKEN_DBG, "peek: [%s]: %d bytes, col:%d-%d '", _Parser_TokenNames[token->type], size, token->col_offset, token->end_col_offset);
+    if(start == NULL || end == NULL) DBG(DO_PARSER_PEEK_TOKEN_DBG, "<NULL>");
+    else for(const char* i=start; i<end; ++i) DBG(DO_PARSER_PEEK_TOKEN_DBG, "%c", *i);
+    DBG(DO_PARSER_PEEK_TOKEN_DBG, "'\n");
+
+    return token;
 }
 
 void _reset_peek(struct Parser* p) {
@@ -236,6 +355,7 @@ struct Parser* _Parser_New(struct tok_state* tok) {
     p->variables = p->variables_tail = NULL;
     p->head = p->tokens = p->last_token = p->peek = p->tail = NULL;
     p->macros = p->macros_tail = NULL;
+    p->expanded_macro_is_blank = p->is_inside_macro_decl = 0;
 
     return p;
 }
@@ -1065,6 +1185,27 @@ unint is_macro_arg(struct Macro* macro, int32_t* cps, unint len) {
     return FAIL; 
 }
 
+void print_macro(struct Macro* macro) {
+    DBG(1, "@macro ");
+    for(unint i=0; i<macro->name.len; ++i) DBG_CP(1, macro->name.cps[i]);
+    DBG(1, " (");
+    struct MacroArg* arg = macro->args;
+    while(arg != NULL) {
+        DBG(1, "\n\t");
+        if(arg->is_variadic) DBG(1, "*");
+        for(unint i=0; i<arg->arg_name.len; ++i) DBG_CP(1, arg->arg_name.cps[i]);
+        arg = arg->next;
+    }
+    DBG(1, "\n) [ ");
+
+    struct token* tok = macro->tokens;
+    for(unint i=0; i<macro->tok_len; ++i) {
+        DBG(1, "%s ", _Parser_TokenNames[tok->type]);
+        tok = tok->next;
+    }
+    DBG(1, "]\n");
+
+}
 
 void* _run_parser(struct Parser* p) {
 
@@ -1114,123 +1255,160 @@ void* _run_parser(struct Parser* p) {
     print_value(&out);
     DBG(1, "*********************************\n");   
 
-    // Skip comments && new lines
-    while((_token = _read_token(p)) != NULL && (_token->type == COMMENT || _token->type == NEWLINE));
-    if(_token == NULL) return NULL;
+    while(true) {
 
-    DBG(1, "DONE SKIPING (using last)\n");
+        // Skip comments && new lines
+        while((_token = _read_token(p)) != NULL && (_token->type == COMMENT || _token->type == NEWLINE));
+        if(_token == NULL) return NULL;
 
-    // Macro declaration
-    if(is_at_identifier(_token, MACRO_IDENTIDIER) == SUCCESS) {
-        struct token* macro_name_token;
+        DBG(1, "DONE SKIPING (using last)\n");
 
-        // @macro
-        if((macro_name_token = expect_token(p, NAME)) == NULL) return NULL;
+        // Macro declaration
+        if(is_at_identifier(_token, MACRO_IDENTIDIER) == SUCCESS) {
+            struct token* macro_name_token;
 
-        // '('
-        if(expect_token(p, LPAR) == NULL) return NULL;
+            // @macro
+            if((macro_name_token = expect_token(p, NAME)) == NULL) return NULL;
 
-        // Already declared?
-        if(is_macro_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
-            _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro is already declared");
-            return NULL;
-        }
+            // '('
+            if(expect_token(p, LPAR) == NULL) return NULL;
 
-        // [AST] Init, create macro structure
-        struct Ast_node* macro_ast = new_ast_macro_decl(p, macro_name_token, macro_name_token->cps, macro_name_token->len);
-        if(macro_ast == NULL) return NULL;
-        
-        // Insert the macro on the tree
+            // Already declared?
+            if(is_macro_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
+                _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro is already declared");
+                return NULL;
+            }
 
-        // [PARSER] Init/Append macro
-        struct Macro* macro = new_empty_macro(p, macro_name_token, macro_name_token->cps, macro_name_token->len);
-        if(macro == NULL) return NULL;
+            // Variable has the same name?
+            if(is_variable_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
+                _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro name is already in use by a variable");
+                return NULL;
+            }
 
-        // Fill with the arguments
-        struct token* arg_token;
-        unint has_variadic_arg = 0;
-        unint is_variadic_arg = 0;
-        unint read_macro_args = 1;
+            // [AST] Init, create macro structure
+            struct Ast_node* macro_ast = new_ast_macro_decl(p, macro_name_token, macro_name_token->cps, macro_name_token->len);
+            if(macro_ast == NULL) return NULL;
+            
+            // Insert the macro on the tree
 
-        // Easy end?
-        arg_token = _peek_token(p);
-        if(arg_token == NULL) return NULL;
+            // [PARSER] Init/Append macro
+            struct Macro* macro = new_empty_macro(p, macro_name_token, macro_name_token->cps, macro_name_token->len);
+            if(macro == NULL) return NULL;
 
-        if(arg_token->type == RPAR) read_macro_args = 0;
+            // Fill with the arguments
+            struct token* arg_token;
+            unint has_variadic_arg = 0;
+            unint is_variadic_arg = 0;
+            unint read_macro_args = 1;
 
-        while(read_macro_args) {
-            DBG(1, "PEEKING TOKEN\n");
+            // Easy end?
             arg_token = _peek_token(p);
             if(arg_token == NULL) return NULL;
 
-            if(arg_token->type == STAR) {
-                _read_token(p); // Consume the star
-                if(has_variadic_arg) {
-                    _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "macros can only have one variadic argument per macro");
-                    return NULL;
-                } else has_variadic_arg = 1;
+            if(arg_token->type == RPAR) read_macro_args = 0;
+
+            while(read_macro_args) {
+                arg_token = _peek_token(p);
+                if(arg_token == NULL) return NULL;
+
+                if(arg_token->type == STAR) {
+                    _read_token(p); // Consume the star
+                    if(has_variadic_arg) {
+                        _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "macros can only have one variadic argument per macro");
+                        return NULL;
+                    } else has_variadic_arg = 1;
+                    
+                    is_variadic_arg = 1;
+                    if((arg_token = expect_token(p, NAME)) == NULL) return NULL;
+                } else {
+                    if((arg_token = expect_token(p, NAME)) == NULL) return NULL;
+                }
+
+                // DO not allow repeated names
+                if(is_macro_arg(macro, arg_token->cps, arg_token->len) == SUCCESS) {
+                    _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "duplicate argument in macro declaration");
+                    return NULL;     
+                }
                 
-                is_variadic_arg = 1;
-                if((arg_token = expect_token(p, NAME)) == NULL) return NULL;
-            } else {
-                if((arg_token = expect_token(p, NAME)) == NULL) return NULL;
+                // Store the arg name
+                if(append_macro_arg(p, arg_token, macro, arg_token->cps, arg_token->len, is_variadic_arg) == FAIL) return NULL;
+                
+                // Commas
+                struct token* comma_token = _peek_token(p);
+                if(comma_token == NULL) return NULL;
+                _reset_peek(p);
+                // If we are not ending the macro, expect a comma
+                if(comma_token->type == RPAR) break;
+
+                if(expect_token(p, COMMA) == NULL) return NULL;
             }
 
-            // DO not allow repeated names
-            if(is_macro_arg(macro, arg_token->cps, arg_token->len) == SUCCESS) {
-                _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "duplicate argument in macro declaration");
-                return NULL;     
+            if(expect_token(p, RPAR) == NULL) return NULL;
+
+            // Read the new line, or expect it?
+            if(expect_token(p, NEWLINE) == NULL) return NULL;
+            // if(_read_token(p) == NULL) return NULL;
+
+            p->is_inside_macro_decl = 1;
+
+
+            // peek the indentation token
+            struct token* indentation = _peek_token(p);
+            if(indentation == NULL) return NULL;
+
+            if(indentation->type == INDENT) {
+                _read_token(p); // Consume indentation
+                // Store the begining of the macro, skiping the first indent
+                macro->tokens = _peek_token(p);
+
+                unint level = 1;
+                // Read tokens until indentation is back to the start
+                while(level != 0) {
+                    indentation = _read_token(p);
+                    if(indentation == NULL) return NULL;
+
+                    if(indentation->type == INDENT) ++level;
+                    else if(indentation->type == DEDENT) --level;
+                    ++macro->tok_len;
+                }
+                macro->tok_len -= 2; // Remove the dedent and the last newline
+
+            }
+
+            p->is_inside_macro_decl = 0;
+
+            DBG(1, "-----------------------------------------------------------------\n");
+            print_macro(macro);
+            DBG(1, "-----------------------------------------------------------------\n");
+            // blank macro
+        }
+        else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
+        else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
+        else if (is_at_identifier(_token, EXTERN_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXTER\n");
+        else if (is_at_identifier(_token, EXPORT_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXPORT\n");
+        // For now, later names can be instructions/labels
+        else if (_token->type == NAME && is_at_identifier(_token, NULL) == FAIL) {
+            if(expect_token(p, EQUAL) == NULL) return NULL;
+            
+            struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
+            if(expr == NULL) {
+                DBG(1, "Error building expression\n");
+                return NULL;
             }
             
-            // Store the arg name
-            if(append_macro_arg(p, arg_token, macro, arg_token->cps, arg_token->len, is_variadic_arg) == FAIL) return NULL;
-            
-            // Commas
-            DBG(1, "COMMAS?\n");
-            struct token* comma_token = _peek_token(p);
-            if(comma_token == NULL) return NULL;
-            _reset_peek(p);
-            // If we are not ending the macro, expect a comma
-            if(comma_token->type == RPAR) break;
+            DBG(1, "#################################\n");
+            dbg_ast(expr);
 
-            if(expect_token(p, COMMA) == NULL) return NULL;
+            DBG(1, "#################################\n");
+
         }
-
-        if(expect_token(p, RPAR) == NULL) return NULL;
-
-        DBG(1, "PARSING MACRO BLOCK\n");
-        // Read the new line, or expect it?
-        if(_read_token(p) == NULL) return NULL;
-
-        DBG(1, "READING\n");
-        // peek the indentation token
-        struct token* indentation = _peek_token(p);
-        if(indentation == NULL) return NULL;
-
-        if(indentation->type == INDENT) {
-            _read_token(p); // Consume indentation
-            // Store the begining of the macro
-            macro->tokens = p->last_token;
-
-            unint level = 1;
-            // Read tokens until indentation is back to the start
-            while(level != 0) {
-                indentation = _read_token(p);
-                if(indentation == NULL) return NULL;
-
-                if(indentation->type == INDENT) ++level;
-                else if(indentation->type == DEDENT) --level;
-                ++macro->tok_len;
-            }
+        else if (_token->type == ENDMARKER) {
+            DBG(1, "END OF PARSING\n");
+            break;
+        } else {
+            _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "invalid syntax");
+            return NULL;
         }
-        DBG(1, "DONE PARSING MACRO BLOCK\n");
-        // blank macro
     }
-    else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
-    else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
-    else if (is_at_identifier(_token, EXTERN_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXTER\n");
-    else if (is_at_identifier(_token, EXPORT_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXPORT\n");
-
-    while((_token = _read_token(p)) != NULL && _token->type != ENDMARKER);
     return NULL;
 }

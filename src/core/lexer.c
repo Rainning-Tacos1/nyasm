@@ -472,6 +472,7 @@ unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type,
     }
 
     unint size = end - start;
+    (void)size;
 
     DBG(DO_LEXER_TOKEN_DBG, "[%s]: %d bytes, col:%d-%d '", _Parser_TokenNames[type], size, token->col_offset, token->end_col_offset);
     if(start == NULL || end == NULL) DBG(DO_LEXER_TOKEN_DBG, "<NULL>");

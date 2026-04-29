@@ -26,6 +26,8 @@ struct Parser {
 
     struct Macro* macros;
     struct Macro* macros_tail;
+    unint is_inside_macro_decl;
+    unint expanded_macro_is_blank;
 };
 
 struct Parser* _Parser_New(struct tok_state* tok);
