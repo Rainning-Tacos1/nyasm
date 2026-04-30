@@ -32,6 +32,7 @@ struct token {
     int32_t* cps;
     unint len;
 
+    const char* line_start;
     struct token* next;
 };
 

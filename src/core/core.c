@@ -30,7 +30,7 @@ nbool assemble(char* path) {
     // Tokenizer
     struct tok_state* tok = _Tokenizer_tok_new();
     if(tok == NULL) {
-        LOG("Error allocating space for the tokenizer");
+        LOG("Error allocating space for the tokenizer\n");
         return FAIL;
     }
 
@@ -42,7 +42,7 @@ nbool assemble(char* path) {
     // Parser
     struct Parser* p = _Parser_New(tok);
     if(p == NULL) {
-        LOG("Error allocating space for the parser");
+        LOG("Error allocating space for the parser\n");
         return FAIL;
     }
     DBG(1, "Start!\n");

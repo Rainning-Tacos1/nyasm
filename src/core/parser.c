@@ -103,9 +103,27 @@ const char * const _Parser_TokenSymbols[] = {
 void _error_from_token(struct Parser* p, struct token* _token, const char *stype, const char *format, ...) {
     va_list va;
     va_start(va, format);
-    //DBG(1, "col_offset = %d | end_col_offset = %d\n", _token->col_offset, _token->end_col_offset);
+
+    if(p->macro_expansion_count != 0) {
+        LOG("Macro calls:\n");
+        unint m = 0;
+        struct MacroTrace* mt = p->macro_traces;
+
+        while(mt->lineno != 0 && m < MAX_MACRO_EXPANSION_TRACE_LIMIT) {
+
+            if(m == (MAX_MACRO_EXPANSION_TRACE_LIMIT / 2)) LOG("  ...\n");
+            LOG("  Line: %d\n", mt->lineno);
+
+            ++m; mt = mt->next;
+        }
+        LOG("\n");
+    }
+
+    const char* line_start = p->tok->line_start;
+    p->tok->line_start = _token->line_start;
     _syntaxerror_range_with_type(p->tok, stype, format, _token->lineno, _token->end_lineno, _token->col_offset+1, _token->end_col_offset+1, va);
-    //_format_syntax_error(stype, format, p->tok->source, &_token->lineno, &col_offset, &_token->end_lineno, &end_col_offset, _token->start, _token->end, va);
+    p->tok->line_start = line_start;
+
     va_end(va);
 }
 
@@ -129,7 +147,7 @@ void memory_error(struct Parser* p, const char* format, ...) {
     _format_syntax_error(ERROR_TYPE_MEMORY, format, p->tok->source, NULL, NULL, NULL, NULL, NULL, NULL, va);
     va_end(va);
 }
-
+    
 unint is_at_identifier(struct token* _token, int32_t* identifier);
 unint is_macro_declared(struct Parser* p, int32_t* cps, unint len);
 struct Macro* get_macro(struct Parser* p, int32_t* cps, unint len);
@@ -193,6 +211,15 @@ nint _expand_macros(struct Parser* p) {
     for(unint i=0; i<macro->name.len; ++i) DBG_CP(DO_MACRO_EXPANSION_DBG, macro->name.cps[i]);
     DBG(DO_MACRO_EXPANSION_DBG, "' (%d tokens)\n", macro->tok_len);
 
+    if(++p->macro_expansion_count > MAX_MACRO_EXPANSION_LIMIT) {
+        _error_from_token(p, tail, ERROR_TYPE_MACRO_LIMIT, "reached macro expansion limit: %d\n", MAX_MACRO_EXPANSION_LIMIT);
+        return FAIL;
+    }
+
+    // Add macro to trace
+    p->macro_traces_curr->lineno = tail->lineno;
+    p->macro_traces_curr = p->macro_traces_curr->next;
+
     if(macro->tok_len == 0) {
         p->expanded_macro_is_blank = 1;
         return SUCCESS;
@@ -248,6 +275,14 @@ unint _fill_token(struct Parser* p) {
     unint type = tokenize(p->tok, start_token);
     if(_fill_token_error_check(p, type) == FAIL) return FAIL;
 
+    if(p->macro_expansion_count && p->macro_expansion_count_reset && p->macro_expansion_count_reset == p->tail) {
+        DBG(1, "RESETING MACRO LEVELS\n");
+        p->macro_expansion_count = 0;
+        // Reset traces
+        for(unint i=0; i<MAX_MACRO_EXPANSION_TRACE_LIMIT; ++i) p->macro_traces[i].lineno = 0;
+        p->macro_traces_curr = p->macro_traces;
+    }
+
     // Link
     if(p->tail != NULL) p->tail->next = start_token;
     p->tail = start_token;
@@ -262,12 +297,13 @@ unint _fill_token(struct Parser* p) {
         if(!p->expanded_macro_is_blank) break;
 
         p->expanded_macro_is_blank = 0;
-        
+
         type = tokenize(p->tok, start_token);
         if(_fill_token_error_check(p, type) == FAIL) return FAIL;
         // keep trying to find a non-blank macro
     }
 
+    p->macro_expansion_count_reset = p->tail;
     return SUCCESS;
 }
 
@@ -353,9 +389,17 @@ struct Parser* _Parser_New(struct tok_state* tok) {
 
     p->tok = tok;
     p->variables = p->variables_tail = NULL;
-    p->head = p->tokens = p->last_token = p->peek = p->tail = NULL;
+    p->macro_expansion_count_reset = p->head = p->tokens = p->last_token = p->peek = p->tail = NULL;
     p->macros = p->macros_tail = NULL;
-    p->expanded_macro_is_blank = p->is_inside_macro_decl = 0;
+    p->macro_expansion_count = p->expanded_macro_is_blank = p->is_inside_macro_decl = 0;
+
+    p->macro_traces_curr = p->macro_traces;
+    for(unint i=0; i<MAX_MACRO_EXPANSION_TRACE_LIMIT-1; ++i) {
+        p->macro_traces[i].lineno = 0; // No macro
+        p->macro_traces[i].next = &p->macro_traces[i+1];
+    }
+    // Make the circular buffer at half the len
+    p->macro_traces[MAX_MACRO_EXPANSION_TRACE_LIMIT-1].next = &p->macro_traces[MAX_MACRO_EXPANSION_TRACE_LIMIT / 2];
 
     return p;
 }
@@ -591,7 +635,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
         
         unint suc = _expr_get_binding_power(op->type, &lbp, &rbp);
         if(suc == FAIL) {
-            _error_from_token(p, op, ERROR_TYPE_EXPRESSION, "Invalid operator in expression");
+            _error_from_token(p, op, ERROR_TYPE_EXPRESSION, "invalid operator in expression");
             return NULL;
         }
 
@@ -626,7 +670,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         (tcleft && (vleft->type != VALUE_STR)) ||
         (tcright && (vright->type != VALUE_STR))
     )) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform concatnation on strings types");
+        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform concatnation on strings types");
         return FAIL;
     }
 
@@ -635,7 +679,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         (tcleft && (vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE)) ||
         (tcright && (vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)) 
     )) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform arithmetic operations on integer/decimal types");
+        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types");
         return FAIL;
     }
 
@@ -644,7 +688,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         (tcleft && vleft->type != VALUE_INT) ||
         (tcright && vright->type != VALUE_INT)
     )) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Can only perform bitwise operations on integer types");
+        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform bitwise operations on integer types");
         return FAIL;
     }
 
@@ -655,7 +699,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         (tcleft && vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE) ||
         (tcright && vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)
     )) {
-        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Can only perform comparison on integer/double types");
+        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "can only perform comparison on integer/double types");
         return FAIL;
     }
     
@@ -663,7 +707,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
     if(op == LSQB && 
         (tcleft && vleft->type != VALUE_ARRAY && vleft->type != VALUE_STR)
     ) {
-        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Can only perform indexation on array/string types");
+        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "can only perform indexation on array/string types");
         return FAIL;
     }
 
@@ -671,7 +715,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
     if(op == LSQB &&
         (tcright && vright->type != VALUE_INT)
     ) {
-        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "Indices can only by of integer type");
+        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "indices can only by of integer type");
         return FAIL;
     }
     
@@ -955,7 +999,7 @@ mul_overflow:
                     if(index < 0) index = len + index;
 
                     if(index < 0 || index >= len) {
-                        _error_from_token(p, op_token, ERROR_TYPE_INDEX_ERROR, "Index out of range");
+                        _error_from_token(p, op_token, ERROR_TYPE_INDEX_ERROR, "index out of range");
                         return FAIL;
                     }
 
@@ -967,7 +1011,7 @@ mul_overflow:
                     } else { // String
                         int32_t* cp = MEM_ALLOC(sizeof(int32_t), "eval of string index");
                         if(cp == NULL) {
-                            _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "No available memory to index the string");
+                            _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "no available memory to index the string");
                             return FAIL;   
                         }
 
@@ -993,7 +1037,7 @@ mul_overflow:
 
                     int32_t* cps = MEM_ALLOC((alen + blen) * sizeof(int32_t), "eval of concatnation");
                     if(cps == NULL) {
-                        _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "No available memory to concatnate the string");
+                        _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "no available memory to concatnate the string");
                         return FAIL;   
                     }
 
@@ -1090,7 +1134,7 @@ mul_overflow:
                     
 
                 default:
-                    _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "Evaluation of that operator hasn't been implemented");
+                    _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "evaluation of that operator hasn't been implemented");
                     return FAIL;
             }
         default:
@@ -1360,6 +1404,7 @@ void* _run_parser(struct Parser* p) {
                 _read_token(p); // Consume indentation
                 // Store the begining of the macro, skiping the first indent
                 macro->tokens = _peek_token(p);
+                if(macro->tokens == NULL) return NULL;
 
                 unint level = 1;
                 // Read tokens until indentation is back to the start
@@ -1380,7 +1425,6 @@ void* _run_parser(struct Parser* p) {
             DBG(1, "-----------------------------------------------------------------\n");
             print_macro(macro);
             DBG(1, "-----------------------------------------------------------------\n");
-            // blank macro
         }
         else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
         else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");

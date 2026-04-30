@@ -152,7 +152,6 @@ unsigned char* codepoint_to_encoding_buf(int32_t cp, unsigned char* buf) {
     unint len = utf8proc_codepoint_valid(cp) ?
         utf8proc_encode_char(cp, buf) :
         utf8proc_encode_char(0xFFFD, buf);
-
     buf[len] = '\0';
     return buf;
 }

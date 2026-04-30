@@ -291,6 +291,7 @@ void _format_syntax_error(const char* stype, const char* msg, const char* filena
                 uc.end = uc.buf = uc.curr = ltext;
                 uc.end += colno;
                 
+                dp_colno += 4;
                 // Iterate through the text
                 while(uc.curr != uc.end) {
                     const char* _start = uc.curr;
@@ -298,8 +299,14 @@ void _format_syntax_error(const char* stype, const char* msg, const char* filena
                     nbool suc = READ_CP(&uc);
                     
                     if(suc != SUCCESS) { *cp = 0xFFFD; uc.curr = _start + 1;}
-                    dp_colno += (CP_WIDTH(*cp) == 2) ? 2 : 1;
+                    if(*cp == '\t') {
+                        unint spaces = TAB_SIZE - (dp_colno % TAB_SIZE);
+                        DBG(1, "dp_colno = %d | spaces = %d\n", dp_colno, spaces);
+                        dp_colno += spaces;
+                    }
+                    else { dp_colno += (CP_WIDTH(*cp) == 2) ? 2 : 1; }
                 }
+                dp_colno -= 4;
 
                 nint highlighted = end_colno - colno;
 
@@ -465,6 +472,7 @@ unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type,
     token->end = end;
     token->cps = NULL;
     token->len = 0;
+    token->line_start = tok->line_start;
 
     if (start != NULL && end != NULL) {
         token->col_offset = tok->starting_col_offset;
@@ -653,7 +661,7 @@ nbool get_indentation(struct tok_state* tok, unint* blankline) {
     if(*cp == '#' || *cp == '\n' || *cp == '\r') *blankline = 1;
     else if(*cp == '/') {
         next_cp(tok);
-        if(*cp == '*') *blankline = 1;
+        if(*cp == '*' || *cp == '/') *blankline = 1;
         backup_cp(tok); // No problem on trying to backup and EOF/error
 
     }
@@ -691,7 +699,7 @@ nbool get_indentation(struct tok_state* tok, unint* blankline) {
             if (altcol != tok->altindstack[tok->indent]) DO_FAIL(_Tokenizer_indenterror(tok));
         }
     }
-
+    ++tok->col_offset; // It has to be here, and I dont know why
     return (tok->uc.err == UNICODE_OK) ? SUCCESS : FAIL;
 }
 
@@ -1028,10 +1036,13 @@ unint tokenize(struct tok_state* tok, struct token* token) {
 
     const char *p_start = NULL;
     const char *p_end = NULL;
+
+    unsigned char __print_cp_buf[CP_ENCODING_BUF];
 nextline:
     tok->start = NULL;
     tok->starting_col_offset = -1;
     blankline = 0;
+    // DBG(1, "SETTING BLANK LINE ================= 0\n"); 
 
     // If: At Begining Of Line
     if(tok->atbol) {
@@ -1039,7 +1050,6 @@ nextline:
         DBG(DO_LEXER_INDENTATION_DBG, "Reading Indentation\n");
         // Updates tok->pendin and errors
         if(get_indentation(tok, &blankline) == FAIL) return MAKE_TOKEN(ERRORTOKEN);
-
     }
 
     tok->start = tok->uc.curr;
@@ -1048,7 +1058,7 @@ nextline:
     // Need to generate indent/dedent tokens?
     if(tok->pendin != 0) DBG(DO_LEXER_INDENTATION_DBG, "Reading Indentation complete\n\n\n");
     while (tok->pendin != 0) return MAKE_TOKEN(generate_indent_dedent_token(tok, token)); // Updates tok->pendin
-    
+
 _loop:
     if (0) goto _loop; // Remove Compiler warning about unused label
     tok->start = NULL;
@@ -1078,84 +1088,88 @@ _loop:
         while(*cp != EOF && !(*cp == '\n' || *cp == '\r')) 
             next_cp(tok);
 
-        backup_cp(tok); /* don't eat the newline or EOF */
-        p_start = tok->start;
-        p_end = tok->uc.curr;
-        return MAKE_TOKEN(COMMENT);
+        //backup_cp(tok); /* don't eat the newline or EOF */
+        //p_start = tok->start;
+        //p_end = tok->uc.curr;
+        //return MAKE_TOKEN(COMMENT);
     }
 
     // Comments (// & /)
-    if(*cp == '/') {
-        next_cp(tok);
+    while(1) {
+        if(*cp == '/') {
+            next_cp(tok);
 
-        if(*cp == '/') { // Comment
-            while(!(*cp == '\n' || *cp == '\r') && *cp != EOF) 
-                next_cp(tok);
-
-            backup_cp(tok); /* don't eat the newline or EOF */
-            p_start = tok->start;
-            p_end = tok->uc.curr;
-            return MAKE_TOKEN(COMMENT);
-
-        // Multi-line comment
-        } else if(*cp == '*') {
-            int32_t prev = 0;
-
-            tok->first_lineno = tok->lineno;
-            tok->multi_line_start = tok->line_start;
-
-            while(true) {
-                next_cp(tok);
-                // Errors
-                if(tok->done == E_DECODE)
-                    return MAKE_TOKEN(ERRORTOKEN); // break; in python (string)
-
-                // Unexpected ending
-                if(*cp == EOF) {
-                    tok->uc.curr = (char *)tok->start;
-                    tok->uc.curr++;
-                    tok->line_start = tok->multi_line_start;
-                    unint start = tok->lineno;
-                    tok->lineno = tok->first_lineno;
-
-                    _Tokenizer_syntaxerror(tok, "Unterminated multi-line comment (detected at line %d)", start);
-                    return MAKE_TOKEN(ERRORTOKEN);
-                }
-
-                // New line
-                //if(*cp == '\n')
-                //    tok->atbol = 1; // I dont remember if this is needed here
-
-                if (prev == '*' && *cp == '/') {
+            if(*cp == '/') { // Comment
+                while(*cp != EOF && !(*cp == '\n' || *cp == '\r')) 
                     next_cp(tok);
 
-                    // No need to check for errors as '\n' is on the same line as "*/" so next_cp already check for malformed characters on that line
-                    
-                    // Exit?
-                    if((*cp == '\n' && tok->starting_col_offset == 0) || (tok->starting_col_offset != 0))
-                        break;
+                //backup_cp(tok); /* don't eat the newline or EOF */
+                //p_start = tok->start;
+                //p_end = tok->uc.curr;
+                //return MAKE_TOKEN(COMMENT);
+                break;
+                
 
-                    _Tokenizer_syntaxerror(tok, "Multi-line comments at the begining of lines must end on a new line ('\\n')");
-                    return MAKE_TOKEN(ERRORTOKEN);
+            // Multi-line comment
+            } else if(*cp == '*') {
+                int32_t prev = 0;
+
+                tok->first_lineno = tok->lineno;
+                tok->multi_line_start = tok->line_start;
+
+                while(true) {
+                    next_cp(tok);
+                    // Errors
+                    if(tok->done == E_DECODE)
+                        return MAKE_TOKEN(ERRORTOKEN); // break; in python (string)
+
+                    // Unexpected ending
+                    if(*cp == EOF) {
+                        tok->uc.curr = (char *)tok->start;
+                        tok->uc.curr++;
+                        tok->line_start = tok->multi_line_start;
+                        unint start = tok->lineno;
+                        tok->lineno = tok->first_lineno;
+
+                        _Tokenizer_syntaxerror(tok, "Unterminated multi-line comment (detected at line %d)", start);
+                        return MAKE_TOKEN(ERRORTOKEN);
+                    }
+
+                    // New line
+                    //if(*cp == '\n')
+                    //    tok->atbol = 1; // I dont remember if this is needed here
+
+                    if (prev == '*' && *cp == '/') {
+                        next_cp(tok);
+
+                        // No need to check for errors as '\n' is on the same line as "*/" so next_cp already check for malformed characters on that line
+                        
+                        // Exit?
+                        if((*cp == '\n' && tok->starting_col_offset == 0) || (tok->starting_col_offset != 0))
+                            break;
+
+                        _Tokenizer_syntaxerror(tok, "Multi-line comments at the begining of lines must end on a new line ('\\n')");
+                        return MAKE_TOKEN(ERRORTOKEN);
+                    }
+                    prev = *cp;
                 }
-                prev = *cp;
+                backup_cp(tok); /* don't eat the newline or EOF */
+
+                // Do not generate multi-line comments --inside parenthesis--
+                goto nextline;
+
+                //p_start = tok->start;
+                //p_end = tok->uc.curr;
+                //return MAKE_TOKEN(COMMENT);
             }
-            backup_cp(tok); /* don't eat the newline or EOF */
+            backup_cp(tok);
+            p_start = tok->start;
+            p_end = tok->uc.curr;
 
-            // Do not generate multi-line comments --inside parenthesis--
-            goto nextline;
-
-            //p_start = tok->start;
-            //p_end = tok->uc.curr;
-            //return MAKE_TOKEN(COMMENT);
+            return MAKE_TOKEN(SLASH);
         }
-        backup_cp(tok);
-        p_start = tok->start;
-        p_end = tok->uc.curr;
-
-        return MAKE_TOKEN(SLASH);
+        break;
     }
-
     // EOF or unicode errors
     if(*cp == EOF) {
         DBG(DO_LEXER_EOF_DBG, "Could be EOF\n");
@@ -1178,7 +1192,7 @@ _loop:
         // ASCII validation is done on the while condition but Unicode validation isnt so do it here
         if(!ISASCII(*cp) && is_identifier_start(*cp) == FAIL) {
             (is_printable_cp(*cp) == SUCCESS) ?
-                _Tokenizer_syntaxerror(tok, "invalid character '%s' (U+%04X)", CP_TO_ENCODING(*cp), *cp) :
+                _Tokenizer_syntaxerror(tok, "invalid character '%s' (U+%04X)", CP_TO_ENCODING_BUF(*cp, __print_cp_buf), *cp) :
                 _Tokenizer_syntaxerror(tok, "invalid non-printable character U+%04X", *cp);
                 
             return MAKE_TOKEN(ERRORTOKEN);
@@ -1189,7 +1203,7 @@ _loop:
             // Unicode validation is not done on the while condition so it is done here
             if(!ISASCII(*cp) && is_identifier_continue(*cp) == FAIL) {
                 (is_printable_cp(*cp) == SUCCESS) ?
-                    _Tokenizer_syntaxerror(tok, "invalid character '%s' (U+%04X)", CP_TO_ENCODING(*cp), *cp) :
+                    _Tokenizer_syntaxerror(tok, "invalid character '%s' (U+%04X)", CP_TO_ENCODING_BUF(*cp, __print_cp_buf), *cp) :
                     _Tokenizer_syntaxerror(tok, "invalid non-printable character U+%04X", *cp);
 
                 return MAKE_TOKEN(ERRORTOKEN);
@@ -1277,7 +1291,8 @@ _loop:
 
                     // If it'ts not an octal digit
                     if(!ISODIGIT(*cp)) {
-                        if(ISDIGIT(*cp)) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "invalid digit '%s' in octal literal", CP_TO_ENCODING(*cp)));
+                        DBG(1, "CONVETING NOW\n");
+                        if(ISDIGIT(*cp)) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "invalid digit '%s' in octal literal", CP_TO_ENCODING_BUF(*cp, __print_cp_buf)));
                         else {
                             backup_cp(tok);
                             return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "invalid octal literal"));
@@ -1291,7 +1306,7 @@ _loop:
                 }while(*cp == '_');
 
                 // Verify if it was a digit but not in octal range
-                if(ISDIGIT(*cp)) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "Invalid digit '%s' in octal literal", CP_TO_ENCODING(*cp)));
+                if(ISDIGIT(*cp)) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "Invalid digit '%s' in octal literal", CP_TO_ENCODING_BUF(*cp, __print_cp_buf)));
 
                 // Verify the end of the number
                 if(verify_end_of_number(tok, "octal") == FAIL) return MAKE_TOKEN(ERRORTOKEN);
@@ -1307,7 +1322,7 @@ _loop:
 
                     // If it'ts not a binary digit
                     if(!ISBDIGIT(*cp)) {
-                        if(ISDIGIT(*cp)) _Tokenizer_syntaxerror(tok, "invalid digit '%s' in binary literal", CP_TO_ENCODING(*cp));
+                        if(ISDIGIT(*cp)) _Tokenizer_syntaxerror(tok, "invalid digit '%s' in binary literal", CP_TO_ENCODING_BUF(*cp, __print_cp_buf));
                         else {
                             backup_cp(tok);
                             _Tokenizer_syntaxerror(tok, "invalid binary literal");
@@ -1321,7 +1336,7 @@ _loop:
                 }while(*cp == '_');
 
                 // Verify if it was a digit but not in binary range
-                if(ISDIGIT(*cp)) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "Invalid digit '%s' in binary literal", CP_TO_ENCODING(*cp)));
+                if(ISDIGIT(*cp)) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "Invalid digit '%s' in binary literal", CP_TO_ENCODING_BUF(*cp, __print_cp_buf)));
 
                 // Verify the end of the number
                 if(verify_end_of_number(tok, "binary") == FAIL) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "invalid binary literal"));
@@ -1461,7 +1476,7 @@ fraction:
             break;
         case ')':
         case ']':
-            if(!tok->level) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "unmatched '%s'", CP_TO_ENCODING(*cp)));
+            if(!tok->level) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "unmatched '%s'", CP_TO_ENCODING_BUF(*cp, __print_cp_buf)));
 
             if(tok->level > 0) {
                 tok->level--;

@@ -10,6 +10,11 @@ struct Ast_node;
 struct Variable;
 struct Macro;
 
+struct MacroTrace {
+    unint lineno;
+    struct MacroTrace* next;
+};
+
 struct Parser {
     struct tok_state* tok;
     struct token* tokens; // Linked list
@@ -28,6 +33,11 @@ struct Parser {
     struct Macro* macros_tail;
     unint is_inside_macro_decl;
     unint expanded_macro_is_blank;
+
+    unint macro_expansion_count;
+    struct token* macro_expansion_count_reset;
+    struct MacroTrace macro_traces[MAX_MACRO_EXPANSION_TRACE_LIMIT];
+    struct MacroTrace* macro_traces_curr;
 };
 
 struct Parser* _Parser_New(struct tok_state* tok);
