@@ -188,122 +188,97 @@ unint _fill_token_error_check(struct Parser* p, unint type) {
     return SUCCESS;
 }
 
-unint _fill_token(struct Parser* p);
+unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct token** start, struct token** end) {
+    //DBG(1, "CALLED _do_real_macro_expansion p = %p | _token = %p | start = %p | en = %p\n", p, _token, start, end);
+    if(p->is_inside_macro_decl || _token->type != NAME || is_at_identifier(_token, NULL) == SUCCESS || is_macro_declared(p, _token->cps, _token->len) == FAIL) {
+        
+        if(p->is_inside_macro_decl) DBG(DO_MACRO_NOT_EXPANDING_DBG, "Not expanding macros\n");
 
-nint _expand_macros(struct Parser* p) {
-    struct token* tail = p->tail;
+        // Allocate one token and leave
+        *end = *start = (struct token*)MEM_ALLOC(sizeof(struct token), "token struct");
+        if(*start == NULL) {
+            memory_error(p, "no available memory for token structure"); 
+            return FAIL;
+        }
 
-    if(p->is_inside_macro_decl) {
-        DBG(DO_MACRO_NOT_EXPANDING_DBG, "Not expanding macros\n");
-        return SUCCESS;
-    }
-
-    if(tail->type != NAME || is_at_identifier(tail, NULL) == SUCCESS || is_macro_declared(p, tail->cps, tail->len) == FAIL) {
+        // Copy
+        **start = *_token;
+        (*start)->next = NULL;
         return SUCCESS;
     }
     
     // it is a macro
     // peek for parameters
-    
-    // always expand the first token
-    struct Macro* macro = get_macro(p, tail->cps, tail->len);
+
+    struct Macro* macro = get_macro(p, _token->cps, _token->len);
     DBG(DO_MACRO_EXPANSION_DBG, "Expanding macro '");
     for(unint i=0; i<macro->name.len; ++i) DBG_CP(DO_MACRO_EXPANSION_DBG, macro->name.cps[i]);
     DBG(DO_MACRO_EXPANSION_DBG, "' (%d tokens)\n", macro->tok_len);
 
     if(++p->macro_expansion_count > MAX_MACRO_EXPANSION_LIMIT) {
-        _error_from_token(p, tail, ERROR_TYPE_MACRO_LIMIT, "reached macro expansion limit: %d\n", MAX_MACRO_EXPANSION_LIMIT);
+        _error_from_token(p, _token, ERROR_TYPE_MACRO_LIMIT, "reached macro expansion limit: %d\n", MAX_MACRO_EXPANSION_LIMIT);
         return FAIL;
     }
 
-    // Add macro to trace
-    p->macro_traces_curr->lineno = tail->lineno;
+    // Add macro to the trace
+    p->macro_traces_curr->lineno = _token->lineno;
     p->macro_traces_curr = p->macro_traces_curr->next;
 
     if(macro->tok_len == 0) {
-        p->expanded_macro_is_blank = 1;
+        *end = *start = NULL;
         return SUCCESS;
     }
 
-    if(macro->tok_len > 0) {
-        *tail = *macro->tokens; // Looses tail->next;
-        tail->next = NULL;
+    struct token* macro_token = macro->tokens;
+    
+    struct token *_start, *_end;
+    struct token *head = NULL, *tail = NULL;
 
-        DBG(DO_MACRO_EXPANDED_TOKENS, "Macro expanded: %s\n", _Parser_TokenNames[tail->type]);
-        if(_expand_macros(p) == FAIL) return FAIL;
-        
-    }
-    // expand the rest
-    tail = macro->tokens->next;
-    for(unint i=1; i<macro->tok_len; ++i) {
-        // Allocate
-        struct token* t = (struct token*)MEM_ALLOC(sizeof(struct token), "macro exp. token struct");
-        if(t == NULL) {
-            memory_error(p, "no available memory for token structure when expanding macro"); 
-            return FAIL;
-        }
+    for(unint i=0; i<macro->tok_len; ++i, macro_token = macro_token->next) {
+        if(_do_real_macro_expansion(p, macro_token, &_start, &_end) == FAIL) return FAIL;
 
-        // Copy
-        *t = *tail;
-        DBG(DO_MACRO_EXPANDED_TOKENS, "Macro expanded: %s\n", _Parser_TokenNames[t->type]);
+        if(_start == NULL) continue; // Blank expansion
+
+        DBG(DO_MACRO_EXPANSION_DBG, "_start->type = %s | _end->type = %s\n", _Parser_TokenNames[_start->type], _Parser_TokenNames[_end->type]);
 
         // Link
-        if(p->tail != NULL) p->tail->next = t;
-        p->tail = t;
+        if(tail != NULL) tail->next = _start;
+        tail = _end;
 
-        // First token
-        if(p->head == NULL) p->head = t;
-
-        // Next token
-        tail = tail->next;
-        
+        // Head
+        if(head == NULL) head = _start;
     }
-    p->tail->next = NULL;
 
+    *start = head;
+    *end = tail;
     return SUCCESS;
 }
 
 // Token
 unint _fill_token(struct Parser* p) {
-    // Allocate
-    struct token* start_token = (struct token*)MEM_ALLOC(sizeof(struct token), "token struct");
-    if(start_token == NULL) {
-        memory_error(p, "no available memory for token structure"); 
-        return FAIL;
-    }
+    struct token _token;
+    struct token *start, *end;
+    do {
+        unint type = tokenize(p->tok, &_token);
+        if(_fill_token_error_check(p, type) == FAIL) return FAIL;
 
-    unint type = tokenize(p->tok, start_token);
-    if(_fill_token_error_check(p, type) == FAIL) return FAIL;
+        if(_do_real_macro_expansion(p, &_token, &start, &end) == FAIL) return FAIL;
 
-    if(p->macro_expansion_count && p->macro_expansion_count_reset && p->macro_expansion_count_reset == p->tail) {
-        DBG(1, "RESETING MACRO LEVELS\n");
         p->macro_expansion_count = 0;
-        // Reset traces
         for(unint i=0; i<MAX_MACRO_EXPANSION_TRACE_LIMIT; ++i) p->macro_traces[i].lineno = 0;
         p->macro_traces_curr = p->macro_traces;
-    }
+    } while(start == NULL); // Blank macro
 
     // Link
-    if(p->tail != NULL) p->tail->next = start_token;
-    p->tail = start_token;
+    if(p->tail != NULL) {
+        p->tail->next = start;
+        p->tail = end;
+    }
+    p->tail = end;
 
     // First token
-    if(p->head == NULL) p->head = start_token;
+    if(p->head == NULL) p->head = start;
 
-    // expands macros
-    while(true) {
-        if(_expand_macros(p) == FAIL) return FAIL;
-
-        if(!p->expanded_macro_is_blank) break;
-
-        p->expanded_macro_is_blank = 0;
-
-        type = tokenize(p->tok, start_token);
-        if(_fill_token_error_check(p, type) == FAIL) return FAIL;
-        // keep trying to find a non-blank macro
-    }
-
-    p->macro_expansion_count_reset = p->tail;
     return SUCCESS;
 }
 
@@ -553,8 +528,9 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
 
             return new_ast_variable(p, _token, var);
         case LSQB:
-
-            if((_token = _peek_token(p)) == NULL || _token->type == COMMA) {
+            if((_token = _peek_token(p)) == NULL) return NULL;
+            
+            if(_token->type == COMMA) {
                 _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "expected a value before the comma");
                 return NULL;
             }

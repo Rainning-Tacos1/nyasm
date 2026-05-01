@@ -301,7 +301,6 @@ void _format_syntax_error(const char* stype, const char* msg, const char* filena
                     if(suc != SUCCESS) { *cp = 0xFFFD; uc.curr = _start + 1;}
                     if(*cp == '\t') {
                         unint spaces = TAB_SIZE - (dp_colno % TAB_SIZE);
-                        DBG(1, "dp_colno = %d | spaces = %d\n", dp_colno, spaces);
                         dp_colno += spaces;
                     }
                     else { dp_colno += (CP_WIDTH(*cp) == 2) ? 2 : 1; }
