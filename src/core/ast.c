@@ -165,6 +165,10 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             dbg_ast_recur(ast->node.binop.left, level+1);
             // Can be NULL if type is MINUS or PLUS to make a negation or positive-ation
             if(ast->node.binop.right != NULL) dbg_ast_recur(ast->node.binop.right, level+1);
+            else { 
+                for(unint i=0; i<level+1; ++i) LOG("\t");
+                LOG("NULL\n");
+            }
             break;
         
         case LITERAL_NODE:

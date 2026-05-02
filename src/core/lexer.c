@@ -456,6 +456,7 @@ unint _Tokenizer_indenterror(struct tok_state *tok) {
 unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type, const char *start, const char *end) {
     
     token->next = NULL;
+    token->macro_trace = NULL;
     token->type = type;
 
     token->level = tok->level;

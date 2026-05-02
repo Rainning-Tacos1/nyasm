@@ -98,24 +98,48 @@ const char * const _Parser_TokenSymbols[] = {
 };
 
 // Errors
+unint macro_trace_len(struct MacroTrace* mt) {
+    unint n = 0;
+    while(mt) {
+        ++n;
+        mt = mt->parent;
+    }
+    return n;
+}
 
-// Do not call on multiline comment tokens
+void _print_macro_trace_select(struct MacroTrace* mt, unint i, unint n) {
+    if (mt->parent)
+        _print_macro_trace_select(mt->parent, i + 1, n);
+
+    unint do_print = 0;
+
+    if (n <= MACRO_EXPANSION_TRACE_START_LIMIT + MACRO_EXPANSION_TRACE_END_LIMIT) {
+        do_print = 1;
+    } else {
+        if (i < MACRO_EXPANSION_TRACE_START_LIMIT) do_print = 1;
+        if (i >= n - MACRO_EXPANSION_TRACE_END_LIMIT) do_print = 1;
+    }
+    if (do_print) {
+        LOG("  macro '");
+        struct Macro* macro = mt->macro;
+        for (unint j = 0; j < macro->name.len; ++j)
+            LOG_CP(macro->name.cps[j]);
+        LOG("' line: %d\n", mt->lineno);
+    }
+    if (n > MACRO_EXPANSION_TRACE_START_LIMIT + MACRO_EXPANSION_TRACE_END_LIMIT && i == MACRO_EXPANSION_TRACE_START_LIMIT) {
+        LOG("  ...\n");
+    }
+}
 void _error_from_token(struct Parser* p, struct token* _token, const char *stype, const char *format, ...) {
     va_list va;
     va_start(va, format);
 
-    if(p->macro_expansion_count != 0) {
-        LOG("Macro calls:\n");
-        unint m = 0;
-        struct MacroTrace* mt = p->macro_traces;
-
-        while(mt->lineno != 0 && m < MAX_MACRO_EXPANSION_TRACE_LIMIT) {
-
-            if(m == (MAX_MACRO_EXPANSION_TRACE_LIMIT / 2)) LOG("  ...\n");
-            LOG("  Line: %d\n", mt->lineno);
-
-            ++m; mt = mt->next;
-        }
+    struct MacroTrace* mt = _token->macro_trace;
+    
+    if(mt) {
+        LOG("Traceback:\n");
+        unint n = macro_trace_len(mt);
+        _print_macro_trace_select(mt, 0, n);
         LOG("\n");
     }
 
@@ -188,8 +212,8 @@ unint _fill_token_error_check(struct Parser* p, unint type) {
     return SUCCESS;
 }
 
-unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct token** start, struct token** end) {
-    //DBG(1, "CALLED _do_real_macro_expansion p = %p | _token = %p | start = %p | en = %p\n", p, _token, start, end);
+unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct token** start, struct token** end, struct MacroTrace* mt) {
+
     if(p->is_inside_macro_decl || _token->type != NAME || is_at_identifier(_token, NULL) == SUCCESS || is_macro_declared(p, _token->cps, _token->len) == FAIL) {
         
         if(p->is_inside_macro_decl) DBG(DO_MACRO_NOT_EXPANDING_DBG, "Not expanding macros\n");
@@ -220,22 +244,33 @@ unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct to
         return FAIL;
     }
 
-    // Add macro to the trace
-    p->macro_traces_curr->lineno = _token->lineno;
-    p->macro_traces_curr = p->macro_traces_curr->next;
-
     if(macro->tok_len == 0) {
         *end = *start = NULL;
         return SUCCESS;
     }
 
     struct token* macro_token = macro->tokens;
-    
+
+    struct MacroTrace* macro_trace = (struct MacroTrace*)MEM_ALLOC(sizeof(struct MacroTrace), "macro trace");
+    if(macro_trace == NULL) {
+        *end = *start = NULL;
+        memory_error(p, "no available memory for macro trace structure"); 
+        return FAIL;
+    }
+
+    macro_trace->parent = (mt == NULL) ? NULL : mt;
+    macro_trace->macro = macro;
+    macro_trace->lineno = _token->lineno;
+
     struct token *_start, *_end;
     struct token *head = NULL, *tail = NULL;
 
     for(unint i=0; i<macro->tok_len; ++i, macro_token = macro_token->next) {
-        if(_do_real_macro_expansion(p, macro_token, &_start, &_end) == FAIL) return FAIL;
+        // Set the macro trace for each token
+        macro_token->macro_trace = macro_trace;
+        DBG(1, "SETTING MACRO TRACE TO TOKEN\n");
+
+        if(_do_real_macro_expansion(p, macro_token, &_start, &_end, macro_trace) == FAIL) return FAIL;
 
         if(_start == NULL) continue; // Blank expansion
 
@@ -262,11 +297,9 @@ unint _fill_token(struct Parser* p) {
         unint type = tokenize(p->tok, &_token);
         if(_fill_token_error_check(p, type) == FAIL) return FAIL;
 
-        if(_do_real_macro_expansion(p, &_token, &start, &end) == FAIL) return FAIL;
+        if(_do_real_macro_expansion(p, &_token, &start, &end, NULL) == FAIL) return FAIL;
 
         p->macro_expansion_count = 0;
-        for(unint i=0; i<MAX_MACRO_EXPANSION_TRACE_LIMIT; ++i) p->macro_traces[i].lineno = 0;
-        p->macro_traces_curr = p->macro_traces;
     } while(start == NULL); // Blank macro
 
     // Link
@@ -310,7 +343,7 @@ struct token* _read_token(struct Parser* p) {
     unint size = end - start;
     (void)size;
 
-    DBG(DO_PARSER_READ_TOKEN_DBG, "Read: [%s]: %d bytes, col:%d-%d '", _Parser_TokenNames[token->type], size, token->col_offset, token->end_col_offset);
+    DBG(DO_PARSER_READ_TOKEN_DBG, "Read: [%s] (trace: %p): %d bytes, col:%d-%d '", _Parser_TokenNames[token->type], token->macro_trace, size, token->col_offset, token->end_col_offset);
     if(start == NULL || end == NULL) DBG(DO_PARSER_READ_TOKEN_DBG, "<NULL>");
     else for(const char* i=start; i<end; ++i) DBG(DO_PARSER_READ_TOKEN_DBG, "%c", *i);
     DBG(DO_PARSER_READ_TOKEN_DBG, "'\n");
@@ -346,7 +379,7 @@ struct token* _peek_token(struct Parser* p) {
     unint size = end - start;
     (void)size;
 
-    DBG(DO_PARSER_PEEK_TOKEN_DBG, "peek: [%s]: %d bytes, col:%d-%d '", _Parser_TokenNames[token->type], size, token->col_offset, token->end_col_offset);
+    DBG(DO_PARSER_PEEK_TOKEN_DBG, "peek: [%s] (trace: %p): %d bytes, col:%d-%d '", _Parser_TokenNames[token->type], token->macro_trace, size, token->col_offset, token->end_col_offset);
     if(start == NULL || end == NULL) DBG(DO_PARSER_PEEK_TOKEN_DBG, "<NULL>");
     else for(const char* i=start; i<end; ++i) DBG(DO_PARSER_PEEK_TOKEN_DBG, "%c", *i);
     DBG(DO_PARSER_PEEK_TOKEN_DBG, "'\n");
@@ -364,17 +397,9 @@ struct Parser* _Parser_New(struct tok_state* tok) {
 
     p->tok = tok;
     p->variables = p->variables_tail = NULL;
-    p->macro_expansion_count_reset = p->head = p->tokens = p->last_token = p->peek = p->tail = NULL;
+    p->head = p->tokens = p->last_token = p->peek = p->tail = NULL;
     p->macros = p->macros_tail = NULL;
     p->macro_expansion_count = p->expanded_macro_is_blank = p->is_inside_macro_decl = 0;
-
-    p->macro_traces_curr = p->macro_traces;
-    for(unint i=0; i<MAX_MACRO_EXPANSION_TRACE_LIMIT-1; ++i) {
-        p->macro_traces[i].lineno = 0; // No macro
-        p->macro_traces[i].next = &p->macro_traces[i+1];
-    }
-    // Make the circular buffer at half the len
-    p->macro_traces[MAX_MACRO_EXPANSION_TRACE_LIMIT-1].next = &p->macro_traces[MAX_MACRO_EXPANSION_TRACE_LIMIT / 2];
 
     return p;
 }
@@ -572,7 +597,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
 
             return new_ast_array(p, _token, arr);
         default:
-            _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "invalid token for expression");
+            _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "invalid syntax for expression");
             return NULL;
     }
     // Just in case
@@ -658,7 +683,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types");
         return FAIL;
     }
-
+    DBG(1, "[TYPE_CHECK]: tcleft = %d | tcright = %d\n", tcleft, tcright);
     // Bitwise operators only on ints
     if((op == LEFTSHIFT || op == RIGHTSHIFT || op == AMPER || op == VBAR || op == CIRCUMFLEX || op == TILDE) && (
         (tcleft && vleft->type != VALUE_INT) ||
@@ -801,17 +826,20 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                 tcright = 1;
             }
 
+            DBG(DO_EXPRESSION_EVAL_TYPE_CHECK_DBG, "Type check #1: tcleft = %d | tcright = %d\n", tcleft, tcright);
             if(_type_check(p, binop, &vleft, &vright, tcleft, tcright) == FAIL) return FAIL;
 
             // Evaluate
             if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
 
+            DBG(DO_EXPRESSION_EVAL_TYPE_CHECK_DBG, "Type check #2: tcleft = %d | tcright = %d\n", 1, 0);
             if(_type_check(p, binop, &vleft, &vright, 1, 0) == FAIL) return FAIL;
 
             // May not exist depending on the operator
             if(pright && _eval_expr(p, pright, &vright) == FAIL) return FAIL;
 
-            if(_type_check(p, binop, &vleft, &vright, 0, 1) == FAIL) return FAIL;
+            DBG(DO_EXPRESSION_EVAL_TYPE_CHECK_DBG, "Type check #3: tcleft = %d | tcright = %d\n", 0, 1);
+            if(pright && _type_check(p, binop, &vleft, &vright, 0, 1) == FAIL) return FAIL;
 
             nint a, b;
             double da, db;

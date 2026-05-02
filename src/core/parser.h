@@ -11,8 +11,9 @@ struct Variable;
 struct Macro;
 
 struct MacroTrace {
+    struct Macro* macro;
     unint lineno;
-    struct MacroTrace* next;
+    struct MacroTrace* parent;
 };
 
 struct Parser {
@@ -35,9 +36,6 @@ struct Parser {
     unint expanded_macro_is_blank;
 
     unint macro_expansion_count;
-    struct token* macro_expansion_count_reset;
-    struct MacroTrace macro_traces[MAX_MACRO_EXPANSION_TRACE_LIMIT];
-    struct MacroTrace* macro_traces_curr;
 };
 
 struct Parser* _Parser_New(struct tok_state* tok);

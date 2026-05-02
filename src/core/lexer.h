@@ -23,6 +23,8 @@
 
 #define DO_ERRTOKEN(stmt) ((stmt), ERRORTOKEN)
 
+struct MacroTrace;
+
 struct token {
     unint type;
     unint level;
@@ -34,6 +36,7 @@ struct token {
 
     const char* line_start;
     struct token* next;
+    struct MacroTrace* macro_trace;
 };
 
 struct tok_state {
