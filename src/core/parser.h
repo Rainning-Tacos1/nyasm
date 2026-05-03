@@ -10,6 +10,12 @@ struct Ast_node;
 struct Variable;
 struct Macro;
 
+struct MacroCallArgs {
+    struct token* head;
+    struct token* tail;
+    struct MacroCallArgs* next;
+};
+
 struct MacroTrace {
     struct Macro* macro;
     unint lineno;

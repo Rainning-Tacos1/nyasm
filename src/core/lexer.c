@@ -699,7 +699,7 @@ nbool get_indentation(struct tok_state* tok, unint* blankline) {
             if (altcol != tok->altindstack[tok->indent]) DO_FAIL(_Tokenizer_indenterror(tok));
         }
     }
-    ++tok->col_offset; // It has to be here, and I dont know why
+    if (tok->pendin != 0) ++tok->col_offset; // It has to be here, and I dont know why
     return (tok->uc.err == UNICODE_OK) ? SUCCESS : FAIL;
 }
 
