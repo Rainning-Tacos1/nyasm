@@ -235,6 +235,16 @@ struct token* _parse_macro_call_arg_until_comma_or_macro_call_end(struct Parser*
     }
 }
 
+unint _compare_identifiers(int32_t* cps1, unint len1, int32_t* cps2, unint len2) {
+    if(len1 != len2) return FAIL;
+
+    unint i;
+    for(i = 0; i < len1; ++i) if(cps1[i] != cps2[i]) break;
+        
+    // Full match
+    if(i == len1) return SUCCESS;
+}
+
 unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct token** start, struct token** end, struct MacroTrace* mt) {
 
     if(p->is_inside_macro_decl || _token->type != NAME || is_at_identifier(_token, NULL) == SUCCESS || is_macro_declared(p, _token->cps, _token->len) == FAIL) {
@@ -265,8 +275,11 @@ unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct to
         return FAIL;
     }
 
+    // Call args
+
     struct MacroCallArgs* call_args_head = NULL;
     struct MacroCallArgs* call_args_tail = NULL;
+    unint given_call_args = 0;
 
     while(true) {
         // peek for call arguments
@@ -292,6 +305,8 @@ unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct to
                 memory_error(p, "no available memory for macro call argument structure"); 
                 return FAIL;
             }
+            
+            ++given_call_args;
 
             // Fill
             call_arg->head = arg_start;
@@ -311,7 +326,6 @@ unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct to
         break;
     }
 
-    // Check for the right args
     if(call_args_head == NULL) DBG(1, "MACRO CALLED WITH NO ARGS\n");
     else {
         DBG(1, "MACRO CALLED WITH ARGS: [\n");
@@ -330,6 +344,119 @@ unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct to
         }
         DBG(1, "]\n");
     }
+
+    // Macro declaration args
+    unint is_variadic = 0;
+    unint left_args_count = 0;
+    unint right_args_count = 0;
+
+    for (struct MacroArg* m_arg = macro->args; m_arg; m_arg = m_arg->next) {
+        if(m_arg->is_variadic) {
+            if (is_variadic) {
+                (void)0; // ERROR: multiple variadic arguments
+            }
+            is_variadic = 1;
+            continue;
+        }
+
+        if (!is_variadic) ++left_args_count;
+        else ++right_args_count;
+    }
+
+    unint min_args_count = left_args_count + right_args_count;
+
+    DBG(1, "Left: %d | VArgs: %d | Right: %d\n", left_args_count, is_variadic, right_args_count);
+
+    // Call argument count check
+
+    if (given_call_args < min_args_count) {
+        // Too little args
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "missing arguments for macro call\n");
+        return FAIL;
+    }
+    else if(!is_variadic && given_call_args > min_args_count) {
+        // Too many
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "too many arguments for macro call\n");
+        return FAIL;
+    } 
+
+    // Position call vargs
+
+    struct MacroCallArgs* call_varg_head = NULL;
+    struct MacroCallArgs* call_varg_tail = NULL;
+
+    if (call_args_head && is_variadic) {
+        struct MacroCallArgs* call_arg = call_args_head;
+        for (unint i = 0; i<left_args_count; ++i) call_arg = call_arg->next;
+
+        call_varg_head = call_arg;
+
+        unint varg_count = given_call_args - left_args_count - right_args_count;
+
+        if (varg_count == 0) {
+            call_varg_head = NULL;
+            call_varg_tail = NULL;
+        } else {
+            for (unint i = 1; i<varg_count; ++i) call_arg = call_arg->next;
+            call_varg_tail = call_arg;
+        }
+    }
+
+    if(call_args_head == NULL) DBG(1, "[MACRO CALL] MACRO CALLED WITH NO ARGS\n");
+    else {
+        struct MacroCallArgs* call_arg = call_args_head;
+        DBG(1, "Left call args: [\n");
+        for(unint i=0; i<left_args_count; ++i) {
+            DBG(1, "  ");
+            if(call_arg->head == NULL && (call_arg->head == call_arg->tail)) DBG(1, "[NO TOKENS]");
+            else {
+                struct token* __token = call_arg->head;
+                while(true) {
+                    DBG(1, "[%s] ", _Parser_TokenNames[__token->type]);
+                    if(__token == call_arg->tail) break;
+                    __token = __token->next;
+                }
+            }
+            DBG(1, "\n");
+            call_arg = call_arg->next;
+        }
+        DBG(1, "], Vargs call args: [\n");
+        call_arg = call_varg_head;
+        while (call_arg){
+            DBG(1, "  ");
+            if(call_arg->head == NULL && (call_arg->head == call_arg->tail)) DBG(1, "[NO TOKENS]");
+            else {
+                struct token* __token = call_arg->head;
+                while(true) {
+                    DBG(1, "[%s] ", _Parser_TokenNames[__token->type]);
+                    if(__token == call_arg->tail) break;
+                    __token = __token->next;
+                }
+            }
+            DBG(1, "\n");
+            if (call_arg == call_varg_tail) break;
+            call_arg = call_arg->next;
+        }
+        DBG(1, "], Right call args: [\n");
+        call_arg = call_varg_tail->next;
+        for(unint i=0; i<right_args_count; ++i) {
+            DBG(1, "  ");
+            if(call_arg->head == NULL && (call_arg->head == call_arg->tail)) DBG(1, "[NO TOKENS]");
+            else {
+                struct token* __token = call_arg->head;
+                while(true) {
+                    DBG(1, "[%s] ", _Parser_TokenNames[__token->type]);
+                    if(__token == call_arg->tail) break;
+                    __token = __token->next;
+                }
+            }
+            DBG(1, "\n");
+            call_arg = call_arg->next;
+        }
+        DBG(1, "]\n");
+    }
+
+    // Macro
 
     if(macro->tok_len == 0) {
         *end = *start = NULL;
@@ -362,6 +489,61 @@ unint _do_real_macro_expansion(struct Parser* p, struct token* _token, struct to
         if(_start == NULL) continue; // Blank expansion
 
         DBG(DO_MACRO_EXPANSION_DBG, "_start->type = %s | _end->type = %s\n", _Parser_TokenNames[_start->type], _Parser_TokenNames[_end->type]);
+
+        // Replace macro argument names for their call argument
+        if(_start == _end) {
+            
+            unint arg_index = 0;
+            
+            struct token* t = _start;
+            struct MacroArg* decl_arg = macro->args;
+            for (unint i=0; i<macro->arg_len; ++i, decl_arg = decl_arg->next, ++arg_index) {
+
+                if (_compare_identifiers(
+                        t->cps, t->len,
+                        decl_arg->arg_name.cps, decl_arg->arg_name.len) == SUCCESS)
+                {
+                    struct MacroCallArgs* match_head = NULL;
+                    struct MacroCallArgs* match_tail = NULL;
+
+                    if (decl_arg->is_variadic) {
+                        match_head = call_varg_head;
+                        match_tail = call_varg_tail;
+                    } else {
+                        struct MacroCallArgs* ca = call_args_head;
+
+                        if (!is_variadic || arg_index < left_args_count) {
+                            for (unint j = 0; j < arg_index; ++j) ca = ca->next;
+                        } else {
+                            unint right_index = arg_index - left_args_count;
+                            unint target_index = given_call_args - right_args_count + right_index;
+
+                            for (unint j = 0; j < target_index; ++j) ca = ca->next;
+                        }
+
+                        match_head = ca;
+                        match_tail = ca;
+                    }
+
+                    DBG(1, "[REPLACING]: ");
+                    struct MacroCallArgs* _ca = match_head;
+                    while (_ca){
+                        if(_ca->head == NULL && (_ca->head == _ca->tail)) DBG(1, "[NO TOKENS] ");
+                        else {
+                            struct token* __token = _ca->head;
+                            while(true) {
+                                DBG(1, "[%s] ", _Parser_TokenNames[__token->type]);
+                                if(__token == _ca->tail) break;
+                                __token = __token->next;
+                            }
+                        }
+                        if (_ca == match_tail) break;
+                        _ca = _ca->next;
+                    }
+                    DBG(1, "\n");
+                }
+            }
+        }
 
         // Link
         if(tail != NULL) tail->next = _start;

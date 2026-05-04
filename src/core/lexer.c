@@ -559,8 +559,6 @@ void next_cp(struct tok_state* tok) {
         return;
     }
 
-    ++tok->col_offset;
-
     // Unfortunatelly do whole line verification for badly encoded characters
     
     // Add !tok->implicit_newline to stop it from doing a check on just the EOF after the implicit newline
@@ -620,6 +618,8 @@ void next_cp(struct tok_state* tok) {
         ADVANCE_LINENO();
 
     }
+
+    ++tok->col_offset;
 
     READ_CP(uc); // It is safe to not check for errors
     DBG(DO_LEXER_CHAR_DBG, "next_cp read: '%s', (U+%04X)\n", CP_TO_ENCODING(*cp), *cp);
@@ -699,7 +699,6 @@ nbool get_indentation(struct tok_state* tok, unint* blankline) {
             if (altcol != tok->altindstack[tok->indent]) DO_FAIL(_Tokenizer_indenterror(tok));
         }
     }
-    if (tok->pendin != 0) ++tok->col_offset; // It has to be here, and I dont know why
     return (tok->uc.err == UNICODE_OK) ? SUCCESS : FAIL;
 }
 
