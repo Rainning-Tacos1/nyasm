@@ -43,9 +43,9 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 
 ### Compile flags
 
-target_compile_options(nyasm PRIVATE -Wall)
-target_compile_options(core PRIVATE -Wall)
-target_compile_options(impl PRIVATE -Wall)
+target_compile_options(nyasm PRIVATE -g -Wall)
+target_compile_options(core PRIVATE  -g -Wall)
+target_compile_options(impl PRIVATE  -g -Wall)
 
 if(ARCH STREQUAL "32")
     message(STATUS "Building ${PROJECT_NAME} for 32-bit")

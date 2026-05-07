@@ -460,12 +460,9 @@ unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type,
     token->type = type;
 
     token->level = tok->level;
-    if (ISSTRINGLIT(type)) {
-        token->lineno = tok->first_lineno;
-    }
-    else {
-        token->lineno = tok->lineno;
-    }
+
+    token->lineno = tok->lineno;
+    
     token->end_lineno = tok->lineno;
     token->col_offset = token->end_col_offset = -1;
     token->start = start;
