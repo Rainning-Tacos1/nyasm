@@ -78,7 +78,7 @@ struct Macro {
     struct AstIdentifier name;
     struct MacroArg* args;
     struct MacroArg* args_tail;
-    unint arg_len; // May be used for later
+    unint arg_len;
 
     struct token* tokens;
     unint tok_len;

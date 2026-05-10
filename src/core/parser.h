@@ -13,6 +13,7 @@ struct Macro;
 struct MacroCallArgs {
     struct token* head;
     struct token* tail;
+    struct token* terminator;
     struct MacroCallArgs* next;
 };
 
