@@ -20,6 +20,7 @@
 #define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
 #define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
 #define ASSERT_IDENTIFIER ((int32_t[]){'a', 's', 's', 'e', 'r', 't', -1})
+#define WARN_IDENTIFIER ((int32_t[]){'w', 'a', 'r', 'n', -1})
 
 extern const char * const _Parser_TokenNames[];
 
@@ -1881,6 +1882,38 @@ void* _run_parser(struct Parser* p) {
                 return NULL;
             }
         }
+        else if(is_at_identifier(_token, WARN_IDENTIFIER) == SUCCESS) {
+            struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
+            if(expr == NULL) {
+                DBG(1, "Error building expression\n");
+                return NULL;
+            }
+
+            DBG(1, "#################################\n");
+            dbg_ast(expr);
+
+            DBG(1, "#################################\n");
+
+            struct Value warn;
+            if(_eval_expr(p, expr, &warn) == FAIL) {
+                DBG(1, "Error building expression\n");
+                return NULL;
+            }
+
+            if(warn.type != VALUE_STR) {
+                _error_from_token(p, _token, ERROR_TYPE_TYPE, "invalid type for warning");
+                return NULL;
+            }
+
+            
+            LOG("  File: \"%s\", line %d\n    @", p->tok->source, _token->lineno);
+            int32_t* warn_ident = WARN_IDENTIFIER;
+            for(unint i=0; warn_ident[i] != -1; ++i) LOG_CP(warn_ident[i]);
+            LOG(" \"");
+            for(unint i=0; i<warn.val.string.len; ++i) LOG_CP(warn.val.string.str[i]);
+            LOG("\"\n");
+        }
+        
         else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
         else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
         else if (is_at_identifier(_token, EXTERN_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXTER\n");
