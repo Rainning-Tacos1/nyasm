@@ -19,6 +19,7 @@
 #define INCLUDE_IDENTIFIER ((int32_t[]){'i', 'n', 'c', 'l', 'u', 'd', 'e', -1})
 #define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
 #define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
+#define ASSERT_IDENTIFIER ((int32_t[]){'a', 's', 's', 'e', 'r', 't', -1})
 
 extern const char * const _Parser_TokenNames[];
 
@@ -1855,6 +1856,30 @@ void* _run_parser(struct Parser* p) {
             DBG(1, "-----------------------------------------------------------------\n");
             print_macro(macro);
             DBG(1, "-----------------------------------------------------------------\n");
+        }
+        else if(is_at_identifier(_token, ASSERT_IDENTIFIER) == SUCCESS) {
+            struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
+            if(expr == NULL) {
+                DBG(1, "Error building expression\n");
+                return NULL;
+            }
+
+            DBG(1, "#################################\n");
+            dbg_ast(expr);
+
+            DBG(1, "#################################\n");
+
+            struct Value assert;
+            if(_eval_expr(p, expr, &assert) == FAIL) {
+                DBG(1, "Error building expression\n");
+                return NULL;
+            }
+
+            if(!bool_eval(&assert)) {
+                _token->col_offset = _token->end_col_offset = -1; // Dont print cursor
+                _error_from_token(p, _token, ERROR_TYPE_ASSERT, "Assertion of expression failed");
+                return NULL;
+            }
         }
         else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
         else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
