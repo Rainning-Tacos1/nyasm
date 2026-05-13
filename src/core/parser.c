@@ -21,6 +21,7 @@
 #define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
 #define ASSERT_IDENTIFIER ((int32_t[]){'a', 's', 's', 'e', 'r', 't', -1})
 #define WARN_IDENTIFIER ((int32_t[]){'w', 'a', 'r', 'n', -1})
+#define ERROR_IDENTIFIER ((int32_t[]){'e', 'r', 'r', 'o', 'r', -1})
 
 extern const char * const _Parser_TokenNames[];
 
@@ -148,6 +149,27 @@ void _error_from_token(struct Parser* p, struct token* _token, const char *stype
     const char* line_start = p->tok->line_start;
     p->tok->line_start = _token->line_start;
     _syntaxerror_range_with_type(p->tok, stype, format, _token->lineno, _token->end_lineno, _token->col_offset+1, _token->end_col_offset+1, va);
+    p->tok->line_start = line_start;
+
+    va_end(va);
+}
+
+void _error_line_with_cursor(struct Parser* p, struct token* _token, nint col_offset, nint end_col_offset, const char *stype, const char *format, ...) {
+    va_list va;
+    va_start(va, format);
+
+    struct MacroTrace* mt = _token->macro_trace;
+    
+    if(mt) {
+        LOG("Traceback:\n");
+        unint n = macro_trace_len(mt);
+        _print_macro_trace_select(mt, 0, n);
+        LOG("\n");
+    }
+
+    const char* line_start = p->tok->line_start;
+    p->tok->line_start = _token->line_start;
+    _syntaxerror_range_with_type(p->tok, stype, format, _token->lineno, _token->end_lineno, col_offset+1, end_col_offset+1, va);
     p->tok->line_start = line_start;
 
     va_end(va);
@@ -1859,6 +1881,11 @@ void* _run_parser(struct Parser* p) {
             DBG(1, "-----------------------------------------------------------------\n");
         }
         else if(is_at_identifier(_token, ASSERT_IDENTIFIER) == SUCCESS) {
+            _reset_peek(p);           
+            struct token* _s = _peek_token(p);
+            if(_s == NULL) return NULL;
+
+            // Expr
             struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
             if(expr == NULL) {
                 DBG(1, "Error building expression\n");
@@ -1876,13 +1903,34 @@ void* _run_parser(struct Parser* p) {
                 return NULL;
             }
 
+            // New line
+            _reset_peek(p);
+            struct token* _e = _peek_token(p);
+            if(_e == NULL) return NULL;
+
             if(!bool_eval(&assert)) {
-                _token->col_offset = _token->end_col_offset = -1; // Dont print cursor
-                _error_from_token(p, _token, ERROR_TYPE_ASSERT, "Assertion of expression failed");
+                // Get the cursor start from the first token that shares the end_lineno
+                nint col_offset = -1;
+                struct token* _c = _s;
+                while(true) {
+                    if(_c->lineno == _e->lineno) {
+                        col_offset = _c->col_offset;
+                        break;
+                    } 
+                    if(_c == _e) break;
+                    _c = _c->next;
+                }
+
+                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_ASSERT, "assertion of expression failed");
                 return NULL;
             }
         }
         else if(is_at_identifier(_token, WARN_IDENTIFIER) == SUCCESS) {
+            _reset_peek(p);           
+            struct token* _s = _peek_token(p);
+            if(_s == NULL) return NULL;
+
+            // Expr
             struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
             if(expr == NULL) {
                 DBG(1, "Error building expression\n");
@@ -1891,7 +1939,6 @@ void* _run_parser(struct Parser* p) {
 
             DBG(1, "#################################\n");
             dbg_ast(expr);
-
             DBG(1, "#################################\n");
 
             struct Value warn;
@@ -1900,12 +1947,28 @@ void* _run_parser(struct Parser* p) {
                 return NULL;
             }
 
+            // New line
+            _reset_peek(p);
+            struct token* _e = _peek_token(p);
+            if(_e == NULL) return NULL;
+
             if(warn.type != VALUE_STR) {
-                _error_from_token(p, _token, ERROR_TYPE_TYPE, "invalid type for warning");
+                // Get the cursor start from the first token that shares the end_lineno
+                nint col_offset = -1;
+                struct token* _c = _s;
+                while(true) {
+                    if(_c->lineno == _e->lineno) {
+                        col_offset = _c->col_offset;
+                        break;
+                    } 
+                    if(_c == _e) break;
+                    _c = _c->next;
+                }
+
+                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for warning");
                 return NULL;
             }
 
-            
             LOG("  File: \"%s\", line %d\n    @", p->tok->source, _token->lineno);
             int32_t* warn_ident = WARN_IDENTIFIER;
             for(unint i=0; warn_ident[i] != -1; ++i) LOG_CP(warn_ident[i]);
@@ -1913,7 +1976,58 @@ void* _run_parser(struct Parser* p) {
             for(unint i=0; i<warn.val.string.len; ++i) LOG_CP(warn.val.string.str[i]);
             LOG("\"\n");
         }
-        
+        else if(is_at_identifier(_token, ERROR_IDENTIFIER) == SUCCESS) {
+            _reset_peek(p);           
+            struct token* _s = _peek_token(p);
+            if(_s == NULL) return NULL;
+
+            // Expr
+            struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
+            if(expr == NULL) {
+                DBG(1, "Error building expression\n");
+                return NULL;
+            }
+
+            DBG(1, "#################################\n");
+            dbg_ast(expr);
+            DBG(1, "#################################\n");
+
+            struct Value error;
+            if(_eval_expr(p, expr, &error) == FAIL) {
+                DBG(1, "Error building expression\n");
+                return NULL;
+            }
+
+            // New line
+            _reset_peek(p);
+            struct token* _e = _peek_token(p);
+            if(_e == NULL) return NULL;
+
+            if(error.type != VALUE_STR) {
+                // Get the cursor start from the first token that shares the end_lineno
+                nint col_offset = -1;
+                struct token* _c = _s;
+                while(true) {
+                    if(_c->lineno == _e->lineno) {
+                        col_offset = _c->col_offset;
+                        break;
+                    } 
+                    if(_c == _e) break;
+                    _c = _c->next;
+                }
+
+                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for error");
+                return NULL;
+            }
+
+            LOG("  File: \"%s\", line %d\n    @", p->tok->source, _token->lineno);
+            int32_t* error_ident = ERROR_IDENTIFIER;
+            for(unint i=0; error_ident[i] != -1; ++i) LOG_CP(error_ident[i]);
+            LOG(" \"");
+            for(unint i=0; i<error.val.string.len; ++i) LOG_CP(error.val.string.str[i]);
+            LOG("\"\n");
+            return NULL;
+        }        
         else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
         else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN INCLUDE\n");
         else if (is_at_identifier(_token, EXTERN_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXTER\n");
