@@ -19,13 +19,13 @@ struct MacroCallArgs {
 
 struct MacroTrace {
     struct Macro* macro;
+    const char* file;
     unint lineno;
     struct MacroTrace* parent;
 };
 
 struct Parser {
     struct tok_state* tok;
-    struct token* tokens; // Linked list
 
     struct token* head;
     struct token* last_token;
@@ -40,7 +40,6 @@ struct Parser {
     struct Macro* macros;
     struct Macro* macros_tail;
     unint is_inside_macro_decl;
-    unint expanded_macro_is_blank;
 
     unint macro_expansion_count;
 };

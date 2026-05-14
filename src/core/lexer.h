@@ -37,6 +37,7 @@ struct token {
     const char* line_start;
     struct token* next;
     struct MacroTrace* macro_trace;
+    const char* file;
 };
 
 struct tok_state {

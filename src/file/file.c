@@ -1,3 +1,6 @@
+#include <sys/stat.h>
+#include <errno.h>
+
 // Public API
 #include "api/debug.h"
 #include "api/memory.h"
@@ -6,6 +9,22 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+// Errno to message
+const char* stat_error_message(nint errnum) {
+    switch (errnum) {
+        case ENOENT:    return "File does not exist";
+        case EACCES:    return "Permission denied";
+        case ENOTDIR:   return "A component of the path is not a directory";
+        case ELOOP:     return "Too many symbolic links";
+        case ENAMETOOLONG: return "File path is too long";
+        case EFAULT:    return "Bad address";
+        case EMFILE:    return "Too many files open in the process";
+        case ENFILE:    return "Too many files open in the system";
+        case EOVERFLOW: return "Value too large for defined data type";
+        default:        return "An unknown error occurred";
+    }
+}
 
 char* load_file(char* path, unint* _size) {
     FILE* fp = fopen(path, "rb");

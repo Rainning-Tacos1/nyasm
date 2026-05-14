@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <sys/stat.h>
-#include <errno.h>
 
 #include "types.h"
 #include "asm_lang.h"
@@ -35,22 +33,6 @@ static const char *const usages[] = {
     "nyasm [options]",
     NULL,
 };
-
-// Errno to message
-const char* stat_error_message(nint errnum) {
-    switch (errnum) {
-        case ENOENT:    return "File does not exist";
-        case EACCES:    return "Permission denied";
-        case ENOTDIR:   return "A component of the path is not a directory";
-        case ELOOP:     return "Too many symbolic links";
-        case ENAMETOOLONG: return "File path is too long";
-        case EFAULT:    return "Bad address";
-        case EMFILE:    return "Too many files open in the process";
-        case ENFILE:    return "Too many files open in the system";
-        case EOVERFLOW: return "Value too large for defined data type";
-        default:        return "An unknown error occurred";
-    }
-}
 
 int main(int argc, const char** argv) {
     // Argument variables
@@ -133,13 +115,13 @@ int main(int argc, const char** argv) {
      // File checks //
     /////////////////
 
-    struct stat sinput, soutput;
+    _stat sinput, soutput;
 
-    if(stat(input, &sinput) != 0) FATAL("Could not open input file: [errno %"_N"] %s\n", (nint)errno, stat_error_message(errno));
-    if(!S_ISREG(sinput.st_mode)) FATAL("Input is not a file\n");
+    if(STAT(input, &sinput) != 0) FATAL("Could not open input file: [errno %"_N"] %s\n", (nint)errno, STAT_ERR_MSG(errno));
+    if(!__S_ISREG(sinput.st_mode)) FATAL("Input is not a file\n");
 
-    if(stat(output, &soutput) != 0) FATAL("Could not open output file: [errno %"_N"] %s\n", (nint)errno, stat_error_message(errno));
-    if(!S_ISREG(soutput.st_mode)) FATAL("Output is not a file\n");
+    if(STAT(output, &soutput) != 0) FATAL("Could not open output file: [errno %"_N"] %s\n", (nint)errno, STAT_ERR_MSG(errno));
+    if(!__S_ISREG(soutput.st_mode)) FATAL("Output is not a file\n");
 
     if((sinput.st_dev == soutput.st_dev) && (sinput.st_ino == soutput.st_ino)) 
         FATAL("The input and output paths point to the same file\n");

@@ -46,6 +46,7 @@
 #define CP_WIDTH(cp) codepoint_width(cp)
 #define CP_TO_ENCODING(cp) codepoint_to_encoding(cp)
 #define WRITE_IMPLICIT_NL(buf) write_implicit_newline(buf)
+#define CP_TO_ENCODING_BUF_GET_LEN(cp, buf) codepoint_to_encoding_buf_get_len(cp, buf)
 #define CP_TO_ENCODING_BUF(cp, buf) codepoint_to_encoding_buf(cp, buf)
 #define NORMALIZE_CP(buf, len) normalize_codepoints(buf, len)
 

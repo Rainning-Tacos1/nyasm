@@ -64,6 +64,8 @@ unint unicode_cat(int32_t cp);
 
 unint codepoint_width(int32_t cp);
 
+unint codepoint_to_encoding_buf_get_len(int32_t cp, unsigned char* buf);
+
 unsigned char* codepoint_to_encoding(int32_t cp);
 
 unint write_implicit_newline(char* buf);
