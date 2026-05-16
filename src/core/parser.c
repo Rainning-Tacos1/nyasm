@@ -143,7 +143,6 @@ void _print_macro_trace_back(struct MacroTrace* mt) {
     if(mt) {
         LOG("Traceback:\n");
         unint n = macro_trace_len(mt);
-        DBG(1, "Len: %d\n", n);
         _print_macro_trace_select(mt, 0, n);
         LOG("\n");
     }
@@ -289,7 +288,7 @@ struct token* _parse_macro_call_arg_until_comma_or_macro_call_end(struct Parser*
 // s == NULL && e == NULL: empty expansion (re == end token of macro call)
 // s != NULL && e != NULL && s != re: macro expansion (re == end token of macro call)
 // ... : never
-unint _read(struct Parser* p, struct token** start,  struct token** end, struct token** re, struct MacroTrace* mt) {
+unint _read(struct Parser* p, struct token** start,  struct token** end, struct token** re) {
     struct token* _token = _advance(p, re);
     if(_token == NULL) return FAIL;
 
@@ -493,17 +492,17 @@ unint _read(struct Parser* p, struct token** start,  struct token** end, struct 
         return SUCCESS;
     }
 
-    struct MacroTrace* macro_trace = (struct MacroTrace*)MEM_ALLOC(sizeof(struct MacroTrace), "macro trace");
-    if(macro_trace == NULL) {
+    struct MacroTrace* mt = (struct MacroTrace*)MEM_ALLOC(sizeof(struct MacroTrace), "macro trace");
+    if(mt == NULL) {
         *end = *start = NULL;
         memory_error(p, "no available memory for macro trace structure"); 
         return FAIL;
     }
     
-    macro_trace->parent = (mt == NULL) ? NULL : mt;
-    macro_trace->macro = macro;
-    macro_trace->file = _token->file;
-    macro_trace->lineno = _token->lineno;
+    mt->parent = NULL;
+    mt->macro = macro;
+    mt->file = _token->file;
+    mt->lineno = _token->lineno;
 
     unint extra_macro_arg_tokens = 0;
     unint args_in_macro_body = 0;
@@ -593,10 +592,10 @@ unint _read(struct Parser* p, struct token** start,  struct token** end, struct 
     mtoken = macro->tokens;
     for(unint i=0; i<total_macro_tokens-1; ++i) {
         mcopy[i].next = &mcopy[i+1];
-        mcopy[i].macro_trace = macro_trace;
+        mcopy[i].macro_trace = mt;
     }
     mcopy[total_macro_tokens-1].next = NULL;
-    mcopy[total_macro_tokens-1].macro_trace = macro_trace;
+    mcopy[total_macro_tokens-1].macro_trace = mt;
 
     // Copy
     struct token* cursor = mcopy;
@@ -703,19 +702,19 @@ unint _fill_and_expand_macros(struct Parser* p) {
 
     struct token** re = &p->tail;
     struct token* cursor;
+    // struct MacroTrace* mt = NULL;
     while(true) {
-        struct MacroTrace* mt = NULL;
-        if (*re) mt = (*re)->macro_trace;
         struct token *s, *e;
         struct token* rs = *re; // Replace start
 
-        if(_read(p, &s, &e, re, mt) == FAIL) return FAIL;
+        if(_read(p, &s, &e, re) == FAIL) return FAIL;
 
         // When its the 1st time reading tokens p->head will start at s
         if(p->head == NULL) p->head = s;
 
         // Macro expansion token
         if(s != NULL && e != NULL && s != *re) {
+            s->macro_trace->parent = rs->next->macro_trace;
 
             // We assume that rs != NULL bc the first token ever read cant be a macro
             rs->next = s;
@@ -725,6 +724,10 @@ unint _fill_and_expand_macros(struct Parser* p) {
 
             cursor = rs;
             re = &cursor;
+
+
+            DBG(DO_MACRO_END_MACRO_TOKEN_DBG, "[%p:%s:l%d:c%d] ADDED TO THE STACK\n", e, _Parser_TokenNames[e->type], e->lineno, e->col_offset);
+            p->macro_ends[p->macro_end_cursor++] = e;
 
             continue;
         }
@@ -742,8 +745,58 @@ unint _fill_and_expand_macros(struct Parser* p) {
             continue;
         }
 
+        else if(s != NULL && (s == e) && s == *re) {
+            // Macro ends dont end on new lines
+            if(s->type == NEWLINE) {
+                // We can safely access s->next because macros dont end on new lines
+                DBG(DO_MACRO_PENDING_DEDENTS_DBG, "s->next = %p | EMITING %d DEDENT TOKENS\n", s->next, p->pending_dedents);
+
+                if(p->pending_dedents > 0 ) {
+                    struct token* dedents = (struct token*)MEM_ALLOC(sizeof(struct token) * p->pending_dedents, "macro dedent tokens");
+                    for(unint i=0; i<(p->pending_dedents-1); ++i) {
+
+                        dedents[i] = *s; // Copy
+                        dedents[i].type = DEDENT;
+                        dedents[i].lineno += 1;     // Next line
+                        dedents[i].end_lineno += 1; // Next line
+                        dedents[i].col_offset = dedents[i].end_col_offset = -1;
+                        dedents[i].start = dedents[i].end = NULL;
+                        dedents[i].cps = NULL;
+                        dedents[i].len = 0;
+
+                        dedents[i].line_start = NULL;
+                        dedents[i].next = &dedents[i+1];
+                        dedents[i].macro_trace = s->macro_trace;
+                        dedents[i].file = s->file;
+
+                    }
+                    dedents[p->pending_dedents-1] = *s; // Copy
+                    dedents[p->pending_dedents-1].type = DEDENT;
+                    dedents[p->pending_dedents-1].lineno += 1;     // Next line
+                    dedents[p->pending_dedents-1].end_lineno += 1; // Next line
+                    dedents[p->pending_dedents-1].col_offset = dedents[p->pending_dedents-1].end_col_offset = -1;
+                    dedents[p->pending_dedents-1].start = dedents[p->pending_dedents-1].end = NULL;
+                    dedents[p->pending_dedents-1].cps = NULL;
+                    dedents[p->pending_dedents-1].len = 0;
+
+                    dedents[p->pending_dedents-1].line_start = NULL;
+                    dedents[p->pending_dedents-1].next = s->next;
+                    dedents[p->pending_dedents-1].macro_trace = s->macro_trace;
+                    dedents[p->pending_dedents-1].file = s->file;
+                    s->next = dedents;
+                }
+                
+                p->pending_dedents = 0;
+            }
+            else if(p->macro_end_cursor > 0 && s == p->macro_ends[p->macro_end_cursor-1]) {
+                p->macro_ends[p->macro_end_cursor--] = NULL;
+                DBG(DO_MACRO_MACRO_END_DBG, "[%p:%s:l%d:c%d]: ENDED MACRO\n", s, _Parser_TokenNames[s->type], s->lineno, s->col_offset);
+                p->pending_dedents += s->macro_trace->macro->dedents_needed;
+            }
+        }
+
         if(re != &p->tail && *re == p->tail) {
-            DBG(1, "Recovering tail\n");
+            DBG(DO_MACRO_RECOVER_TAIL_DBG, "Recovering tail\n");
             re = &p->tail;
         }
 
@@ -844,7 +897,9 @@ struct Parser* _Parser_New(struct tok_state* tok) {
     p->variables = p->variables_tail = NULL;
     p->head = p->last_token = p->peek = p->tail = NULL;
     p->macros = p->macros_tail = NULL;
-    p->macro_expansion_count = p->is_inside_macro_decl = 0;
+    p->pending_dedents = p->macro_end_cursor = p->macro_expansion_count = p->is_inside_macro_decl = 0;
+
+    for(unint i=0; i<MAX_MACRO_EXPANSION_LIMIT; ++i) p->macro_ends[i] = NULL;
 
     return p;
 }
@@ -1129,7 +1184,6 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types");
         return FAIL;
     }
-    DBG(1, "[TYPE_CHECK]: tcleft = %d | tcright = %d\n", tcleft, tcright);
     // Bitwise operators only on ints
     if((op == LEFTSHIFT || op == RIGHTSHIFT || op == AMPER || op == VBAR || op == CIRCUMFLEX || op == TILDE) && (
         (tcleft && vleft->type != VALUE_INT) ||
@@ -1628,6 +1682,7 @@ struct Macro* new_empty_macro(struct Parser *p, struct token* _token, int32_t *c
     macro->tokens = NULL;
     macro->arg_len = 0;
     macro->tok_len = 0;
+    macro->dedents_needed = 0;
 
     // First Macro
     if(p->macros == NULL) p->macros = macro;
@@ -1868,7 +1923,6 @@ void* _run_parser(struct Parser* p) {
 
             p->is_inside_macro_decl = 1;
 
-
             // peek the indentation token
             struct token* indentation = _peek_token(p);
             if(indentation == NULL) return NULL;
@@ -1880,16 +1934,24 @@ void* _run_parser(struct Parser* p) {
                 if(macro->tokens == NULL) return NULL;
 
                 unint level = 1;
+                unint last_dedents = 0;
                 // Read tokens until indentation is back to the start
                 while(level != 0) {
+                    DBG(1, "level = %d\n", level);
                     indentation = _read_token(p);
                     if(indentation == NULL) return NULL;
 
-                    if(indentation->type == INDENT) ++level;
-                    else if(indentation->type == DEDENT) --level;
+                    if(indentation->type == INDENT) { ++level; }
+                    if(indentation->type == DEDENT) {
+                        ++last_dedents;
+                        level--;
+                    } else last_dedents = 0;
                     ++macro->tok_len;
                 }
-                macro->tok_len -= 2; // Remove the dedent and the last newline
+                macro->tok_len -= (last_dedents + 1); // remove dedents & last newline
+                macro->dedents_needed = --last_dedents;
+
+                DBG(DO_MACRO_LAST_DEDENTS_DBG, "macro->tok_len = %d | last_dedents = %d\n", macro->tok_len, last_dedents);
 
             }
 

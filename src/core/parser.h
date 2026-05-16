@@ -42,6 +42,11 @@ struct Parser {
     unint is_inside_macro_decl;
 
     unint macro_expansion_count;
+
+    unint pending_dedents;
+
+    unint macro_end_cursor;
+    struct token* macro_ends[MAX_MACRO_EXPANSION_LIMIT];
 };
 
 struct Parser* _Parser_New(struct tok_state* tok);

@@ -82,6 +82,7 @@ struct Macro {
 
     struct token* tokens;
     unint tok_len;
+    unint dedents_needed;
     struct Macro* next;
 };
 
