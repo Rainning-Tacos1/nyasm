@@ -11,6 +11,8 @@
 #include "parser.h"
 #include "lexer.h"
 #include "token.h"
+#include "variables.h"
+#include "ast.h"
 #include "err.h"
 
 nbool assemble(char* path) {
@@ -46,7 +48,11 @@ nbool assemble(char* path) {
         return FAIL;
     }
     DBG(1, "Start!\n");
-    _run_parser(p);
+
+    struct Ast_node* ast = _run_parser(p);
+    DBG(1, "End!\n");
+    dbg_ast(ast);
+    DBG(1, "Done DBG!\n");
     
     return SUCCESS;
 }

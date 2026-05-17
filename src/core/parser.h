@@ -50,8 +50,9 @@ struct Parser {
 };
 
 struct Parser* _Parser_New(struct tok_state* tok);
-void* _run_parser(struct Parser* p);
+struct Ast_node* _run_parser(struct Parser* p);
 
 void _error_from_token(struct Parser* p, struct token* _token, const char *stype, const char *format, ...);
+void memory_error(struct Parser* p, const char* format, ...);
 
 #endif

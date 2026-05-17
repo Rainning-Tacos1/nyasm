@@ -1796,340 +1796,336 @@ char* cp_string_to_encoding(int32_t* cps, nint cp_len) {
     return result;
 }
 
-void* _run_parser(struct Parser* p) {
+#define FLAG_MACRO_DECL 0x1
+#define FLAG_INCLUDE    0x2
+#define FLAG_ASSERT     0x3
+#define FLAG_WARN       0x4
+#define FLAG_EOF        0x5
 
-    struct token* _token;
-    void* ast = NULL;
+unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags);
 
-    // Create the first AST node
-    if(new_ast(p) == FAIL) {
-        memory_error(p, "No available memory for AST's root node");
-        return NULL;
-    }
-
-    struct Variable* var = new_variable(p, (int32_t[]){'h','e','l','l','o','_','w','o','r','l','d'}, 11, &(struct Value){
-        .type = VALUE_INT,
-        .val.number = 0x10
-    });
-
-    if(var == NULL) {
-        DBG(1, "Error building variable\n");
-        return NULL;
-    }
+unint _parse_block(struct Parser* p, struct AstStatements* statements, unint* found_eof) {
+    if(expect_token(p, INDENT) == NULL) return FAIL;
 
     while(true) {
+        _reset_peek(p);
+        struct token* dedent = _peek_token(p);
+        if(dedent == NULL) return FAIL;
 
-        // Skip comments && new lines
-        struct token* last_token = NULL;
+        DBG(1, "BLOCK PEEKED: [%s:l%d:c%d]\n", _Parser_TokenNames[dedent->type], dedent->lineno, dedent->col_offset);
+        if(dedent->type == DEDENT) {
+            _read_token(p);
+            *found_eof = 0;
+            return SUCCESS;
+        }
+        
+        // Parse statements
+        struct Ast_node* stmt_ast = NULL;
+        unint _flags = 0;
+        if(_parse_statement(p, &stmt_ast, &_flags) == FAIL) return FAIL;
 
-        while ((_token = _read_token(p)) != NULL &&
-            (_token->type == COMMENT || _token->type == NEWLINE)) {
-            last_token = _token;
+        if(stmt_ast == NULL) {
+            if(_flags == FLAG_EOF) {
+                *found_eof = 1;
+                return SUCCESS;
+            } else continue; // Skip @warn, @assert, @include and @macro
         }
 
-        if (_token == NULL) return NULL;
+        if(insert_ast_statement(p, statements, stmt_ast) == NULL) return FAIL;
 
-        DBG(1, "DONE SKIPING (using last)\n");
+    }  
+}
 
-        // Macro declaration
-        if(is_at_identifier(_token, MACRO_IDENTIDIER) == SUCCESS) {
-            struct token* macro_name_token;
+unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags) {
+    struct token* _token;
+    // Skip comments && new lines
+    _reset_peek(p);
+    struct token* last_token = p->last_token;
 
-            // @macro
-            if((macro_name_token = expect_token(p, NAME)) == NULL) return NULL;
+    while ((_token = _read_token(p)) != NULL &&
+        (_token->type == COMMENT || _token->type == NEWLINE)) {
+        last_token = _token;
+    }
 
-            // '('
-            if(expect_token(p, LPAR) == NULL) return NULL;
+    if (_token == NULL) return FAIL;
 
-            // Already declared?
-            if(is_macro_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
-                _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro is already declared");
-                return NULL;
-            }
+    DBG(1, "DONE SKIPING (using last)\n");
 
-            // Variable has the same name?
-            if(is_variable_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
-                _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro name is already in use by a variable");
-                return NULL;
-            }
+    // Non AST stuff
+    if(is_at_identifier(_token, MACRO_IDENTIDIER) == SUCCESS) {
+        struct token* macro_name_token;
 
-            // [AST] Init, create macro structure
-            struct Ast_node* macro_ast = new_ast_macro_decl(p, macro_name_token, macro_name_token->cps, macro_name_token->len);
-            if(macro_ast == NULL) return NULL;
-            
-            // Insert the macro on the tree
+        // @macro
+        if((macro_name_token = expect_token(p, NAME)) == NULL) return FAIL;
 
-            // [PARSER] Init/Append macro
-            struct Macro* macro = new_empty_macro(p, macro_name_token, macro_name_token->cps, macro_name_token->len);
-            if(macro == NULL) return NULL;
+        // '('
+        if(expect_token(p, LPAR) == NULL) return FAIL;
 
-            // Fill with the arguments
-            struct token* arg_token;
-            unint has_variadic_arg = 0;
-            unint is_variadic_arg = 0;
-            unint read_macro_args = 1;
+        // Already declared?
+        if(is_macro_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
+            _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro is already declared");
+            return FAIL;
+        }
 
-            // Easy end?
+        // Variable has the same name?
+        if(is_variable_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
+            _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro name is already in use by a variable");
+            return FAIL;
+        }
+
+        // [PARSER] Init/Append macro
+        struct Macro* macro = new_empty_macro(p, macro_name_token, macro_name_token->cps, macro_name_token->len);
+        if(macro == NULL) return FAIL;
+
+        // Fill with the arguments
+        struct token* arg_token;
+        unint has_variadic_arg = 0;
+        unint is_variadic_arg = 0;
+        unint read_macro_args = 1;
+
+        // Easy end?
+        arg_token = _peek_token(p);
+        if(arg_token == NULL) return FAIL;
+
+        if(arg_token->type == RPAR) read_macro_args = 0;
+        else _reset_peek(p);
+
+        while(read_macro_args) {
+            is_variadic_arg = 0;
             arg_token = _peek_token(p);
-            if(arg_token == NULL) return NULL;
+            if(arg_token == NULL) return FAIL;
 
-            if(arg_token->type == RPAR) read_macro_args = 0;
-            else _reset_peek(p);
-
-            while(read_macro_args) {
-                DBG(1, "READING ARGS");
-                is_variadic_arg = 0;
-                arg_token = _peek_token(p);
-                if(arg_token == NULL) return NULL;
-
-                if(arg_token->type == STAR) {
-                    DBG(1, "READ THE STAR\n");
-                    _read_token(p); // Consume the star
-                    if(has_variadic_arg) {
-                        _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "macros can only have one variadic argument");
-                        return NULL;
-                    } else has_variadic_arg = 1;
-                    
-                    is_variadic_arg = 1;
-                    if((arg_token = expect_token(p, NAME)) == NULL) return NULL;
-                } else {
-                    if((arg_token = expect_token(p, NAME)) == NULL) return NULL;
-                }
-
-                // DO not allow repeated names
-                if(is_macro_arg(macro, arg_token->cps, arg_token->len) == SUCCESS) {
-                    _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "duplicate argument in macro declaration");
-                    return NULL;     
-                }
+            if(arg_token->type == STAR) {
+                _read_token(p); // Consume the star
+                if(has_variadic_arg) {
+                    _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "macros can only have one variadic argument");
+                    return FAIL;
+                } else has_variadic_arg = 1;
                 
-                // Store the arg name
-                if(append_macro_arg(p, arg_token, macro, arg_token->cps, arg_token->len, is_variadic_arg) == FAIL) return NULL;
-                
-                // Commas
-                struct token* comma_token = _peek_token(p);
-                if(comma_token == NULL) return NULL;
-                _reset_peek(p);
-                // If we are not ending the macro, expect a comma
-                if(comma_token->type == RPAR) break;
-
-                if(expect_token(p, COMMA) == NULL) return NULL;
+                is_variadic_arg = 1;
+                if((arg_token = expect_token(p, NAME)) == NULL) return FAIL;
+            } else {
+                if((arg_token = expect_token(p, NAME)) == NULL) return FAIL;
             }
 
-            if(expect_token(p, RPAR) == NULL) return NULL;
-
-            // Read the new line, or expect it?
-            if(expect_token(p, NEWLINE) == NULL) return NULL;
-            // if(_read_token(p) == NULL) return NULL;
-
-            p->is_inside_macro_decl = 1;
-
-            // peek the indentation token
-            struct token* indentation = _peek_token(p);
-            if(indentation == NULL) return NULL;
-
-            if(indentation->type == INDENT) {
-                _read_token(p); // Consume indentation
-                // Store the begining of the macro, skiping the first indent
-                macro->tokens = _peek_token(p);
-                if(macro->tokens == NULL) return NULL;
-
-                unint level = 1;
-                unint last_dedents = 0;
-                // Read tokens until indentation is back to the start
-                while(level != 0) {
-                    DBG(1, "level = %d\n", level);
-                    indentation = _read_token(p);
-                    if(indentation == NULL) return NULL;
-
-                    if(indentation->type == INDENT) { ++level; }
-                    if(indentation->type == DEDENT) {
-                        ++last_dedents;
-                        level--;
-                    } else last_dedents = 0;
-                    ++macro->tok_len;
-                }
-                macro->tok_len -= (last_dedents + 1); // remove dedents & last newline
-                macro->dedents_needed = --last_dedents;
-
-                DBG(DO_MACRO_LAST_DEDENTS_DBG, "macro->tok_len = %d | last_dedents = %d\n", macro->tok_len, last_dedents);
-
+            // DO not allow repeated names
+            if(is_macro_arg(macro, arg_token->cps, arg_token->len) == SUCCESS) {
+                _error_from_token(p, arg_token, ERROR_TYPE_MESSAGE, "duplicate argument in macro declaration");
+                return FAIL;     
             }
+            
+            // Store the arg name
+            if(append_macro_arg(p, arg_token, macro, arg_token->cps, arg_token->len, is_variadic_arg) == FAIL) return FAIL;
+            
+            // Commas
+            struct token* comma_token = _peek_token(p);
+            if(comma_token == NULL) return FAIL;
+            _reset_peek(p);
+            // If we are not ending the macro, expect a comma
+            if(comma_token->type == RPAR) break;
 
-            p->is_inside_macro_decl = 0;
-
-            DBG(1, "-----------------------------------------------------------------\n");
-            print_macro(macro);
-            DBG(1, "-----------------------------------------------------------------\n");
+            if(expect_token(p, COMMA) == NULL) return FAIL;
         }
-        else if(is_at_identifier(_token, ASSERT_IDENTIFIER) == SUCCESS) {
-            _reset_peek(p);           
-            struct token* _s = _peek_token(p);
-            if(_s == NULL) return NULL;
 
-            // Expr
-            struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
-            if(expr == NULL) {
-                DBG(1, "Error building expression\n");
-                return NULL;
+        if(expect_token(p, RPAR) == NULL) return FAIL;
+
+        // Read the new line, or expect it?
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+        // if(_read_token(p) == NULL) return FAIL;
+
+        p->is_inside_macro_decl = 1;
+
+        // peek the indentation token
+        struct token* indentation = _peek_token(p);
+        if(indentation == NULL) return FAIL;
+
+        if(indentation->type == INDENT) {
+            _read_token(p); // Consume indentation
+            // Store the begining of the macro, skiping the first indent
+            macro->tokens = _peek_token(p);
+            if(macro->tokens == NULL) return FAIL;
+
+            unint level = 1;
+            unint last_dedents = 0;
+            // Read tokens until indentation is back to the start
+            while(level != 0) {
+                indentation = _read_token(p);
+                if(indentation == NULL) return FAIL;
+
+                if(indentation->type == INDENT) { ++level; }
+                if(indentation->type == DEDENT) {
+                    ++last_dedents;
+                    level--;
+                } else last_dedents = 0;
+                ++macro->tok_len;
             }
+            macro->tok_len -= (last_dedents + 1); // remove dedents & last newline
+            macro->dedents_needed = --last_dedents;
 
-            DBG(1, "#################################\n");
-            dbg_ast(expr);
+            DBG(DO_MACRO_LAST_DEDENTS_DBG, "macro->tok_len = %d | last_dedents = %d\n", macro->tok_len, last_dedents);
 
-            DBG(1, "#################################\n");
-
-            struct Value assert;
-            if(_eval_expr(p, expr, &assert) == FAIL) {
-                DBG(1, "Error building expression\n");
-                return NULL;
-            }
-
-            // New line
-            _reset_peek(p);
-            struct token* _e = _peek_token(p);
-            if(_e == NULL) return NULL;
-
-            if(!bool_eval(&assert)) {
-                // Get the cursor start from the first token that shares the end_lineno
-                nint col_offset = -1;
-                struct token* _c = _s;
-                while(true) {
-                    if(_c->lineno == _e->lineno) {
-                        col_offset = _c->col_offset;
-                        break;
-                    } 
-                    if(_c == _e) break;
-                    _c = _c->next;
-                }
-
-                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_ASSERT, "assertion of expression failed");
-                return NULL;
-            }
         }
-        else if(is_at_identifier(_token, WARN_IDENTIFIER) == SUCCESS) {
-            _reset_peek(p);           
-            struct token* _s = _peek_token(p);
-            if(_s == NULL) return NULL;
 
-            // Expr
-            struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
-            if(expr == NULL) {
-                DBG(1, "Error building expression\n");
-                return NULL;
-            }
+        p->is_inside_macro_decl = 0;
 
-            DBG(1, "#################################\n");
-            dbg_ast(expr);
-            DBG(1, "#################################\n");
+        DBG(1, "-----------------------------------------------------------------\n");
+        print_macro(macro);
+        DBG(1, "-----------------------------------------------------------------\n");
 
-            struct Value warn;
-            if(_eval_expr(p, expr, &warn) == FAIL) {
-                DBG(1, "Error building expression\n");
-                return NULL;
-            }
+        *flags = FLAG_MACRO_DECL;
+        *stmt_ast = NULL;
+        return SUCCESS;
+    }
 
-            // New line
-            _reset_peek(p);
-            struct token* _e = _peek_token(p);
-            if(_e == NULL) return NULL;
+    else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) {
+        _reset_peek(p);           
+        struct token* _s = _peek_token(p);
+        if(_s == NULL) return FAIL;
 
-            if(warn.type != VALUE_STR) {
-                // Get the cursor start from the first token that shares the end_lineno
-                nint col_offset = -1;
-                struct token* _c = _s;
-                while(true) {
-                    if(_c->lineno == _e->lineno) {
-                        col_offset = _c->col_offset;
-                        break;
-                    } 
-                    if(_c == _e) break;
-                    _c = _c->next;
-                }
-
-                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for warning");
-                return NULL;
-            }
-
-            LOG("  File: \"%s\", line %d\n    @warn \"", p->tok->source, _token->lineno);
-            for(unint i=0; i<warn.val.string.len; ++i) LOG_CP(warn.val.string.str[i]);
-            LOG("\"\n");
+        // Expr
+        struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
+        if(expr == NULL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
         }
-        else if(is_at_identifier(_token, ERROR_IDENTIFIER) == SUCCESS) {
-            _reset_peek(p);           
-            struct token* _s = _peek_token(p);
-            if(_s == NULL) return NULL;
 
-            // Expr
-            struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
-            if(expr == NULL) {
-                DBG(1, "Error building expression\n");
-                return NULL;
-            }
+        DBG(1, "#################################\n");
+        dbg_ast(expr);
+        DBG(1, "#################################\n");
 
-            DBG(1, "#################################\n");
-            dbg_ast(expr);
-            DBG(1, "#################################\n");
+        struct Value val;
+        if(_eval_expr(p, expr, &val) == FAIL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
+        }
 
-            struct Value error;
-            if(_eval_expr(p, expr, &error) == FAIL) {
-                DBG(1, "Error building expression\n");
-                return NULL;
-            }
+        // New line
+        _reset_peek(p);
+        struct token* _e = _read_token(p);
+        if(_e == NULL) return FAIL;
 
-            // New line
-            _reset_peek(p);
-            struct token* _e = _peek_token(p);
-            if(_e == NULL) return NULL;
+        // Get the cursor start from the first token that shares the end_lineno
+        nint col_offset = -1;
+        struct token* _c = _s;
+        while(true) {
+            if(_c->lineno == _e->lineno) {
+                col_offset = _c->col_offset;
+                break;
+            } 
+            if(_c == _e) break;
+            _c = _c->next;
+        }
 
-            if(error.type != VALUE_STR) {
-                // Get the cursor start from the first token that shares the end_lineno
-                nint col_offset = -1;
-                struct token* _c = _s;
-                while(true) {
-                    if(_c->lineno == _e->lineno) {
-                        col_offset = _c->col_offset;
-                        break;
-                    } 
-                    if(_c == _e) break;
-                    _c = _c->next;
-                }
+        if(val.type != VALUE_STR) {
+            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for @include");
+            return FAIL;
+        }
 
-                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for @error");
-                return NULL;
-            }
+        // Check file
+        char* include_path = cp_string_to_encoding(val.val.string.str, val.val.string.len);
+        if(include_path == NULL) {
+            memory_error(p, "no available memory for @include string");
+            return FAIL;
+        }
 
-            LOG("  File: \"%s\", line %d\n    @error \"", p->tok->source, _token->lineno);
-            for(unint i=0; i<error.val.string.len; ++i) LOG_CP(error.val.string.str[i]);
-            LOG("\"\n");
-            return NULL;
-        }        
-        else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) {
-            _reset_peek(p);           
-            struct token* _s = _peek_token(p);
-            if(_s == NULL) return NULL;
+        _stat sfile;
+        if(stat(include_path, &sfile) != 0) {
+            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_PATH, "could not open file: \"%s\"", include_path);
+            return FAIL;
+        }
+        if(!__S_ISREG(sfile.st_mode)){
+            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_PATH, "path: \"%s\" is not a file", include_path);
+            return FAIL;
+        }
 
-            // Expr
-            struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
-            if(expr == NULL) {
-                DBG(1, "Error building expression\n");
-                return NULL;
-            }
+        // Include
+        unint size = 0;
+        char* file = LOAD_FILE(include_path, &size);
+        if(file == NULL) {
+            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_PATH, "error loading file: \"%s\" into memory", include_path);
+            return FAIL;
+        }
 
-            DBG(1, "#################################\n");
-            dbg_ast(expr);
-            DBG(1, "#################################\n");
+        // Make room for a potential implicit new line
+        if(file != NULL) file = MEM_RESIZE_LAST(size + SIZEOF_IMPLICIT_NEWLINE);
 
-            struct Value val;
-            if(_eval_expr(p, expr, &val) == FAIL) {
-                DBG(1, "Error building expression\n");
-                return NULL;
-            }
+        // new Tokenizer
+        struct tok_state* _tok = _Tokenizer_tok_new();
+        if(_tok == NULL) {
+            memory_error(p, "no available space for the tokenizer\n");            
+            return FAIL;
+        }
 
-            // New line
-            _reset_peek(p);
-            struct token* _e = _peek_token(p);
-            if(_e == NULL) return NULL;
+        _tok->uc.curr = _tok->uc.buf = file;
+        _tok->inp = _tok->uc.curr; // Trigger an underflow/verification
+        _tok->uc.end = file+size; // There is still space for an implicit newline
+        _tok->source = include_path;
 
+        // new Parser
+        struct Parser* _p = _Parser_New(_tok);
+        if(_p == NULL) {
+            memory_error(p, "no available space for the parser\n");
+            return FAIL;
+        }
+
+        _p->is_inside_macro_decl = 1; // Do not expand macros
+        _p->macro_expansion_count = p->macro_expansion_count;
+
+        struct token* prev = NULL;
+        while(true){
+            struct token* _token = _read_token(_p);
+
+            if(_token == NULL || _token->type == ERRORTOKEN) return FAIL;
+            if(_token->type == ENDMARKER) break;
+            prev = _token;
+        }
+
+        // Link
+        prev->next = NULL; // Unlink [ENDMARKER]
+        if(last_token == NULL) p->head = _p->head;
+        else {
+            last_token->next = _p->head;
+            DBG(1, "last_token: [%p:%s:l%d:c%d]\n", last_token, _Parser_TokenNames[last_token->type], last_token->lineno,last_token->col_offset);
+        }
+        prev->next = _e;
+        p->last_token = (p->peek = last_token);            
+        _p->is_inside_macro_decl = 0;
+
+        *flags = FLAG_INCLUDE;
+        *stmt_ast = NULL;
+        return SUCCESS;
+    }
+
+    if(is_at_identifier(_token, ASSERT_IDENTIFIER) == SUCCESS) {
+        _reset_peek(p); 
+        // Start          
+        struct token* _s = _peek_token(p);
+        if(_s == NULL) return FAIL;
+
+        // Expr
+        struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
+        if(expr == NULL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
+        }
+
+        DBG(1, "#################################\n");
+        dbg_ast(expr);
+
+        DBG(1, "#################################\n");
+
+        struct Value assert;
+        if(_eval_expr(p, expr, &assert) == FAIL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
+        }
+
+        // New line
+        _reset_peek(p);
+        struct token* _e = _read_token(p);
+        if(_e == NULL) return FAIL;
+
+        if(!bool_eval(&assert)) {
             // Get the cursor start from the first token that shares the end_lineno
             nint col_offset = -1;
             struct token* _c = _s;
@@ -2142,107 +2138,268 @@ void* _run_parser(struct Parser* p) {
                 _c = _c->next;
             }
 
-            if(val.type != VALUE_STR) {
-                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for @include");
-                return NULL;
-            }
-
-            // Check file
-            char* include_path = cp_string_to_encoding(val.val.string.str, val.val.string.len);
-            if(include_path == NULL) {
-                memory_error(p, "no available memory for @include string");
-                return NULL;
-            }
-
-            _stat sfile;
-            if(stat(include_path, &sfile) != 0) {
-                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_PATH, "could not open file: \"%s\"", include_path);
-                return NULL;
-            }
-            if(!__S_ISREG(sfile.st_mode)){
-                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_PATH, "path: \"%s\" is not a file", include_path);
-                return NULL;
-            }
-
-            // Include
-            unint size = 0;
-            char* file = LOAD_FILE(include_path, &size);
-            if(file == NULL) {
-                _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_PATH, "error loading file: \"%s\" into memory", include_path);
-                return NULL;
-            }
-
-            // Make room for a potential implicit new line
-            if(file != NULL) file = MEM_RESIZE_LAST(size + SIZEOF_IMPLICIT_NEWLINE);
-
-            // new Tokenizer
-            struct tok_state* _tok = _Tokenizer_tok_new();
-            if(_tok == NULL) {
-                LOG("Error allocating space for the tokenizer\n");
-                return NULL;
-            }
-
-            _tok->uc.curr = _tok->uc.buf = file;
-            _tok->inp = _tok->uc.curr; // Trigger an underflow/verification
-            _tok->uc.end = file+size; // There is still space for an implicit newline
-            _tok->source = include_path;
-
-            // new Parser
-            struct Parser* _p = _Parser_New(_tok);
-            if(_p == NULL) {
-                LOG("Error allocating space for the parser\n");
-                return NULL;
-            }
-
-            _p->is_inside_macro_decl = 1; // Do not expand macros
-            _p->macro_expansion_count = p->macro_expansion_count;
-
-            struct token* prev = NULL;
-            while(true){
-                struct token* _token = _read_token(_p);
-
-                if(_token == NULL || _token->type == ERRORTOKEN) return NULL;
-                if(_token->type == ENDMARKER) break;
-                prev = _token;
-            }
-
-            // Link
-            prev->next = NULL; // Unlink [ENDMARKER]
-            if(last_token == NULL) p->head = _p->head;
-            else {
-                last_token->next = _p->head;
-                DBG(1, "last_token: [%p:%s:l%d:c%d]\n", last_token, _Parser_TokenNames[last_token->type], last_token->lineno,last_token->col_offset);
-            }
-            prev->next = _e;
-            p->last_token = (p->peek = last_token);            
-            _p->is_inside_macro_decl = 0;
-        }
-        else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN IF\n");
-        else if (is_at_identifier(_token, EXTERN_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXTERN\n");
-        else if (is_at_identifier(_token, EXPORT_IDENTIFIER) == SUCCESS) DBG(1, "FOUND AN EXPORT\n");
-        // For now, later names can be instructions/labels
-        else if (_token->type == NAME && is_at_identifier(_token, NULL) == FAIL) {
-            if(expect_token(p, EQUAL) == NULL) return NULL;
+            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_ASSERT, "assertion of expression failed");
             
-            struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
-            if(expr == NULL) {
+            return FAIL;
+        }
+
+        *flags = FLAG_ASSERT;
+        *stmt_ast = NULL;
+        return SUCCESS;
+    }
+
+    else if(is_at_identifier(_token, WARN_IDENTIFIER) == SUCCESS) {
+        _reset_peek(p);           
+        struct token* _s = _peek_token(p);
+        if(_s == NULL) return FAIL;
+
+        // Expr
+        struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
+        if(expr == NULL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
+        }
+
+        DBG(1, "#################################\n");
+        dbg_ast(expr);
+        DBG(1, "#################################\n");
+
+        struct Value warn;
+        if(_eval_expr(p, expr, &warn) == FAIL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
+        }
+
+        // New line
+        _reset_peek(p);
+        struct token* _e = _read_token(p);
+        if(_e == NULL) return FAIL;
+
+        if(warn.type != VALUE_STR) {
+            // Get the cursor start from the first token that shares the end_lineno
+            nint col_offset = -1;
+            struct token* _c = _s;
+            while(true) {
+                if(_c->lineno == _e->lineno) {
+                    col_offset = _c->col_offset;
+                    break;
+                } 
+                if(_c == _e) break;
+                _c = _c->next;
+            }
+
+            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for warning");
+            return FAIL;
+        }
+
+        LOG("  File: \"%s\", line %d\n    @warn \"", p->tok->source, _token->lineno);
+        for(unint i=0; i<warn.val.string.len; ++i) LOG_CP(warn.val.string.str[i]);
+        LOG("\"\n");
+
+        *flags = FLAG_WARN;
+        *stmt_ast = NULL;
+        return SUCCESS;
+    }
+
+    else if(is_at_identifier(_token, ERROR_IDENTIFIER) == SUCCESS) {
+        _reset_peek(p);           
+        struct token* _s = _peek_token(p);
+        if(_s == NULL) return FAIL;
+
+        // Expr
+        struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
+        if(expr == NULL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
+        }
+
+        DBG(1, "#################################\n");
+        dbg_ast(expr);
+        DBG(1, "#################################\n");
+
+        struct Value error;
+        if(_eval_expr(p, expr, &error) == FAIL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
+        }
+
+        // New line
+        _reset_peek(p);
+        struct token* _e = _read_token(p);
+        if(_e == NULL) return FAIL;
+
+        if(error.type != VALUE_STR) {
+            // Get the cursor start from the first token that shares the end_lineno
+            nint col_offset = -1;
+            struct token* _c = _s;
+            while(true) {
+                if(_c->lineno == _e->lineno) {
+                    col_offset = _c->col_offset;
+                    break;
+                } 
+                if(_c == _e) break;
+                _c = _c->next;
+            }
+
+            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for @error");
+            return FAIL;
+        }
+
+        LOG("  File: \"%s\", line %d\n    @error \"", p->tok->source, _token->lineno);
+        for(unint i=0; i<error.val.string.len; ++i) LOG_CP(error.val.string.str[i]);
+        LOG("\"\n");
+
+        return FAIL;
+    }        
+
+    // Ast stuff
+    else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) {
+        _reset_peek(p);           
+        struct token* _s = _peek_token(p);
+        if(_s == NULL) return FAIL;
+
+        // Expr
+        struct Ast_node* cond = _parse_expr(p, (unint)(0), 0);
+        if(cond == NULL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
+        }
+
+        DBG(1, "#################################\n");
+        dbg_ast(cond);
+        DBG(1, "#################################\n");
+
+        // New line
+        _reset_peek(p);
+        struct token* _e = _read_token(p);
+        if(_e == NULL) return FAIL;
+
+        struct Ast_node* _if = new_ast_if(p, cond);
+        if(_if == NULL) return FAIL;
+
+        unint found_eof = 0;
+        // Parse the block
+        if(_parse_block(p, &_if->node._if.statements, &found_eof) == FAIL) return FAIL;
+        // if found eof, dont bother parsing the other blocks
+        // Parse elif
+        // Parse else
+        *stmt_ast = _if;
+    }
+    
+    // Variables
+    else if(_token->type == NAME && is_at_identifier(_token, NULL) == FAIL) {
+        DBG(1, "Tests\n");
+        struct token* lsqb = _peek_token(p);
+        if(lsqb == NULL) return FAIL;
+
+        // if ":" -> label
+
+        struct token* rsqb = _peek_token(p);
+        if(rsqb == NULL) return FAIL;
+
+        struct Ast_node* idx; // For Assignment with indexation
+
+        // Variable side
+        if(lsqb->type == LSQB && rsqb->type == RSQB) {
+            // Append to array
+            _read_token(p); // "["
+            _read_token(p); // "]"
+        }
+        else if(lsqb->type == LSQB) {
+            _read_token(p);
+
+            // Expr
+            idx = _parse_expr(p, (unint)(0), 0);
+            if(idx == NULL) {
                 DBG(1, "Error building expression\n");
-                return NULL;
+                return FAIL;
             }
+
+            DBG(1, "#################################\n");
+            dbg_ast(idx);
+            DBG(1, "#################################\n");
             
-            DBG(1, "#################################\n");
-            dbg_ast(expr);
-
-            DBG(1, "#################################\n");
-
+            // Closing RSQB
+            if(expect_token(p, RSQB) == NULL) return FAIL;
         }
-        else if (_token->type == ENDMARKER) {
-            DBG(1, "END OF PARSING\n");
-            break;
+
+        // Expect "="
+        if(expect_token(p, EQUAL) == NULL) return FAIL;
+
+        // Expression side
+        struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
+        if(expr == NULL) {
+            DBG(1, "Error building expression\n");
+            return FAIL;
+        }
+        
+        DBG(1, "#################################\n");
+        dbg_ast(expr);
+
+        DBG(1, "#################################\n");
+
+        // New line
+        if(_read_token(p) == NULL) return FAIL;
+
+        // AST
+        if(lsqb->type == LSQB && rsqb->type == RSQB) {
+            // Array append
+            struct AstIdentifier ident;
+            ident.cps = _token->cps;
+            ident.len = _token->len;
+
+            struct Ast_node* apa = new_ast_assign_append_array(p, &ident, expr);
+            if(apa == NULL) return FAIL;
+
+            *stmt_ast = apa;  
+        } else if(lsqb->type == LSQB) {
+            // Indexation + Assignment
+            struct AstIdentifier ident;
+            ident.cps = _token->cps;
+            ident.len = _token->len;
+
+            struct Ast_node* avi = new_ast_assign_variable_idx(p, &ident, idx, expr);
+            if(avi == NULL) return FAIL;
+
+            *stmt_ast = avi; 
         } else {
-            _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "invalid syntax");
-            return NULL;
+            // Normal assignement
+            struct AstIdentifier ident;
+            ident.cps = _token->cps;
+            ident.len = _token->len;
+
+            struct Ast_node* av = new_ast_assign_variable(p, &ident, expr);
+            if(av == NULL) return FAIL;
+
+            *stmt_ast = av;            
         }
     }
-    return NULL;
+
+    else if (_token->type == ENDMARKER) {
+        DBG(1, "END OF PARSING\n");
+        *stmt_ast = NULL;
+        *flags = FLAG_EOF;
+    } else {
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "invalid syntax");
+        return FAIL;
+    }
+    return SUCCESS;
+}
+
+
+struct Ast_node* _run_parser(struct Parser* p) {
+    struct Ast_node* ast = new_ast(p);
+    if(ast == NULL) return NULL;
+    
+    while(true) {
+        struct Ast_node* stmt_ast = NULL;
+        unint flags = 0;
+        if(_parse_statement(p, &stmt_ast, &flags) == FAIL) return NULL; // Something wrong that should not recover the AST
+        
+        if(stmt_ast == NULL) {
+            if(flags == FLAG_EOF) return ast;
+            else continue; // Skip @warn, @assert, @include and @macro
+        }
+        if(insert_ast_statement(p, &ast->node.statements, stmt_ast) == NULL) return NULL;
+    }
 }
