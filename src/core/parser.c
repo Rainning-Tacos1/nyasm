@@ -26,6 +26,7 @@
 #define ASSERT_IDENTIFIER ((int32_t[]){'a', 's', 's', 'e', 'r', 't', -1})
 #define WARN_IDENTIFIER ((int32_t[]){'w', 'a', 'r', 'n', -1})
 #define ERROR_IDENTIFIER ((int32_t[]){'e', 'r', 'r', 'o', 'r', -1})
+#define ELIF_IDENTIFIER ((int32_t[]){'e', 'l', 'i', 'f', -1})
 
 extern const char * const _Parser_TokenNames[];
 
@@ -1831,9 +1832,48 @@ unint _parse_block(struct Parser* p, struct AstStatements* statements, unint* fo
             } else continue; // Skip @warn, @assert, @include and @macro
         }
 
-        if(insert_ast_statement(p, statements, stmt_ast) == NULL) return FAIL;
+        if(insert_ast_statement_node(p, statements, stmt_ast) == NULL) return FAIL;
 
     }  
+}
+
+struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** _s, struct token** _e) {
+    *_s = *_e = NULL;
+    _reset_peek(p);           
+    if((*_s = _peek_token(p)) == NULL) return FAIL;
+
+    // Expr
+    struct Ast_node* cond = _parse_expr(p, (unint)(0), 0);
+    if(cond == NULL) {
+        DBG(1, "Error building expression\n");
+        return NULL;
+    }
+
+    DBG(1, "#################################\n");
+    dbg_ast(cond);
+    DBG(1, "#################################\n");
+
+    // New line
+    _reset_peek(p);
+    if((*_e = _read_token(p)) == NULL) return NULL;
+
+    return cond;
+}
+
+void report_expr_error_with_start_and_end(struct Parser* p, struct token* _s, struct token* _e, const char *stype, const char* string) {
+    // Get the cursor start from the first token that shares the end_lineno
+    nint col_offset = -1;
+    struct token* _c = _s;
+    while(true) {
+        if(_c->lineno == _e->lineno) {
+            col_offset = _c->col_offset;
+            break;
+        } 
+        if(_c == _e) break;
+        _c = _c->next;
+    }
+
+    _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, stype, string);
 }
 
 unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags) {
@@ -1978,31 +2018,15 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
     }
 
     else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) {
-        _reset_peek(p);           
-        struct token* _s = _peek_token(p);
-        if(_s == NULL) return FAIL;
-
-        // Expr
-        struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
-        if(expr == NULL) {
-            DBG(1, "Error building expression\n");
-            return FAIL;
-        }
-
-        DBG(1, "#################################\n");
-        dbg_ast(expr);
-        DBG(1, "#################################\n");
+        struct token *_s, *_e;
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
+        if(expr == NULL) return FAIL;
 
         struct Value val;
         if(_eval_expr(p, expr, &val) == FAIL) {
             DBG(1, "Error building expression\n");
             return FAIL;
         }
-
-        // New line
-        _reset_peek(p);
-        struct token* _e = _read_token(p);
-        if(_e == NULL) return FAIL;
 
         // Get the cursor start from the first token that shares the end_lineno
         nint col_offset = -1;
@@ -2096,34 +2120,16 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         return SUCCESS;
     }
 
-    if(is_at_identifier(_token, ASSERT_IDENTIFIER) == SUCCESS) {
-        _reset_peek(p); 
-        // Start          
-        struct token* _s = _peek_token(p);
-        if(_s == NULL) return FAIL;
-
-        // Expr
-        struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
-        if(expr == NULL) {
-            DBG(1, "Error building expression\n");
-            return FAIL;
-        }
-
-        DBG(1, "#################################\n");
-        dbg_ast(expr);
-
-        DBG(1, "#################################\n");
+    else if(is_at_identifier(_token, ASSERT_IDENTIFIER) == SUCCESS) {
+        struct token *_s, *_e;
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
+        if(expr == NULL) return FAIL;
 
         struct Value assert;
         if(_eval_expr(p, expr, &assert) == FAIL) {
             DBG(1, "Error building expression\n");
             return FAIL;
         }
-
-        // New line
-        _reset_peek(p);
-        struct token* _e = _read_token(p);
-        if(_e == NULL) return FAIL;
 
         if(!bool_eval(&assert)) {
             // Get the cursor start from the first token that shares the end_lineno
@@ -2149,31 +2155,15 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
     }
 
     else if(is_at_identifier(_token, WARN_IDENTIFIER) == SUCCESS) {
-        _reset_peek(p);           
-        struct token* _s = _peek_token(p);
-        if(_s == NULL) return FAIL;
-
-        // Expr
-        struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
-        if(expr == NULL) {
-            DBG(1, "Error building expression\n");
-            return FAIL;
-        }
-
-        DBG(1, "#################################\n");
-        dbg_ast(expr);
-        DBG(1, "#################################\n");
+        struct token *_s, *_e;
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
+        if(expr == NULL) return FAIL;
 
         struct Value warn;
         if(_eval_expr(p, expr, &warn) == FAIL) {
             DBG(1, "Error building expression\n");
             return FAIL;
         }
-
-        // New line
-        _reset_peek(p);
-        struct token* _e = _read_token(p);
-        if(_e == NULL) return FAIL;
 
         if(warn.type != VALUE_STR) {
             // Get the cursor start from the first token that shares the end_lineno
@@ -2202,31 +2192,15 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
     }
 
     else if(is_at_identifier(_token, ERROR_IDENTIFIER) == SUCCESS) {
-        _reset_peek(p);           
-        struct token* _s = _peek_token(p);
-        if(_s == NULL) return FAIL;
-
-        // Expr
-        struct Ast_node* expr = _parse_expr(p, (unint)(0), 0);
-        if(expr == NULL) {
-            DBG(1, "Error building expression\n");
-            return FAIL;
-        }
-
-        DBG(1, "#################################\n");
-        dbg_ast(expr);
-        DBG(1, "#################################\n");
+        struct token *_s, *_e;
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
+        if(expr == NULL) return FAIL;
 
         struct Value error;
         if(_eval_expr(p, expr, &error) == FAIL) {
             DBG(1, "Error building expression\n");
             return FAIL;
         }
-
-        // New line
-        _reset_peek(p);
-        struct token* _e = _read_token(p);
-        if(_e == NULL) return FAIL;
 
         if(error.type != VALUE_STR) {
             // Get the cursor start from the first token that shares the end_lineno
@@ -2254,35 +2228,33 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
     // Ast stuff
     else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) {
-        _reset_peek(p);           
-        struct token* _s = _peek_token(p);
-        if(_s == NULL) return FAIL;
 
-        // Expr
-        struct Ast_node* cond = _parse_expr(p, (unint)(0), 0);
-        if(cond == NULL) {
-            DBG(1, "Error building expression\n");
-            return FAIL;
-        }
-
-        DBG(1, "#################################\n");
-        dbg_ast(cond);
-        DBG(1, "#################################\n");
-
-        // New line
-        _reset_peek(p);
-        struct token* _e = _read_token(p);
-        if(_e == NULL) return FAIL;
+        struct token *_s, *_e;
+        struct Ast_node* cond = parse_expr_with_start_and_end(p, &_s, &_e);
+        if(cond == NULL) return FAIL;
 
         struct Ast_node* _if = new_ast_if(p, cond);
         if(_if == NULL) return FAIL;
 
         unint found_eof = 0;
         // Parse the block
-        if(_parse_block(p, &_if->node._if.statements, &found_eof) == FAIL) return FAIL;
-        // if found eof, dont bother parsing the other blocks
-        // Parse elif
-        // Parse else
+        if(_parse_block(p, &_if->node._if._if.statements, &found_eof) == FAIL) return FAIL;
+        if(found_eof == 1) goto _end_if;
+
+        // Elif 
+        while(true) {
+            _reset_peek(p);
+            struct token* _elif = _peek_token(p);
+            if(_elif == NULL) return FAIL;
+
+            if(is_at_identifier(_elif, ELIF_IDENTIFIER) == FAIL) break;
+
+            // Parse cond, parse block
+        }
+
+        // Else
+
+_end_if:
         *stmt_ast = _if;
     }
     
@@ -2400,6 +2372,6 @@ struct Ast_node* _run_parser(struct Parser* p) {
             if(flags == FLAG_EOF) return ast;
             else continue; // Skip @warn, @assert, @include and @macro
         }
-        if(insert_ast_statement(p, &ast->node.statements, stmt_ast) == NULL) return NULL;
+        if(insert_ast_statement_node(p, &ast->node.statements, stmt_ast) == NULL) return NULL;
     }
 }

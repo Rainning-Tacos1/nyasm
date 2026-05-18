@@ -99,7 +99,7 @@ struct Ast_node* new_ast_array(struct Parser* p, struct token* _token, struct Va
     return node;
 }
 
-struct AstStatementsNode* insert_ast_statement(struct Parser* p, struct AstStatements* ast, struct Ast_node* stmt_ast) {
+struct AstStatementsNode* insert_ast_statement_node(struct Parser* p, struct AstStatements* ast, struct Ast_node* stmt_ast) {
     struct AstStatementsNode* node = (struct AstStatementsNode*)MEM_ALLOC(sizeof(struct AstStatementsNode), "Statement node");
     if(node == NULL) {
         memory_error(p, "No available memory for AST statement node");  
@@ -126,9 +126,10 @@ struct Ast_node* new_ast_if(struct Parser* p, struct Ast_node* cond) {
     }
 
     node->type = IF_NODE;
-    node->node._if.cond = cond;
-    node->node._if.statements.head = NULL;
-    node->node._if.statements.tail = NULL;
+
+    node->node._if._if.cond = cond;
+    node->node._if._if.statements.head = NULL;
+    node->node._if._if.statements.tail = NULL;
     return node;
 }
 
@@ -271,14 +272,14 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             for(unint i=0; i<level+1; ++i) LOG("\t");
             LOG("[CONDITION]\n");
 
-            dbg_ast_recur(ast->node._if.cond, level+2);
+            dbg_ast_recur(ast->node._if._if.cond, level+2);
 
             for(unint i=0; i<level+1; ++i) LOG("\t");
             LOG("[STATEMENTS]\n");
 
             struct Ast_node stmts;
             stmts.type = STATEMENTS_NODE;
-            stmts.node.statements = ast->node._if.statements;
+            stmts.node.statements = ast->node._if._if.statements;
             dbg_ast_recur(&stmts, level+2);
 
             break;

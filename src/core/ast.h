@@ -76,11 +76,16 @@ struct AstStatements {
     struct AstStatementsNode* tail;
 };
 
+struct CondBlock {
+    struct Ast_node* cond;
+    struct AstStatements statements;
+};
+
 struct AstIf {
     struct Ast_node* cond;
     struct AstStatements statements;
     // elif branches
-    // else branch
+    struct CondBlock _if;
 };
 
 // Macros
@@ -140,7 +145,7 @@ struct Ast_node* new_ast_binop(struct Parser* p, struct token* op_token, unint o
 struct Ast_node* new_ast_variable(struct Parser* p, struct token* _token, struct Variable* var);
 struct Ast_node* new_ast_array(struct Parser* p, struct token* _token, struct Value* var);
 
-struct AstStatementsNode* insert_ast_statement(struct Parser* p, struct AstStatements* ast, struct Ast_node* stmt_ast);
+struct AstStatementsNode* insert_ast_statement_node(struct Parser* p, struct AstStatements* ast, struct Ast_node* stmt_ast);
 
 struct Ast_node* new_ast_if(struct Parser* p, struct Ast_node* cond);
 
