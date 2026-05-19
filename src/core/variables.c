@@ -459,13 +459,15 @@ struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg) {
     return number;
 }
 
-struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len, struct Value* val) {
+struct Variable* new_variable(struct Parser* p, struct token* _token, struct Value* val) {
     struct Variable* var = (struct Variable*)MEM_ALLOC(sizeof(struct Variable), "new variable");
-    if(var == NULL) return NULL;
+    if(var == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for variable");
+        return NULL;
+    }
 
     // Fill
-    var->var.len = len;
-    var->var.cps = cps;
+    var->var_name = _token;
     var->next = NULL;
 
     // Copy
@@ -481,23 +483,23 @@ struct Variable* new_variable(struct Parser* p, int32_t* cps, unint len, struct 
     return var;
 }
 
-struct Variable* get_variable(struct Parser* p, int32_t* cps, unint len) {
+struct Variable* get_variable(struct Parser* p, struct token* _token) {
     if(p == NULL || p->variables == NULL) return NULL;
 
     for(struct Variable* var = p->variables; var != NULL; var = var->next) {
-        if(var->var.len != len) continue;
+        if(var->var_name->len != _token->len) continue;
 
         unint i;
-        for(i = 0; i < len; ++i) if(var->var.cps[i] != cps[i]) break;
+        for(i = 0; i < _token->len; ++i) if(var->var_name->cps[i] != _token->cps[i]) break;
         
         // Full match
-        if(i == len) return var;
+        if(i == _token->len) return var;
     }
     return NULL;
 }
 
-unint is_variable_declared(struct Parser* p, int32_t* cps, unint len) {
-    return (get_variable(p, cps, len) == NULL) ? FAIL : SUCCESS;
+unint is_variable_declared(struct Parser* p, struct token* _token) {
+    return (get_variable(p, _token) == NULL) ? FAIL : SUCCESS;
 }
 
 void print_value_recur(struct Value* val, unint level) {

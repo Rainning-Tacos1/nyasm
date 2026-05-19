@@ -19,14 +19,23 @@
 #include "types.h"
 
 #define MACRO_IDENTIDIER ((int32_t[]){'m', 'a', 'c', 'r', 'o', -1})
-#define IF_IDENTIFIER ((int32_t[]){'i', 'f', -1})
 #define INCLUDE_IDENTIFIER ((int32_t[]){'i', 'n', 'c', 'l', 'u', 'd', 'e', -1})
-#define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
-#define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
+
 #define ASSERT_IDENTIFIER ((int32_t[]){'a', 's', 's', 'e', 'r', 't', -1})
 #define WARN_IDENTIFIER ((int32_t[]){'w', 'a', 'r', 'n', -1})
 #define ERROR_IDENTIFIER ((int32_t[]){'e', 'r', 'r', 'o', 'r', -1})
+
+#define IF_IDENTIFIER ((int32_t[]){'i', 'f', -1})
 #define ELIF_IDENTIFIER ((int32_t[]){'e', 'l', 'i', 'f', -1})
+#define ELSE_IDENTIFIER ((int32_t[]){'e', 'l', 's', 'e', -1})
+
+#define WHILE_IDENTIFIER ((int32_t[]){'w', 'h', 'i', 'l', 'e', -1})
+#define REPEAT_IDENTIFIER ((int32_t[]){'r', 'e', 'p', 'e', 'a', 't', -1})
+#define BREAK_IDENTIFIER ((int32_t[]){'b', 'r', 'e', 'a', 'k', -1})
+
+#define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
+#define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
+
 
 extern const char * const _Parser_TokenNames[];
 
@@ -1050,13 +1059,13 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
                 return NULL;
             }
 
-            struct Variable* var = get_variable(p, _token->cps, _token->len);
-            if(var == NULL) {
-                _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "variable is not declared");
-                return NULL;
-            }
+            // struct Variable* var = get_variable(p, _token->cps, _token->len);
+            // if(var == NULL) {
+            //     _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "variable is not declared");
+            //     return NULL;
+            // }
 
-            return new_ast_variable(p, _token, var);
+            return new_ast_variable(p, _token);
         case LSQB:
             if((_token = _peek_token(p)) == NULL) return NULL;
             
@@ -1304,7 +1313,14 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             *val = *expr->node.literal.value;
             return SUCCESS;
         case VAR_NODE:
-            *val = expr->node.var.val;
+            // Check if variable is declared
+            // Get the variable
+            struct Variable* var = get_variable(p, expr->node.var);
+            if(var == NULL) {
+                _error_from_token(p, expr->node.var, ERROR_TYPE_EXPRESSION, "variable is not declared");
+                return FAIL;
+            }
+            *val = var->val;
             return SUCCESS;
         case BINOP_NODE:
             struct AstBinOp* binop = &expr->node.binop;
@@ -1797,11 +1813,8 @@ char* cp_string_to_encoding(int32_t* cps, nint cp_len) {
     return result;
 }
 
-#define FLAG_MACRO_DECL 0x1
-#define FLAG_INCLUDE    0x2
-#define FLAG_ASSERT     0x3
-#define FLAG_WARN       0x4
-#define FLAG_EOF        0x5
+#define FLAG_MACRO_DECL 1
+#define FLAG_INCLUDE_DECL 2
 
 unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags);
 
@@ -1825,22 +1838,20 @@ unint _parse_block(struct Parser* p, struct AstStatements* statements, unint* fo
         unint _flags = 0;
         if(_parse_statement(p, &stmt_ast, &_flags) == FAIL) return FAIL;
 
+        if(_flags == FLAG_MACRO_DECL || _flags == FLAG_INCLUDE_DECL) continue; // Skip macro
         if(stmt_ast == NULL) {
-            if(_flags == FLAG_EOF) {
-                *found_eof = 1;
-                return SUCCESS;
-            } else continue; // Skip @warn, @assert, @include and @macro
+            *found_eof = 1;
+            return SUCCESS;
         }
 
         if(insert_ast_statement_node(p, statements, stmt_ast) == NULL) return FAIL;
-
     }  
 }
 
 struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** _s, struct token** _e) {
     *_s = *_e = NULL;
     _reset_peek(p);           
-    if((*_s = _peek_token(p)) == NULL) return FAIL;
+    if((*_s = _peek_token(p)) == NULL) return NULL;
 
     // Expr
     struct Ast_node* cond = _parse_expr(p, (unint)(0), 0);
@@ -1904,12 +1915,6 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         // Already declared?
         if(is_macro_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
             _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro is already declared");
-            return FAIL;
-        }
-
-        // Variable has the same name?
-        if(is_variable_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
-            _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro name is already in use by a variable");
             return FAIL;
         }
 
@@ -2018,47 +2023,33 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
     }
 
     else if (is_at_identifier(_token, INCLUDE_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(expr == NULL) return FAIL;
+        
+        // Include path
+        struct token* _include = _read_token(p);
+        if(_include == NULL) return FAIL;
 
-        struct Value val;
-        if(_eval_expr(p, expr, &val) == FAIL) {
-            DBG(1, "Error building expression\n");
+        if(_include->type != STRING) {
+            _error_from_token(p, _include, ERROR_TYPE_TYPE, "invalid type for @include");
             return FAIL;
         }
 
-        // Get the cursor start from the first token that shares the end_lineno
-        nint col_offset = -1;
-        struct token* _c = _s;
-        while(true) {
-            if(_c->lineno == _e->lineno) {
-                col_offset = _c->col_offset;
-                break;
-            } 
-            if(_c == _e) break;
-            _c = _c->next;
-        }
-
-        if(val.type != VALUE_STR) {
-            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for @include");
-            return FAIL;
-        }
+        struct token* _e = expect_token(p, NEWLINE);
+        if(_e == NULL) return FAIL;
 
         // Check file
-        char* include_path = cp_string_to_encoding(val.val.string.str, val.val.string.len);
+        char* include_path = cp_string_to_encoding(_include->cps+1, _include->len-2); // Remove the quotes
         if(include_path == NULL) {
-            memory_error(p, "no available memory for @include string");
+            _error_from_token(p, _include, ERROR_TYPE_MEMORY, "no available memory for @include string");
             return FAIL;
         }
 
         _stat sfile;
         if(stat(include_path, &sfile) != 0) {
-            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_PATH, "could not open file: \"%s\"", include_path);
+            _error_from_token(p, _include, ERROR_TYPE_PATH, "could not open file: \"%s\"", include_path);
             return FAIL;
         }
         if(!__S_ISREG(sfile.st_mode)){
-            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_PATH, "path: \"%s\" is not a file", include_path);
+            _error_from_token(p, _include, ERROR_TYPE_PATH, "path: \"%s\" is not a file", include_path);
             return FAIL;
         }
 
@@ -2066,7 +2057,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         unint size = 0;
         char* file = LOAD_FILE(include_path, &size);
         if(file == NULL) {
-            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_PATH, "error loading file: \"%s\" into memory", include_path);
+            memory_error(p, "error loading file: \"%s\" into memory", include_path);
             return FAIL;
         }
 
@@ -2076,7 +2067,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         // new Tokenizer
         struct tok_state* _tok = _Tokenizer_tok_new();
         if(_tok == NULL) {
-            memory_error(p, "no available space for the tokenizer\n");            
+            memory_error(p, "no available memory for the tokenizer\n");            
             return FAIL;
         }
 
@@ -2088,7 +2079,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         // new Parser
         struct Parser* _p = _Parser_New(_tok);
         if(_p == NULL) {
-            memory_error(p, "no available space for the parser\n");
+            memory_error(p, "no available memory for the parser\n");
             return FAIL;
         }
 
@@ -2115,42 +2106,21 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         p->last_token = (p->peek = last_token);            
         _p->is_inside_macro_decl = 0;
 
-        *flags = FLAG_INCLUDE;
+        *flags = FLAG_INCLUDE_DECL;
         *stmt_ast = NULL;
         return SUCCESS;
     }
 
+    // Ast stuff
     else if(is_at_identifier(_token, ASSERT_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
         struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
         if(expr == NULL) return FAIL;
 
-        struct Value assert;
-        if(_eval_expr(p, expr, &assert) == FAIL) {
-            DBG(1, "Error building expression\n");
-            return FAIL;
-        }
+        struct Ast_node* assert = new_ast_assert(p, expr, _s, _e);
+        if(assert == NULL) return FAIL;
 
-        if(!bool_eval(&assert)) {
-            // Get the cursor start from the first token that shares the end_lineno
-            nint col_offset = -1;
-            struct token* _c = _s;
-            while(true) {
-                if(_c->lineno == _e->lineno) {
-                    col_offset = _c->col_offset;
-                    break;
-                } 
-                if(_c == _e) break;
-                _c = _c->next;
-            }
-
-            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_ASSERT, "assertion of expression failed");
-            
-            return FAIL;
-        }
-
-        *flags = FLAG_ASSERT;
-        *stmt_ast = NULL;
+        *stmt_ast = assert;
         return SUCCESS;
     }
 
@@ -2159,35 +2129,10 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
         if(expr == NULL) return FAIL;
 
-        struct Value warn;
-        if(_eval_expr(p, expr, &warn) == FAIL) {
-            DBG(1, "Error building expression\n");
-            return FAIL;
-        }
+        struct Ast_node* warn = new_ast_warn(p, expr, _s, _e);
+        if(warn == NULL) return FAIL;
 
-        if(warn.type != VALUE_STR) {
-            // Get the cursor start from the first token that shares the end_lineno
-            nint col_offset = -1;
-            struct token* _c = _s;
-            while(true) {
-                if(_c->lineno == _e->lineno) {
-                    col_offset = _c->col_offset;
-                    break;
-                } 
-                if(_c == _e) break;
-                _c = _c->next;
-            }
-
-            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for warning");
-            return FAIL;
-        }
-
-        LOG("  File: \"%s\", line %d\n    @warn \"", p->tok->source, _token->lineno);
-        for(unint i=0; i<warn.val.string.len; ++i) LOG_CP(warn.val.string.str[i]);
-        LOG("\"\n");
-
-        *flags = FLAG_WARN;
-        *stmt_ast = NULL;
+        *stmt_ast = warn;
         return SUCCESS;
     }
 
@@ -2196,68 +2141,117 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
         if(expr == NULL) return FAIL;
 
-        struct Value error;
-        if(_eval_expr(p, expr, &error) == FAIL) {
-            DBG(1, "Error building expression\n");
-            return FAIL;
-        }
+        struct Ast_node* error = new_ast_error(p, expr, _s, _e);
+        if(error == NULL) return FAIL;
 
-        if(error.type != VALUE_STR) {
-            // Get the cursor start from the first token that shares the end_lineno
-            nint col_offset = -1;
-            struct token* _c = _s;
-            while(true) {
-                if(_c->lineno == _e->lineno) {
-                    col_offset = _c->col_offset;
-                    break;
-                } 
-                if(_c == _e) break;
-                _c = _c->next;
-            }
-
-            _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, ERROR_TYPE_TYPE, "invalid type for @error");
-            return FAIL;
-        }
-
-        LOG("  File: \"%s\", line %d\n    @error \"", p->tok->source, _token->lineno);
-        for(unint i=0; i<error.val.string.len; ++i) LOG_CP(error.val.string.str[i]);
-        LOG("\"\n");
-
-        return FAIL;
+        *stmt_ast = error;
+        return SUCCESS;
     }        
 
-    // Ast stuff
     else if(is_at_identifier(_token, IF_IDENTIFIER) == SUCCESS) {
-
-        struct token *_s, *_e;
-        struct Ast_node* cond = parse_expr_with_start_and_end(p, &_s, &_e);
+        struct Ast_node* cond = _parse_expr(p, (unint)(0), 0);
         if(cond == NULL) return FAIL;
 
-        struct Ast_node* _if = new_ast_if(p, cond);
+        // Read new line
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+        struct Ast_node* _if = new_ast_if(p, _token, cond);
         if(_if == NULL) return FAIL;
 
         unint found_eof = 0;
         // Parse the block
-        if(_parse_block(p, &_if->node._if._if.statements, &found_eof) == FAIL) return FAIL;
+        if(_parse_block(p, &_if->node._if.statements, &found_eof) == FAIL) return FAIL;
         if(found_eof == 1) goto _end_if;
 
         // Elif 
+        struct token* _elif;
         while(true) {
-            _reset_peek(p);
-            struct token* _elif = _peek_token(p);
+            _elif = _peek_token(p);
             if(_elif == NULL) return FAIL;
 
             if(is_at_identifier(_elif, ELIF_IDENTIFIER) == FAIL) break;
+            
+            _read_token(p);
 
-            // Parse cond, parse block
+            // Condition
+            struct Ast_node* elif_cond = _parse_expr(p, (unint)(0), 0);
+            if(cond == NULL) return FAIL;
+            
+            // Read the new line
+            if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+            if(insert_elif(p, _elif, _if, elif_cond) == FAIL) return FAIL;
+            
+            _if->node._if._elifs_end->cond = elif_cond;
+
+            // Block
+            if(_parse_block(p, &_if->node._if._elifs_end->statements, &found_eof) == FAIL) return FAIL;
+            if(found_eof == 1) goto _end_if;
         }
 
-        // Else
+        if(is_at_identifier(_elif, ELSE_IDENTIFIER) == FAIL) goto _end_if;
 
+        _read_token(p); // Read else
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+        // Else
+        if(insert_else(p, _elif, _if) == FAIL) return FAIL;  
+        
+        // Block
+        if(_parse_block(p, _if->node._if._else, &found_eof) == FAIL) return FAIL;
+        
 _end_if:
+        _reset_peek(p);
         *stmt_ast = _if;
+        return SUCCESS;
     }
     
+    else if(is_at_identifier(_token, WHILE_IDENTIFIER) == SUCCESS) {
+        struct Ast_node* cond = _parse_expr(p, (unint)(0), 0);
+        if(cond == NULL) return FAIL;
+
+        // Read new line
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+        struct Ast_node* _while = new_ast_while(p, _token, cond);
+        if(_while == NULL) return FAIL;
+
+        unint found_eof = 0;
+        // Parse the block
+        if(_parse_block(p, &_while->node._while.statements, &found_eof) == FAIL) return FAIL;
+
+        *stmt_ast = _while;
+        return SUCCESS;
+    }
+    
+    else if(is_at_identifier(_token, REPEAT_IDENTIFIER) == SUCCESS) {
+        struct Ast_node* cond = _parse_expr(p, (unint)(0), 0);
+        if(cond == NULL) return FAIL;
+
+        // Read new line
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+        struct Ast_node* _repeat = new_ast_repeat(p, _token, cond);
+        if(_repeat == NULL) return FAIL;
+
+        unint found_eof = 0;
+        // Parse the block
+        if(_parse_block(p, &_repeat->node._repeat.statements, &found_eof) == FAIL) return FAIL;
+
+        *stmt_ast = _repeat;
+        return SUCCESS;
+    }
+
+    else if(is_at_identifier(_token, BREAK_IDENTIFIER) == SUCCESS) {
+
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+        struct Ast_node* _break = new_ast_break(p, _token);
+        if(_break == NULL) return FAIL;
+
+        *stmt_ast = _break;
+        return SUCCESS; 
+    }
     // Variables
     else if(_token->type == NAME && is_at_identifier(_token, NULL) == FAIL) {
         DBG(1, "Tests\n");
@@ -2316,46 +2310,37 @@ _end_if:
         // AST
         if(lsqb->type == LSQB && rsqb->type == RSQB) {
             // Array append
-            struct AstIdentifier ident;
-            ident.cps = _token->cps;
-            ident.len = _token->len;
-
-            struct Ast_node* apa = new_ast_assign_append_array(p, &ident, expr);
+            struct Ast_node* apa = new_ast_assign_append_array(p, _token, expr);
             if(apa == NULL) return FAIL;
 
             *stmt_ast = apa;  
         } else if(lsqb->type == LSQB) {
             // Indexation + Assignment
-            struct AstIdentifier ident;
-            ident.cps = _token->cps;
-            ident.len = _token->len;
 
-            struct Ast_node* avi = new_ast_assign_variable_idx(p, &ident, idx, expr);
+            struct Ast_node* avi = new_ast_assign_variable_idx(p, _token, idx, expr);
             if(avi == NULL) return FAIL;
 
             *stmt_ast = avi; 
         } else {
             // Normal assignement
-            struct AstIdentifier ident;
-            ident.cps = _token->cps;
-            ident.len = _token->len;
 
-            struct Ast_node* av = new_ast_assign_variable(p, &ident, expr);
+            struct Ast_node* av = new_ast_assign_variable(p, _token, expr);
             if(av == NULL) return FAIL;
 
             *stmt_ast = av;            
         }
+        return SUCCESS;
     }
 
     else if (_token->type == ENDMARKER) {
         DBG(1, "END OF PARSING\n");
         *stmt_ast = NULL;
-        *flags = FLAG_EOF;
+        return SUCCESS;
     } else {
         _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "invalid syntax");
         return FAIL;
     }
-    return SUCCESS;
+    return FAIL;
 }
 
 
@@ -2367,11 +2352,9 @@ struct Ast_node* _run_parser(struct Parser* p) {
         struct Ast_node* stmt_ast = NULL;
         unint flags = 0;
         if(_parse_statement(p, &stmt_ast, &flags) == FAIL) return NULL; // Something wrong that should not recover the AST
-        
-        if(stmt_ast == NULL) {
-            if(flags == FLAG_EOF) return ast;
-            else continue; // Skip @warn, @assert, @include and @macro
-        }
+
+        if(flags == FLAG_MACRO_DECL || flags == FLAG_INCLUDE_DECL) continue; // Skip macro
+        if(stmt_ast == NULL) return ast; // Eof
         if(insert_ast_statement_node(p, &ast->node.statements, stmt_ast) == NULL) return NULL;
     }
 }
