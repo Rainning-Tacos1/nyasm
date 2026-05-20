@@ -489,7 +489,7 @@ unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type,
 
     int32_t* token_buf = NULL;
 
-    if(TOKEN_ALLOC_NEEDED(type) && start != NULL && end != NULL) {
+    if(start != NULL && end != NULL) {
         // Allocate
         token_buf = token_cp_buffer_init(tok);
         if(token_buf == NULL) RETURN_NOMEM();
@@ -990,15 +990,15 @@ unint _Token_ThreeChars(int32_t c1, int32_t c2, int32_t c3) {
     //         break;
     //     }
     //     break;
-    case '/':
-        switch (c2) {
-        case '/':
-            switch (c3) {
-            case '=': return DOUBLESLASHEQUAL;
-            }
-            break;
-        }
-        break;
+    // case '/':
+    //     switch (c2) {
+    //     case '/':
+    //         switch (c3) {
+    //         case '=': return DOUBLESLASHEQUAL;
+    //         }
+    //         break;
+    //     }
+    //     break;
     case '<':
         switch (c2) {
         case '<':
@@ -1056,8 +1056,6 @@ nextline:
     if(tok->pendin != 0) DBG(DO_LEXER_INDENTATION_DBG, "Reading Indentation complete\n\n\n");
     while (tok->pendin != 0) return MAKE_TOKEN(generate_indent_dedent_token(tok, token)); // Updates tok->pendin
 
-_loop:
-    if (0) goto _loop; // Remove Compiler warning about unused label
     tok->start = NULL;
 
     /* Peek ahead at the next character */
@@ -1100,7 +1098,7 @@ _loop:
                 while(*cp != EOF && !(*cp == '\n' || *cp == '\r')) 
                     next_cp(tok);
 
-                //backup_cp(tok); /* don't eat the newline or EOF */
+                backup_cp(tok); /* don't eat the newline or EOF */
                 //p_start = tok->start;
                 //p_end = tok->uc.curr;
                 //return MAKE_TOKEN(COMMENT);

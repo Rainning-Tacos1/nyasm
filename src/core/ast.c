@@ -153,7 +153,7 @@ struct Ast_node* new_ast_while(struct Parser* p, struct token* _token, struct As
     return node;
 }
 
-struct Ast_node* new_ast_repeat(struct Parser* p, struct token* _token, struct Ast_node* expr) {
+struct Ast_node* new_ast_repeat(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST repeat node");
@@ -162,9 +162,11 @@ struct Ast_node* new_ast_repeat(struct Parser* p, struct token* _token, struct A
 
     node->type = REPEAT_NODE;
 
-    node->node._while.cond = expr;
-    node->node._while.statements.head = NULL;
-    node->node._while.statements.tail = NULL;
+    node->node._repeat.expr = expr;
+    node->node._repeat.statements.head = NULL;
+    node->node._repeat.statements.tail = NULL;
+    node->node._repeat._s = _s;
+    node->node._repeat._e = _e;
 
     return node;
 }
@@ -209,7 +211,7 @@ unint insert_else(struct Parser* p, struct token* _token, struct Ast_node* _if) 
     return SUCCESS;
 }
 
-struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* expr) {
+struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* expr, unint ass_type) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, ident, ERROR_TYPE_MEMORY, "no available memory for AST assignment node");
@@ -219,11 +221,12 @@ struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, 
     node->type = ASSIGN_VAR_NODE;
     node->node.var_assign.expr = expr;
     node->node.var_assign.name = ident;
+    node->node.var_assign.ass_type = ass_type;
 
     return node;
 }
 
-struct Ast_node* new_ast_assign_variable_idx(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr) {
+struct Ast_node* new_ast_assign_variable_idx(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr, unint ass_type) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, ident, ERROR_TYPE_MEMORY, "no available memory for AST assignment+idx node");
@@ -234,11 +237,12 @@ struct Ast_node* new_ast_assign_variable_idx(struct Parser* p, struct token* ide
     node->node.var_idx_assign.name = ident;
     node->node.var_idx_assign.expr = expr;
     node->node.var_idx_assign.idx = idx;
+    node->node.var_idx_assign.ass_type = ass_type;
 
     return node;
 }
 
-struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ident, struct Ast_node* expr) {
+struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ident, struct Ast_node* expr, unint ass_type) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, ident, ERROR_TYPE_MEMORY, "no available memory for AST append assignment node");
@@ -248,6 +252,7 @@ struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ide
     node->type = ASSIGN_APPEND_ARRAY_NODE;
     node->node.var_array_append_assign.expr = expr;
     node->node.var_array_append_assign.name = ident;
+    node->node.var_array_append_assign.ass_type = ass_type;
 
     return node;
 }
@@ -283,17 +288,30 @@ struct Ast_node* new_ast_warn(struct Parser* p, struct Ast_node* expr, struct to
     return node;
 }
 
-struct Ast_node* new_ast_include(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e, struct token* last_token) {
+struct Ast_node* new_ast_import(struct Parser* p, struct token* _token) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
-        memory_error(p, "No available memory for AST include node");  
+        memory_error(p, "No available memory for AST import node");  
         return NULL;
     }
 
-    node->type = INCLUDE_NODE;
-    node->node.include.include = expr;
-    node->node.include._s = _s;
-    node->node.include._e = _e;
+    node->type = IMPORT_NODE;
+    node->node.import.import = _token;
+
+    return node;
+}
+
+struct Ast_node* new_ast_space(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e, unint type) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        memory_error(p, "No available memory for AST space node");  
+        return NULL;
+    }
+
+    node->type = type;
+    node->node.space.expr = expr;
+    node->node.space._s = _s;
+    node->node.space._e = _e;
 
     return node;
 }
@@ -313,6 +331,46 @@ struct Ast_node* new_ast_assert(struct Parser* p, struct Ast_node* expr, struct 
     return node;
 }
 
+char* assign_token_to_text(unsigned int ass) {
+    switch (ass) {
+        case EQUAL:
+            return "=";
+
+        case PLUSEQUAL:
+            return "+=";
+
+        case MINEQUAL:
+            return "-=";
+
+        case STAREQUAL:
+            return "*=";
+
+        case SLASHEQUAL:
+            return "/=";
+
+        case PERCENTEQUAL:
+            return "%=";
+
+        case AMPEREQUAL:
+            return "&=";
+
+        case VBAREQUAL:
+            return "|=";
+
+        case CIRCUMFLEXEQUAL:
+            return "^=";
+
+        case LEFTSHIFTEQUAL:
+            return "<<=";
+
+        case RIGHTSHIFTEQUAL:
+            return ">>=";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
 void dbg_ast_recur(struct Ast_node* ast, unint level) {
     for(unint i=0; i<level; ++i) LOG("\t");
     LOG("[");
@@ -329,16 +387,31 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case REPEAT_NODE: { LOG("REPEAT_NODE"); break; }
         case BREAK_NODE: { LOG("BREAK_NODE"); break; }
 
+        case IMPORT_NODE: { LOG("IMPORT_NODE]"); return; }
+
+        case BYTE_NODE: { LOG("BYTE_NODE"); break; }
+        case WORD_NODE: { LOG("WORD_NODE"); break; }
+        case DWORD_NODE : { LOG("DWORD_NODE"); break; }
+        case QWORD_NODE : { LOG("QWORD_NODE"); break; }
+        case FLOAT_NODE : { LOG("FLOAT_NODE"); break; }
+        case DOUBLE_NODE : { LOG("DOUBLE_NODE"); break; }
+
+        case SAVEB_NODE: { LOG("SAVEB_NODE"); break; }
+        case SAVEW_NODE: { LOG("SAVEW_NODE"); break; }
+        case SAVEDW_NODE: { LOG("SAVEDW_NODE"); break; }
+        case SAVEQ_NODE: { LOG("SAVEQ_NODE"); break; }
+        case SAVEF_NODE: { LOG("SAVEF_NODE"); break; }
+        case SAVED_NODE: { LOG("SAVED_NODE"); break; }
+
         case ASSIGN_VAR_NODE: { LOG("ASSIGN_VAR_NODE"); break; }
         case ASSIGN_VAR_IDX_NODE: { LOG("ASSIGN_VAR_IDX_NODE"); break; }
         case ASSIGN_APPEND_ARRAY_NODE: { LOG("ASSIGN_APPEND_ARRAY_NODE"); break; }
     
         case ERROR_NODE: { LOG("ERROR_NODE"); break; }
         case WARN_NODE: { LOG("WARN_NODE"); break; }
-        case INCLUDE_NODE: { LOG("INCLUDE_NODE"); break; }
         case ASSERT_NODE: { LOG("ASSERT_NODE"); break; }
 
-        default: { LOG("INVALID_NODE"); break; }
+        default: { LOG("INVALID_NODE]"); return; }
     }
     LOG("] ");
 
@@ -377,7 +450,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                 case LSQB:         { LOG("idx"); break; }
                 case DOT:          { LOG("concat"); break; }
 
-                default: { LOG("X"); break; }
+                default: { LOG("X'\n"); return; }
             };
             LOG("'\n");
             dbg_ast_recur(ast->node.binop.left, level+1);
@@ -388,7 +461,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                 LOG("NULL\n");
             }
             break;
-        
+
         case LITERAL_NODE:
             LOG("[");
             switch(ast->node.literal.value->type) {
@@ -402,7 +475,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             }
             LOG("]\n");
             break;
-        
+ 
         case VAR_NODE:
             for(unint i=0; i<ast->node.var->len; ++i) LOG_CP(ast->node.var->cps[i]);
             LOG("\n");
@@ -502,10 +575,6 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             LOG("\n");
             dbg_ast_recur(ast->node.warn.warn, level+1);
             break;
-        case INCLUDE_NODE:
-            LOG("\n");
-            dbg_ast_recur(ast->node.include.include, level+1);
-            break;
         case ASSERT_NODE:
             LOG("\n");
             dbg_ast_recur(ast->node.assert.assert, level+1);
@@ -518,7 +587,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             for(unint i=0; i<ast->node.var_assign.name->len; ++i) LOG_CP(ast->node.var_assign.name->cps[i]);
             LOG("\n");
             for(unint i=0; i<level+1; ++i) LOG("\t");
-            LOG("[=]\n");
+            LOG("[%s]\n", assign_token_to_text(ast->node.var_assign.ass_type));
             dbg_ast_recur(ast->node.var_assign.expr, level+2);
             break;
         
@@ -526,7 +595,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             LOG("\n");
             for(unint i=0; i<level+1; ++i) LOG("\t");
             LOG("[VARIABLE] ");
-            for(unint i=0; i<ast->node.var_assign.name->len; ++i) LOG_CP(ast->node.var_assign.name->cps[i]);
+            for(unint i=0; i<ast->node.var_idx_assign.name->len; ++i) LOG_CP(ast->node.var_idx_assign.name->cps[i]);
             LOG("\n");
             for(unint i=0; i<level+1; ++i) LOG("\t");
             LOG("[IDX]\n");
@@ -540,11 +609,29 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             LOG("\n");
             for(unint i=0; i<level+1; ++i) LOG("\t");
             LOG("[VARIABLE] ");
-            for(unint i=0; i<ast->node.var_array_append_assign.name->len; ++i) LOG_CP(ast->node.var_assign.name->cps[i]);
+            for(unint i=0; i<ast->node.var_array_append_assign.name->len; ++i) LOG_CP(ast->node.var_array_append_assign.name->cps[i]);
             LOG("\n");
             for(unint i=0; i<level+1; ++i) LOG("\t");
             LOG("[=]\n");
             dbg_ast_recur(ast->node.var_array_append_assign.expr, level+2);
+            break;
+
+        case BYTE_NODE:
+        case WORD_NODE:
+        case DWORD_NODE:
+        case QWORD_NODE:
+        case FLOAT_NODE:
+        case DOUBLE_NODE:
+
+        case SAVEB_NODE:
+        case SAVEW_NODE:
+        case SAVEDW_NODE:
+        case SAVEQ_NODE:
+        case SAVEF_NODE:
+        case SAVED_NODE:
+            LOG("\n");
+            for(unint i=0; i<level; ++i) LOG("\t");
+            dbg_ast_recur(ast->node.space.expr, level);
             break;
 
         default: { LOG("INVALID_NODE"); break; }
