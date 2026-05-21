@@ -33,15 +33,13 @@
 #define REPEAT_IDENTIFIER ((int32_t[]){'r', 'e', 'p', 'e', 'a', 't', -1})
 #define BREAK_IDENTIFIER ((int32_t[]){'b', 'r', 'e', 'a', 'k', -1})
 
-#define IMPORT_IDENTIFIER ((int32_t[]){'i', 'm', 'p', 'o', 'r', 't', -1})
-
 #define BYTE_IDENTIFIER ((int32_t[]){'b', 'y', 't', 'e', -1})
 #define WORD_IDENTIFIER ((int32_t[]){'w', 'o', 'r', 'd', -1})
 #define DWORD_IDENTIFIER ((int32_t[]){'d', 'w', 'o', 'r', 'd', -1})
 #define QWORD_IDENTIFIER ((int32_t[]){'q', 'w', 'o', 'r', 'd', -1})
 #define FLOAT_IDENTIFIER ((int32_t[]){'f', 'l', 'o', 'a', 't', -1})
 #define DOUBLE_IDENTIFIER ((int32_t[]){'d', 'o', 'u', 'b', 'l', 'e', -1})
-
+#define PTR_IDENTIFIER ((int32_t[]){'p', 't', 'r', -1})
 
 #define SAVEB_IDENTIFIER ((int32_t[]){'s', 'a', 'v', 'e', 'b', -1})
 #define SAVEW_IDENTIFIER ((int32_t[]){'s', 'a', 'v', 'e', 'w', -1})
@@ -49,7 +47,12 @@
 #define SAVEQ_IDENTIFIER ((int32_t[]){'s', 'a', 'v', 'e', 'q', -1})
 #define SAVEF_IDENTIFIER ((int32_t[]){'s', 'a', 'v', 'e', 'f', -1})
 #define SAVED_IDENTIFIER ((int32_t[]){'s', 'a', 'v', 'e', 'd', -1})
+#define SAVEP_IDENTIFIER ((int32_t[]){'s', 'a', 'v', 'e', 'p', -1})
 
+#define IMPORT_IDENTIFIER ((int32_t[]){'i', 'm', 'p', 'o', 'r', 't', -1})
+#define STRUCT_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'u', 'c', 't', -1})
+#define STRING_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'i', 'n', 'g', -1})
+#define DEL_IDENTIFIER ((int32_t[]){'d', 'e', 'l', -1})
 
 #define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
 #define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
@@ -1903,6 +1906,131 @@ void report_expr_error_with_start_and_end(struct Parser* p, struct token* _s, st
     _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset, stype, string);
 }
 
+unint read_possible_alignemnt(struct Parser* p, struct Ast_node** align_expr) {
+    *align_expr = NULL;
+    // Possible ":"
+    struct token* colon = _peek_token(p);
+    if(colon == NULL) return FAIL;
+
+    if(colon->type == COLON) {
+        _read_token(p); // COLON
+
+        struct token* align_tok = _read_token(p);
+        if(align_tok == NULL) return FAIL;
+        
+        if(align_tok->type == NUMBER) {
+            *align_expr = new_ast_number(p, align_tok, 0);
+            if(*align_expr == NULL) return FAIL;
+
+            if((*align_expr)->node.literal.value->type != VALUE_INT) goto _invalid_alignment;
+
+            return (align_expr == NULL) ? FAIL : SUCCESS;
+        } else {
+_invalid_alignment:
+            _error_from_token(p, align_tok, ERROR_TYPE_MESSAGE, "invalid alignment");
+            return FAIL;
+        }
+    }
+    _reset_peek(p);
+    return SUCCESS;
+
+}
+
+unint read_possible_array(struct Parser* p, struct Ast_node** len_expr, struct Ast_node** align_expr) {
+    *len_expr = *align_expr = NULL;
+
+    // Possible "["
+    struct token* lsqb = _peek_token(p);
+    if(lsqb == NULL) return FAIL;
+
+    if(lsqb->type == LSQB) {
+        _read_token(p); // LSQB
+
+        // Len
+        struct token* len_tok = _read_token(p);
+        if(len_tok == NULL) return FAIL;
+
+        if(len_tok->type == NUMBER) {
+            *len_expr = new_ast_number(p, len_tok, 0);
+            if(*len_expr == NULL) return FAIL;
+
+            if((*len_expr)->node.literal.value->type != VALUE_INT) goto _invalid_len;
+
+        } else {
+_invalid_len:
+            _error_from_token(p, len_tok, ERROR_TYPE_MESSAGE, "invalid length");
+            return FAIL;        
+        }
+
+        // Possible alignment
+        if(read_possible_alignemnt(p, align_expr) == FAIL) return FAIL;
+
+        // Closing "]"
+        if(expect_token(p, RSQB) == NULL) return FAIL;
+
+        return SUCCESS;
+    }
+
+    _reset_peek(p);
+    return SUCCESS;
+}
+
+unint handle_struct_decl_field(struct Parser* p, struct Ast_node* _struct_decl, struct Ast_node** align_start_expr, struct Ast_node** len_expr, struct Ast_node** align_per_el_expr, struct token** field_name) {
+    if(read_possible_array(p, len_expr, align_per_el_expr) == FAIL) return FAIL;
+    
+    if(read_possible_alignemnt(p, align_start_expr) == FAIL) return FAIL;
+
+    if((*field_name = expect_token(p, NAME)) == NULL) return FAIL;
+
+    struct AstStructDecl* struct_decl = &_struct_decl->node.struct_decl;
+    for(struct StructDeclField* field = struct_decl->head; field; field = field->next) {
+        if(_compare_identifiers(field->name->cps, field->name->len, (*field_name)->cps, (*field_name)->len) == SUCCESS ) {
+            _error_from_token(p, *field_name, ERROR_TYPE_DECLARATION, "redeclared struct field");
+            return FAIL;
+        }
+    }
+
+    // Read new line
+    if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+    return SUCCESS;
+}
+
+#define IS_SAVE_TYPE(type) ((type) == SAVEB_NODE || (type) == SAVEW_NODE || (type) == SAVEDW_NODE || (type) == SAVEQ_NODE || (type) == SAVEF_NODE || (type) == SAVED_NODE || (type) == SAVEP_NODE)
+
+struct Ast_node* handle_space_identifiers(struct Parser* p, struct token* _token, unint type) {
+    struct Ast_node *align_start_expr, *len_expr, *align_per_el_expr;
+    struct token*_s = NULL;
+    struct token*_e = NULL;
+    struct Ast_node* value = NULL;
+
+    // Save types must have array expression
+    if(IS_SAVE_TYPE(type)) {
+        struct token* p1 = _peek_token(p);
+        if(p1 == NULL) return NULL;
+
+        if(expected_token(p, p1, LSQB) == NULL) return NULL;
+        _reset_peek(p);
+    }
+
+    if(read_possible_array(p, &len_expr, &align_per_el_expr) == FAIL) return NULL;
+
+    if(read_possible_alignemnt(p, &align_start_expr) == FAIL) return NULL;
+
+    if(!IS_SAVE_TYPE(type)) {
+        value = parse_expr_with_start_and_end(p, &_s, &_e);
+        if(value == NULL) return NULL;
+    }
+
+    // Read new line
+    if(expect_token(p, NEWLINE) == NULL) return NULL;
+
+    struct Ast_node* _space = new_ast_space(p, _token, align_start_expr, len_expr, align_per_el_expr, type, /* Extra*/ value, _s, _e);
+    if(_space == NULL) return NULL;
+
+    return _space;
+}
+
 #define IS_ASSIGNMENT(_token) (_token == EQUAL || _token == PLUSEQUAL || _token == MINEQUAL || _token == STAREQUAL || _token == SLASHEQUAL || _token == PERCENTEQUAL || _token == AMPEREQUAL || _token == VBAREQUAL || _token == CIRCUMFLEXEQUAL || _token == LEFTSHIFTEQUAL || _token == RIGHTSHIFTEQUAL)
 
 unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags) {
@@ -1932,7 +2060,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
         // Already declared?
         if(is_macro_declared(p, macro_name_token->cps, macro_name_token->len) == SUCCESS) {
-            _error_from_token(p, macro_name_token, ERROR_TYPE_DECLARATION, "macro is already declared");
+            _error_from_token(p, macro_name_token, ERROR_TYPE_MESSAGE, "macro is already declared");
             return FAIL;
         }
 
@@ -2047,7 +2175,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         if(_include == NULL) return FAIL;
 
         if(_include->type != STRING) {
-            _error_from_token(p, _include, ERROR_TYPE_TYPE, "invalid type for @include");
+            _error_from_token(p, _include, ERROR_TYPE_TYPE, "invalid type for include");
             return FAIL;
         }
 
@@ -2057,7 +2185,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         // Check file
         char* include_path = cp_string_to_encoding(_include->cps+1, _include->len-2); // Remove the quotes
         if(include_path == NULL) {
-            _error_from_token(p, _include, ERROR_TYPE_MEMORY, "no available memory for @include string");
+            _error_from_token(p, _include, ERROR_TYPE_MEMORY, "no available memory for include string");
             return FAIL;
         }
 
@@ -2137,7 +2265,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
-        struct Ast_node* assert = new_ast_assert(p, expr, _s, _e);
+        struct Ast_node* assert = new_ast_assert(p, _token, expr, _s, _e);
         if(assert == NULL) return FAIL;
 
         *stmt_ast = assert;
@@ -2151,7 +2279,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
-        struct Ast_node* warn = new_ast_warn(p, expr, _s, _e);
+        struct Ast_node* warn = new_ast_warn(p, _token, expr, _s, _e);
         if(warn == NULL) return FAIL;
 
         *stmt_ast = warn;
@@ -2165,7 +2293,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
-        struct Ast_node* error = new_ast_error(p, expr, _s, _e);
+        struct Ast_node* error = new_ast_error(p, _token, expr, _s, _e);
         if(error == NULL) return FAIL;
 
         *stmt_ast = error;
@@ -2284,209 +2412,176 @@ _end_if:
         if(_import == NULL) return FAIL;
 
         if(_import->type != STRING) {
-            _error_from_token(p, _import, ERROR_TYPE_TYPE, "invalid type for @import");
+            _error_from_token(p, _import, ERROR_TYPE_TYPE, "invalid type for import");
             return FAIL;
         }
 
         struct token* _e = expect_token(p, NEWLINE);
         if(_e == NULL) return FAIL;
 
-        struct Ast_node* _i = new_ast_import(p, _import);
+        struct Ast_node* _i = new_ast_import(p, _token, _import);
         if(_i == NULL) return FAIL;
 
         *stmt_ast = _i;
         return SUCCESS;
     }
 
-    else if(is_at_identifier(_token, BYTE_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
+    else if(is_at_identifier(_token, BYTE_IDENTIFIER) == SUCCESS) return   ((*stmt_ast = handle_space_identifiers(p, _token, BYTE_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, WORD_IDENTIFIER) == SUCCESS) return   ((*stmt_ast = handle_space_identifiers(p, _token, WORD_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, DWORD_IDENTIFIER) == SUCCESS) return  ((*stmt_ast = handle_space_identifiers(p, _token, DWORD_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, QWORD_IDENTIFIER) == SUCCESS) return  ((*stmt_ast = handle_space_identifiers(p, _token, QWORD_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, FLOAT_IDENTIFIER) == SUCCESS) return  ((*stmt_ast = handle_space_identifiers(p, _token, FLOAT_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, DOUBLE_IDENTIFIER) == SUCCESS) return ((*stmt_ast = handle_space_identifiers(p, _token, DOUBLE_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, PTR_IDENTIFIER) == SUCCESS) return ((*stmt_ast = handle_space_identifiers(p, _token, PTR_NODE)) == NULL) ? FAIL : SUCCESS;
 
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+    else if(is_at_identifier(_token, SAVEB_IDENTIFIER) == SUCCESS) return   ((*stmt_ast = handle_space_identifiers(p, _token, SAVEB_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, SAVEW_IDENTIFIER) == SUCCESS) return   ((*stmt_ast = handle_space_identifiers(p, _token, SAVEW_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, SAVEDW_IDENTIFIER) == SUCCESS) return  ((*stmt_ast = handle_space_identifiers(p, _token, SAVEDW_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, SAVEQ_IDENTIFIER) == SUCCESS) return  ((*stmt_ast = handle_space_identifiers(p, _token, SAVEQ_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, SAVEF_IDENTIFIER) == SUCCESS) return  ((*stmt_ast = handle_space_identifiers(p, _token, SAVEF_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, SAVED_IDENTIFIER) == SUCCESS) return ((*stmt_ast = handle_space_identifiers(p, _token, SAVED_NODE)) == NULL) ? FAIL : SUCCESS;
+    else if(is_at_identifier(_token, SAVEP_IDENTIFIER) == SUCCESS) return ((*stmt_ast = handle_space_identifiers(p, _token, SAVEP_NODE)) == NULL) ? FAIL : SUCCESS;
 
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, BYTE_NODE);
-        if(_space == NULL) return FAIL;
+    else if(is_at_identifier(_token, STRUCT_IDENTIFIER) == SUCCESS) {
+        // Declaration or var
+        struct token* struct_type;
+        if((struct_type = expect_token(p, NAME)) == NULL) return FAIL;
 
-        *stmt_ast = _space;
-        return SUCCESS;
+        struct token* p1 = _peek_token(p);
+        if(p1 == NULL) return FAIL;
+
+        // Struct Variable
+        if(p1->type != NEWLINE) {
+            struct token* struct_name;
+            if((struct_name = expect_token(p, NAME)) == NULL) return FAIL;
+    
+            if(expect_token(p, NEWLINE) == NULL) return FAIL;
+    
+            // AST Struct var
+            // Depends on scope
+            struct Ast_node* struct_var = new_ast_struct_var(p, _token, struct_name);
+            if(struct_var == NULL) return FAIL;
+
+            *stmt_ast = struct_var;
+            return SUCCESS; 
+        }
+
+        // Struct Declaration
+        _read_token(p);
+        if(expect_token(p, INDENT) == NULL) return FAIL;
+
+        // new ast struct decl
+        struct Ast_node* struct_decl = new_ast_struct_decl(p, _token);
+        if(struct_decl == NULL) return FAIL;
+
+        while(true) {
+            struct Ast_node *align_start_expr, *len_expr, *align_per_el_expr;
+            struct token* field_name;
+            unint data_type;
+
+            struct token* type = _read_token(p);
+            if(type == NULL) return FAIL;
+
+            if(type->type == DEDENT) {
+                *stmt_ast = struct_decl;
+                return SUCCESS;
+            } 
+
+            else if(is_at_identifier(type, BYTE_IDENTIFIER) == SUCCESS) {
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                data_type = BYTE_NODE;
+            }
+
+            else if(is_at_identifier(type, WORD_IDENTIFIER) == SUCCESS) {
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                data_type = WORD_NODE;
+            }
+
+            else if(is_at_identifier(type, DWORD_IDENTIFIER) == SUCCESS) {
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                data_type = DWORD_NODE;
+            }
+
+            else if(is_at_identifier(type, QWORD_IDENTIFIER) == SUCCESS) {
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                data_type = QWORD_NODE;
+            }
+
+            else if(is_at_identifier(type, FLOAT_IDENTIFIER) == SUCCESS) {
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                data_type = FLOAT_NODE;
+            }
+
+            else if(is_at_identifier(type, DOUBLE_IDENTIFIER) == SUCCESS) {
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                data_type = DOUBLE_NODE;
+            }
+
+            else if(is_at_identifier(type, PTR_IDENTIFIER) == SUCCESS) {
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                data_type = PTR_NODE;
+            }
+
+            else {
+                _error_from_token(p, type, ERROR_TYPE_MESSAGE, "invalid type");
+                return FAIL;      
+            }
+
+            // Append node to struct declaration
+            if(insert_struct_field(p, type, &struct_decl->node.struct_decl, field_name, data_type, len_expr, align_per_el_expr, align_start_expr) == FAIL) return FAIL;
+        }
     }
 
-    else if(is_at_identifier(_token, WORD_IDENTIFIER) == SUCCESS) {
+    else if(is_at_identifier(_token, STRING_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
+        if(expr == NULL) return FAIL;
 
         // Read new line
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, WORD_NODE);
-        if(_space == NULL) return FAIL;
+        struct Ast_node* string = new_ast_at_string(p, _token, expr, _s, _e);
+        if(string == NULL) return FAIL;
 
-        *stmt_ast = _space;
-        return SUCCESS;
+        *stmt_ast = string;
+        return SUCCESS;     
     }
 
-    else if(is_at_identifier(_token, DWORD_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
+    else if(is_at_identifier(_token, DEL_IDENTIFIER) == SUCCESS) {
+        struct token* ident;
 
-        // Read new line
+        if((ident = expect_token(p, NAME)) == NULL) return FAIL;
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, DWORD_NODE);
-        if(_space == NULL) return FAIL;
+        struct Ast_node* del = new_ast_del(p, _token, ident);
+        if(del == NULL) return FAIL;
 
-        *stmt_ast = _space;
-        return SUCCESS;
-    }
-
-    else if(is_at_identifier(_token, QWORD_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
-
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, QWORD_NODE);
-        if(_space == NULL) return FAIL;
-
-        *stmt_ast = _space;
-        return SUCCESS;
-    }
-
-    else if(is_at_identifier(_token, FLOAT_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
-
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, FLOAT_NODE);
-        if(_space == NULL) return FAIL;
-
-        *stmt_ast = _space;
-        return SUCCESS;
-    }
-
-    else if(is_at_identifier(_token, DOUBLE_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
-
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, DOUBLE_NODE);
-        if(_space == NULL) return FAIL;
-
-        *stmt_ast = _space;
-        return SUCCESS;
-    }
-
-    else if(is_at_identifier(_token, SAVEB_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
-
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, SAVEB_NODE);
-        if(_space == NULL) return FAIL;
-
-        *stmt_ast = _space;
-        return SUCCESS;
-    }
-
-    else if(is_at_identifier(_token, SAVEW_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
-
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, SAVEW_NODE);
-        if(_space == NULL) return FAIL;
-
-        *stmt_ast = _space;
-        return SUCCESS;
-    }
-
-    else if(is_at_identifier(_token, SAVEDW_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
-
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, SAVEDW_NODE);
-        if(_space == NULL) return FAIL;
-
-        *stmt_ast = _space;
-        return SUCCESS;
-    }
-
-    else if(is_at_identifier(_token, SAVEQ_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
-
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, SAVEQ_NODE);
-        if(_space == NULL) return FAIL;
-
-        *stmt_ast = _space;
-        return SUCCESS;
-    }
-
-    else if(is_at_identifier(_token, SAVEF_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
-
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, SAVEF_NODE);
-        if(_space == NULL) return FAIL;
-
-        *stmt_ast = _space;
-        return SUCCESS;
-    }
-
-    else if(is_at_identifier(_token, SAVED_IDENTIFIER) == SUCCESS) {
-        struct token *_s, *_e;
-        struct Ast_node* total = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(total == NULL) return FAIL;
-
-        // Read new line
-        if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-        struct Ast_node* _space = new_ast_space(p, total, _s, _e, SAVED_NODE);
-        if(_space == NULL) return FAIL;
-
-        *stmt_ast = _space;
+        *stmt_ast = del;
         return SUCCESS;
     }
 
     else if(_token->type == NAME && is_at_identifier(_token, NULL) == FAIL) {
         unint level = 0;
 
-        // Assignment
+        // Assignment & Labels
         while(true) {
             struct token* _t = _peek_token(p); 
             if(_t == NULL) return FAIL;
 
-            if     (_t->type == LPAR || _t->type == LSQB) ++level;
+            // Labels
+            if(_t->type == COLON) {
+                _read_token(p);
+
+                if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+                struct Ast_node* label = new_ast_label(p, _token, _token);
+                if(label == NULL) return FAIL;
+
+                *stmt_ast = label;
+                return SUCCESS;
+            }
+
+            else if(_t->type == LPAR || _t->type == LSQB) ++level;
             else if(_t->type == RPAR || _t->type == RSQB) --level;
             else if(_t->type == NEWLINE) break;
             else if((IS_ASSIGNMENT(_t->type)) && level == 0) {

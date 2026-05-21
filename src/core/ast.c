@@ -258,10 +258,10 @@ struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ide
 }
 
 // Warn, error, include, assert
-struct Ast_node* new_ast_error(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e) {
+struct Ast_node* new_ast_error(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
-        memory_error(p, "No available memory for AST error node");  
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST error node");
         return NULL;
     }
 
@@ -273,10 +273,10 @@ struct Ast_node* new_ast_error(struct Parser* p, struct Ast_node* expr, struct t
     return node;
 }
 
-struct Ast_node* new_ast_warn(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e) {
+struct Ast_node* new_ast_warn(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
-        memory_error(p, "No available memory for AST warn node");  
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST warn node");
         return NULL;
     }
 
@@ -288,38 +288,56 @@ struct Ast_node* new_ast_warn(struct Parser* p, struct Ast_node* expr, struct to
     return node;
 }
 
-struct Ast_node* new_ast_import(struct Parser* p, struct token* _token) {
+struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct token* import_token) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
-        memory_error(p, "No available memory for AST import node");  
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST import node");
         return NULL;
     }
 
     node->type = IMPORT_NODE;
-    node->node.import.import = _token;
+    node->node.import.import = import_token;
 
     return node;
 }
 
-struct Ast_node* new_ast_space(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e, unint type) {
+struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
-        memory_error(p, "No available memory for AST space node");  
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST space node");
         return NULL;
     }
 
     node->type = type;
-    node->node.space.expr = expr;
+
+    node->node.space.len_expr = len_expr;
+    node->node.space.align_per_el_expr = align_per_el_expr;
+    node->node.space.align_start_expr = align_start_expr;
+
+    node->node.space.value = value;
     node->node.space._s = _s;
     node->node.space._e = _e;
 
     return node;
 }
 
-struct Ast_node* new_ast_assert(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e) {
+struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
-        memory_error(p, "No available memory for AST assert node");  
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST label node"); 
+        return NULL;
+    }
+
+    node->type = LABEL_NODE;
+    node->node.label.name = name;
+
+    return node;
+}
+
+struct Ast_node* new_ast_assert(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST assert node");
         return NULL;
     }
 
@@ -327,6 +345,85 @@ struct Ast_node* new_ast_assert(struct Parser* p, struct Ast_node* expr, struct 
     node->node.assert.assert = expr;
     node->node.assert._s = _s;
     node->node.assert._e = _e;
+
+    return node;
+}
+
+struct Ast_node* new_ast_struct_decl(struct Parser* p, struct token* _token) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST struct declaration node");
+        return NULL;
+    }
+
+    node->type = STRUCT_DECL_NODE;
+
+    node->node.struct_decl.head = NULL;
+    node->node.struct_decl.tail = NULL;
+
+    return node;
+}
+
+unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStructDecl* struct_decl, struct token* name, unint type, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, struct Ast_node* align_start_expr) {
+    struct StructDeclField* field = (struct StructDeclField*)MEM_ALLOC(sizeof(struct StructDeclField), "struct field");
+    if(field == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST struct field node"); 
+        return FAIL;
+    }
+
+    field->name = name;
+    field->type = type;
+    field->len_expr = len_expr;
+    field->align_per_el_expr = align_per_el_expr;
+    field->align_start_expr = align_start_expr;
+    field->next = NULL;
+
+    // Link
+    if(struct_decl->head == NULL) struct_decl->head = field;
+
+    if(struct_decl->tail != NULL) struct_decl->tail->next = field;
+    struct_decl->tail = field;
+
+    return SUCCESS;
+}
+
+struct Ast_node* new_ast_struct_var(struct Parser* p, struct token* _token, struct token* struct_name) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST struct variable node");
+        return NULL;
+    }
+
+    node->type = STRUCT_VAR_NODE;
+    return node;
+}
+
+
+struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST string node");
+        return NULL;
+    }
+
+    node->type = STRING_NODE;
+
+    node->node.string.expr = expr;
+    node->node.string._s = _s;
+    node->node.string._e = _e;
+
+    return node;
+}
+
+struct Ast_node* new_ast_del(struct Parser* p, struct token* _token, struct token* ident) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST string node");
+        return NULL;
+    }
+
+    node->type = DEL_NODE;
+    node->node.del.ident = ident;
 
     return node;
 }
@@ -371,6 +468,9 @@ char* assign_token_to_text(unsigned int ass) {
     }
 }
 
+#define IS_SAVE_TYPE(type) ((type) == SAVEB_NODE || (type) == SAVEW_NODE || (type) == SAVEDW_NODE || (type) == SAVEQ_NODE || (type) == SAVEF_NODE || (type) == SAVED_NODE || (type) == SAVEP_NODE)
+
+
 void dbg_ast_recur(struct Ast_node* ast, unint level) {
     for(unint i=0; i<level; ++i) LOG("\t");
     LOG("[");
@@ -387,7 +487,11 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case REPEAT_NODE: { LOG("REPEAT_NODE"); break; }
         case BREAK_NODE: { LOG("BREAK_NODE"); break; }
 
-        case IMPORT_NODE: { LOG("IMPORT_NODE]"); return; }
+        case IMPORT_NODE: { LOG("IMPORT_NODE"); break; }
+
+        case STRING_NODE: { LOG("STRING_NODE"); break; }
+
+        case DEL_NODE: { LOG("DEL_NODE"); break; }
 
         case BYTE_NODE: { LOG("BYTE_NODE"); break; }
         case WORD_NODE: { LOG("WORD_NODE"); break; }
@@ -395,6 +499,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case QWORD_NODE : { LOG("QWORD_NODE"); break; }
         case FLOAT_NODE : { LOG("FLOAT_NODE"); break; }
         case DOUBLE_NODE : { LOG("DOUBLE_NODE"); break; }
+        case PTR_NODE : { LOG("PTR_NODE"); break; }
 
         case SAVEB_NODE: { LOG("SAVEB_NODE"); break; }
         case SAVEW_NODE: { LOG("SAVEW_NODE"); break; }
@@ -402,6 +507,11 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case SAVEQ_NODE: { LOG("SAVEQ_NODE"); break; }
         case SAVEF_NODE: { LOG("SAVEF_NODE"); break; }
         case SAVED_NODE: { LOG("SAVED_NODE"); break; }
+        case SAVEP_NODE: { LOG("SAVEP_NODE"); break; }
+
+        case LABEL_NODE: { LOG("LABEL_NODE"); break; }
+
+        case STRUCT_DECL_NODE: { LOG("STRUCT_DECL_NODE"); break; }
 
         case ASSIGN_VAR_NODE: { LOG("ASSIGN_VAR_NODE"); break; }
         case ASSIGN_VAR_IDX_NODE: { LOG("ASSIGN_VAR_IDX_NODE"); break; }
@@ -622,6 +732,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case QWORD_NODE:
         case FLOAT_NODE:
         case DOUBLE_NODE:
+        case PTR_NODE:
 
         case SAVEB_NODE:
         case SAVEW_NODE:
@@ -629,11 +740,102 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case SAVEQ_NODE:
         case SAVEF_NODE:
         case SAVED_NODE:
+        case SAVEP_NODE:
             LOG("\n");
-            for(unint i=0; i<level; ++i) LOG("\t");
-            dbg_ast_recur(ast->node.space.expr, level);
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[LEN] ");
+            if(ast->node.space.len_expr == NULL) LOG("<NULL>");
+            else {
+                LOG("\n");
+                dbg_ast_recur(ast->node.space.len_expr, level+2);
+            }
+            LOG("\n");
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[ALIGNMENT PER ELEMENT] ");
+            if(ast->node.space.align_per_el_expr == NULL) LOG("<NULL>");
+            else {
+                LOG("\n");
+                dbg_ast_recur(ast->node.space.align_per_el_expr, level+2);
+            }
+            LOG("\n");
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[ALIGNMENT START] ");
+            if(ast->node.space.align_start_expr == NULL) LOG("<NULL>");
+            else {
+                LOG("\n");
+                dbg_ast_recur(ast->node.space.align_start_expr, level+2);
+            }
+            
+            if(!IS_SAVE_TYPE(ast->type)) {
+                LOG("\n");
+                for(unint i=0; i<level+1; ++i) LOG("\t");
+                LOG("[VALUE]\n");
+                dbg_ast_recur(ast->node.space.value, level+2);
+            }
+            LOG("\n");
             break;
 
+        case LABEL_NODE:
+            for(unint i=0; i<ast->node.label.name->len; ++i) LOG_CP(ast->node.label.name->cps[i]);
+            LOG("\n");
+            break;
+
+        
+        case STRUCT_DECL_NODE:
+            LOG("\n");
+            for(struct StructDeclField* field = ast->node.struct_decl.head; field; field = field->next) {
+                for(unint i=0; i<level+1; ++i) LOG("\t");
+                LOG("[FIELD] ");
+                for(unint i=0; i<field->name->len; ++i) LOG_CP(field->name->cps[i]);
+                LOG("\n");
+                for(unint i=0; i<level+2; ++i) LOG("\t");
+                LOG("[TYPE] ");
+                switch(field->type) {
+                    case BYTE_NODE: { LOG("BYTE_NODE"); break; }
+                    case WORD_NODE: { LOG("WORD_NODE"); break; }
+                    case DWORD_NODE : { LOG("DWORD_NODE"); break; }
+                    case QWORD_NODE : { LOG("QWORD_NODE"); break; }
+                    case FLOAT_NODE : { LOG("FLOAT_NODE"); break; }
+                    case DOUBLE_NODE : { LOG("DOUBLE_NODE"); break; }
+                    case PTR_NODE: { LOG("PTR_NODE"); break; }
+                }
+                LOG("\n");
+                for(unint i=0; i<level+2; ++i) LOG("\t");
+                LOG("[LEN] ");
+                if(field->len_expr == NULL) LOG("<NULL>");
+                else {
+                    LOG("\n");
+                    dbg_ast_recur(field->len_expr, level+3);
+                }
+                LOG("\n");
+                for(unint i=0; i<level+2; ++i) LOG("\t");
+                LOG("[ALIGNMENT PER ELEMENT] ");
+                if(field->align_per_el_expr == NULL) LOG("<NULL>");
+                else {
+                    LOG("\n");
+                    dbg_ast_recur(field->align_per_el_expr, level+3);
+                }
+                LOG("\n");
+                for(unint i=0; i<level+2; ++i) LOG("\t");
+                LOG("[ALIGNMENT START] ");
+                if(field->align_start_expr == NULL) LOG("<NULL>");
+                else {
+                    LOG("\n");
+                    dbg_ast_recur(field->align_start_expr, level+3);
+                }
+                LOG("\n");
+            }
+            break;
+
+        case STRING_NODE:
+            LOG("\n");
+            dbg_ast_recur(ast->node.string.expr, level+1);
+            break;
+
+        case DEL_NODE:
+            for(unint i=0; i<ast->node.del.ident->len; ++i) LOG_CP(ast->node.del.ident->cps[i]);
+            LOG("\n");
+            break;
         default: { LOG("INVALID_NODE"); break; }
     }
 }

@@ -29,6 +29,7 @@ enum AST_types {
     QWORD_NODE,
     FLOAT_NODE,
     DOUBLE_NODE,
+    PTR_NODE,
 
     SAVEB_NODE,
     SAVEW_NODE,
@@ -36,8 +37,19 @@ enum AST_types {
     SAVEQ_NODE,
     SAVEF_NODE,
     SAVED_NODE,
+    SAVEP_NODE,
 
+    LABEL_NODE,
+
+    
+    STRUCT_DECL_NODE,
+    STRUCT_VAR_NODE,
+    
     IMPORT_NODE,
+    
+    DEL_NODE,
+
+    STRING_NODE,
 
     ASSIGN_VAR_NODE,
     ASSIGN_VAR_IDX_NODE,
@@ -166,10 +178,54 @@ struct AstImport {
     struct token* import;
 };
 
+// del
+struct AstDel {
+    struct token* ident;
+};
+
 struct AstSpace {
+    struct Ast_node* align_start_expr;
+    struct Ast_node* len_expr;
+    struct Ast_node* align_per_el_expr;
+    unint type;
+    
+    /* For @byte, ... */ 
+    struct Ast_node* value;
+    struct token* _s; 
+    struct token* _e;
+};
+
+struct AstLabel {
+    struct token* name;
+};
+
+struct StructDeclField {
+    struct token* name;
+
+    unint type;
+
+    // Array
+    struct Ast_node* len_expr;
+    struct Ast_node* align_per_el_expr;
+
+    struct Ast_node* align_start_expr;
+
+    struct StructDeclField* next;
+};
+
+struct AstStructDecl {
+    struct StructDeclField* head;
+    struct StructDeclField* tail;
+};
+
+struct AstStructVar {
+
+};
+
+struct AstString {
     struct Ast_node* expr;
     struct token* _s; // For error reporting
-    struct token* _e; // For error reporting 
+    struct token* _e; // For error reporting    
 };
 
 // Macros
@@ -214,7 +270,18 @@ struct Ast_node {
         // Import
         struct AstImport import;
 
+        // String
+        struct AstString string;
+
+        // @byte, @word, @dword, @qword, @float, @double
+        // @saveb, @savew, @savedw, @saveq, @savef, @saved
         struct AstSpace space;
+
+        struct AstLabel label;
+
+        struct AstStructDecl struct_decl;
+
+        struct AstDel del;
 
         // Assignments
         struct AstAssignVariable var_assign;
@@ -251,17 +318,28 @@ struct Ast_node* new_ast_while(struct Parser* p, struct token* _token, struct As
 struct Ast_node* new_ast_repeat(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
 struct Ast_node* new_ast_break(struct Parser* p, struct token* _token);
 
-struct Ast_node* new_ast_import(struct Parser* p, struct token* _token);
+struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct token* import_token);
 
-struct Ast_node* new_ast_space(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e, unint type);
+struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
+
+struct Ast_node* new_ast_del(struct Parser* p, struct token* _token, struct token* ident);
+
+struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e);
+
+struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name);
+
+struct Ast_node* new_ast_struct_decl(struct Parser* p, struct token* _token);
+unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStructDecl* struct_decl, struct token* name, unint type, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, struct Ast_node* align_start_expr);
+
+struct Ast_node* new_ast_struct_var(struct Parser* p, struct token* _token, struct token* struct_name);
 
 struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* expr, unint ass_type);
 struct Ast_node* new_ast_assign_variable_idx(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr, unint ass_type);
 struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ident, struct Ast_node* expr, unint ass_type);
 
-struct Ast_node* new_ast_assert(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e);
-struct Ast_node* new_ast_warn(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e);
-struct Ast_node* new_ast_error(struct Parser* p, struct Ast_node* expr, struct token* _s, struct token* _e);
+struct Ast_node* new_ast_assert(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
+struct Ast_node* new_ast_warn(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
+struct Ast_node* new_ast_error(struct Parser* p, struct token* _token,  struct Ast_node* expr, struct token* _s, struct token* _e);
 
 void dbg_ast(struct Ast_node* ast);
 
