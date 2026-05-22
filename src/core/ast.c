@@ -54,11 +54,21 @@ struct Ast_node* new_ast_number(struct Parser* p, struct token* _token, unint is
     return (node->node.literal.value != NULL) ? node : NULL;   
 }
 
+struct Ast_node* new_ast_dollar(struct Parser* p, struct token* _token) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the AST dollar node");
+        return NULL;
+    }
+
+    node->type = DOLLAR_NODE;
+    return node;
+}
 
 struct Ast_node* new_ast_binop(struct Parser* p, struct token* op_token, unint op, struct Ast_node* left, struct Ast_node* right) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
-        _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "no available memory for the AST binop");
+        _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "no available memory for the AST binop node");
         return NULL;
     }
 
@@ -178,7 +188,7 @@ struct Ast_node* new_ast_break(struct Parser* p, struct token* _token) {
         return NULL;
     }
 
-    node->type = REPEAT_NODE;
+    node->type = BREAK_NODE;
     return node;
 }
 
@@ -242,7 +252,7 @@ struct Ast_node* new_ast_assign_variable_idx(struct Parser* p, struct token* ide
     return node;
 }
 
-struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ident, struct Ast_node* expr, unint ass_type) {
+struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ident, struct Ast_node* expr) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, ident, ERROR_TYPE_MEMORY, "no available memory for AST append assignment node");
@@ -252,7 +262,6 @@ struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ide
     node->type = ASSIGN_APPEND_ARRAY_NODE;
     node->node.var_array_append_assign.expr = expr;
     node->node.var_array_append_assign.name = ident;
-    node->node.var_array_append_assign.ass_type = ass_type;
 
     return node;
 }
@@ -349,7 +358,7 @@ struct Ast_node* new_ast_assert(struct Parser* p, struct token* _token, struct A
     return node;
 }
 
-struct Ast_node* new_ast_struct_decl(struct Parser* p, struct token* _token) {
+struct Ast_node* new_ast_struct_decl(struct Parser* p, struct token* _token, struct token* struct_name) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST struct declaration node");
@@ -358,13 +367,14 @@ struct Ast_node* new_ast_struct_decl(struct Parser* p, struct token* _token) {
 
     node->type = STRUCT_DECL_NODE;
 
+    node->node.struct_decl.struct_name = struct_name;
     node->node.struct_decl.head = NULL;
     node->node.struct_decl.tail = NULL;
 
     return node;
 }
 
-unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStructDecl* struct_decl, struct token* name, unint type, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, struct Ast_node* align_start_expr) {
+unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStructDecl* struct_decl, struct token* name, struct token* struct_name, unint type, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, struct Ast_node* align_start_expr) {
     struct StructDeclField* field = (struct StructDeclField*)MEM_ALLOC(sizeof(struct StructDeclField), "struct field");
     if(field == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST struct field node"); 
@@ -387,7 +397,7 @@ unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStru
     return SUCCESS;
 }
 
-struct Ast_node* new_ast_struct_var(struct Parser* p, struct token* _token, struct token* struct_name) {
+struct Ast_node* new_ast_struct_var(struct Parser* p, struct token* _token, struct token* struct_name, struct token* struct_var_name) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST struct variable node");
@@ -395,9 +405,75 @@ struct Ast_node* new_ast_struct_var(struct Parser* p, struct token* _token, stru
     }
 
     node->type = STRUCT_VAR_NODE;
+    node->node.struct_var.struct_name = struct_name;
+    node->node.struct_var.var_name = struct_var_name;
+    node->node.struct_var.head = NULL;
+    node->node.struct_var.tail = NULL;
+
     return node;
 }
 
+unint insert_struct_field_assignment(struct Parser* p, struct token* _token, struct StructAssignField** head, struct StructAssignField** tail, struct token* field_name, struct Ast_node* value) {
+    struct StructAssignField* field = (struct StructAssignField*)MEM_ALLOC(sizeof(struct StructAssignField), "struct assignment field");
+    if(field == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for struct assignment field"); 
+        return FAIL;
+    }
+
+    field->field_name = field_name;
+    field->value = value;
+    field->head = NULL;
+    field->tail = NULL;
+
+    field->next = NULL;
+
+    // Link
+    if(*head == NULL) *head = field;
+
+    if(*tail != NULL) (*tail)->next = field;
+    *tail = field;
+
+    return SUCCESS;
+}
+
+struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct token* calling_conv, struct token* func_name, unint return_type) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST function node");
+        return NULL;
+    }
+
+    node->type = FUN_NODE;
+
+    node->node.fun_decl.calling_conv = calling_conv;
+    node->node.fun_decl.func_name = func_name;
+    node->node.fun_decl.return_type = return_type;
+
+    node->node.fun_decl.head = NULL;
+    node->node.fun_decl.tail = NULL;
+
+    return node;
+}
+
+unint insert_fun_decl_arg(struct Parser* p, struct token* _token, struct AstFuncDecl* func_decl, struct token* arg_name, unint type) {
+    struct FuncDeclArg* arg = (struct FuncDeclArg*)MEM_ALLOC(sizeof(struct FuncDeclArg), "function declaration arg");
+    if(arg == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for function declaration arg"); 
+        return FAIL;
+    }
+
+    arg->arg_name = arg_name;
+    arg->type = type;
+    arg->next = NULL;
+
+    // Link
+    if(func_decl->head == NULL) func_decl->head = arg;
+
+    if(func_decl->tail != NULL) func_decl->tail->next = arg;
+    func_decl->tail = arg;
+
+    return SUCCESS;
+}
 
 struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
     struct Ast_node* node = new_ast_node();
@@ -427,6 +503,33 @@ struct Ast_node* new_ast_del(struct Parser* p, struct token* _token, struct toke
 
     return node;
 }
+
+struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct token* ident) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST return node");
+        return NULL;
+    }
+
+    node->type = RETURN_NODE;
+    node->node._return.ident = ident;
+
+    return node;
+}
+
+void dbg_ast_recur(struct Ast_node *ast, unint level);
+
+void dbg_struct_var_fields(struct StructAssignField* head, unint level) {
+    for(struct StructAssignField* field = head; field; field = field->next) {
+        for(unint i=0; i<level; ++i) LOG("\t");
+        LOG("[FIELD] ");
+        for(unint i=0; i<field->field_name->len; ++i) LOG_CP(field->field_name->cps[i]);
+        LOG("\n");
+        if(field->value) dbg_ast_recur(field->value, level+1);
+        else dbg_struct_var_fields(field->head, level+1);
+    }
+}
+
 
 char* assign_token_to_text(unsigned int ass) {
     switch (ass) {
@@ -478,20 +581,26 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case BINOP_NODE: { LOG("BINOP_NODE"); break; }
         case LITERAL_NODE: { LOG("LITERAL_NODE"); break; }
         case VAR_NODE: { LOG("VARIABLE_NODE"); break; }
-    
+        case DOLLAR_NODE: { LOG("DOLLAR_NODE]\n"); return; }
+
+
         case STATEMENTS_NODE: { LOG("STATEMENTS_NODE"); break; }
     
         case IF_NODE: { LOG("IF_NODE"); break; }
     
         case WHILE_NODE: { LOG("WHILE_NODE"); break; }
         case REPEAT_NODE: { LOG("REPEAT_NODE"); break; }
-        case BREAK_NODE: { LOG("BREAK_NODE"); break; }
+        case BREAK_NODE: { LOG("BREAK_NODE]\n"); return; }
 
         case IMPORT_NODE: { LOG("IMPORT_NODE"); break; }
 
         case STRING_NODE: { LOG("STRING_NODE"); break; }
 
         case DEL_NODE: { LOG("DEL_NODE"); break; }
+
+        case RETURN_NODE: { LOG("RETURN_NODE"); break; }
+
+        case FUN_NODE: { LOG("FUN_NODE"); break; }
 
         case BYTE_NODE: { LOG("BYTE_NODE"); break; }
         case WORD_NODE: { LOG("WORD_NODE"); break; }
@@ -512,6 +621,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case LABEL_NODE: { LOG("LABEL_NODE"); break; }
 
         case STRUCT_DECL_NODE: { LOG("STRUCT_DECL_NODE"); break; }
+        case STRUCT_VAR_NODE: { LOG("STRUCT_VAR_NODE"); break; }
 
         case ASSIGN_VAR_NODE: { LOG("ASSIGN_VAR_NODE"); break; }
         case ASSIGN_VAR_IDX_NODE: { LOG("ASSIGN_VAR_IDX_NODE"); break; }
@@ -673,10 +783,6 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             dbg_ast_recur(&stmts, level+2);
             break;
 
-        case BREAK_NODE:
-            LOG("\n");
-            break;
-
         case ERROR_NODE:
             LOG("\n");
             dbg_ast_recur(ast->node.error.error, level+1);
@@ -782,6 +888,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
 
         
         case STRUCT_DECL_NODE:
+            for(unint i=0; i<ast->node.struct_decl.struct_name->len; ++i) LOG_CP(ast->node.struct_decl.struct_name->cps[i]);
             LOG("\n");
             for(struct StructDeclField* field = ast->node.struct_decl.head; field; field = field->next) {
                 for(unint i=0; i<level+1; ++i) LOG("\t");
@@ -798,6 +905,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                     case FLOAT_NODE : { LOG("FLOAT_NODE"); break; }
                     case DOUBLE_NODE : { LOG("DOUBLE_NODE"); break; }
                     case PTR_NODE: { LOG("PTR_NODE"); break; }
+                    case STRUCT_DECL_NODE: { LOG("STRUCT_DECL_NODE"); break; }
                 }
                 LOG("\n");
                 for(unint i=0; i<level+2; ++i) LOG("\t");
@@ -836,6 +944,73 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             for(unint i=0; i<ast->node.del.ident->len; ++i) LOG_CP(ast->node.del.ident->cps[i]);
             LOG("\n");
             break;
+
+        case RETURN_NODE:
+            if(ast->node._return.ident == NULL) LOG("<NULL>");
+            else for(unint i=0; i<ast->node._return.ident->len; ++i) LOG_CP(ast->node._return.ident->cps[i]);
+            LOG("\n");
+            break;
+
+        case STRUCT_VAR_NODE:
+            for(unint i=0; i<ast->node.struct_var.struct_name->len; ++i) LOG_CP(ast->node.struct_var.struct_name->cps[i]);
+            LOG("\n");
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[NAME] ");
+            for(unint i=0; i<ast->node.struct_var.var_name->len; ++i) LOG_CP(ast->node.struct_var.var_name->cps[i]);
+            LOG("\n");
+            dbg_struct_var_fields(ast->node.struct_var.head, level+1);
+            break;
+
+        case FUN_NODE:
+            LOG("\n");
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[CALLING CONV] ");
+            for(unint i=0; i<ast->node.fun_decl.calling_conv->len; ++i) LOG_CP(ast->node.fun_decl.calling_conv->cps[i]);
+            LOG("\n");
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[NAME] ");
+            for(unint i=0; i<ast->node.fun_decl.func_name->len; ++i) LOG_CP(ast->node.fun_decl.func_name->cps[i]);
+            LOG("\n");
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[ARGS]\n");
+            for(struct FuncDeclArg* arg = ast->node.fun_decl.head; arg; arg = arg->next) {
+                for(unint i=0; i<level+2; ++i) LOG("\t");
+                    LOG("[");
+                    switch(arg->type) {
+                        case BYTE_NODE: { LOG("BYTE_NODE"); break; }
+                        case WORD_NODE: { LOG("WORD_NODE"); break; }
+                        case DWORD_NODE : { LOG("DWORD_NODE"); break; }
+                        case QWORD_NODE : { LOG("QWORD_NODE"); break; }
+                        case FLOAT_NODE : { LOG("FLOAT_NODE"); break; }
+                        case DOUBLE_NODE : { LOG("DOUBLE_NODE"); break; }
+                        case PTR_NODE: { LOG("PTR_NODE"); break; }
+                    }
+                    LOG("] ");
+                    for(unint i=0; i<arg->arg_name->len; ++i) LOG_CP(arg->arg_name->cps[i]);
+                    LOG("\n");
+            }
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[RETURN] ");
+            switch(ast->node.fun_decl.return_type) {
+                case BYTE_NODE: { LOG("BYTE_NODE"); break; }
+                case WORD_NODE: { LOG("WORD_NODE"); break; }
+                case DWORD_NODE : { LOG("DWORD_NODE"); break; }
+                case QWORD_NODE : { LOG("QWORD_NODE"); break; }
+                case FLOAT_NODE : { LOG("FLOAT_NODE"); break; }
+                case DOUBLE_NODE : { LOG("DOUBLE_NODE"); break; }
+                case PTR_NODE: { LOG("PTR_NODE"); break; }
+                case VOID_RETURN_TYPE: { LOG("VOID"); break; }
+            }
+            LOG("\n");
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[STATEMENTS]\n");
+
+            stmts.type = STATEMENTS_NODE;
+            stmts.node.statements = ast->node.fun_decl.statements;
+            dbg_ast_recur(&stmts, level+2);
+            break;
+
+
         default: { LOG("INVALID_NODE"); break; }
     }
 }

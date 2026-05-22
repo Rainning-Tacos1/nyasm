@@ -41,10 +41,11 @@
 #define ERROR_TYPE_OVERFLOW "OverflowError"
 #define ERROR_TYPE_DIVISION_ERROR "ZeroDivisionError"
 #define ERROR_TYPE_INDEX_ERROR "IndexError"
-#define ERROR_TYPE_DECLARATION "DeclarationError"
 #define ERROR_TYPE_MACRO_LIMIT "MacroLimit"
 #define ERROR_TYPE_ASSERT "AssertError"
 #define ERROR_TYPE_PATH "PathError"
+
+#define MAX_CTX_BLOCK_LEVEL 100
 
 #define MACRO_EXPANSION_TRACE_START_LIMIT 3
 #define MACRO_EXPANSION_TRACE_END_LIMIT 3

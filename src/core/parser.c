@@ -52,7 +52,9 @@
 #define IMPORT_IDENTIFIER ((int32_t[]){'i', 'm', 'p', 'o', 'r', 't', -1})
 #define STRUCT_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'u', 'c', 't', -1})
 #define STRING_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'i', 'n', 'g', -1})
+#define RETURN_IDENTIFIER ((int32_t[]){'r', 'e', 't', 'u', 'r', 'n', -1})
 #define DEL_IDENTIFIER ((int32_t[]){'d', 'e', 'l', -1})
+#define FUN_IDENTIFIER ((int32_t[]){'f', 'u', 'n', -1})
 
 #define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
 #define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
@@ -133,6 +135,7 @@ const char * const _Parser_TokenSymbols[] = {
     "<N_TOKENS>",      // <N_TOKENS>
     "||",              // DOUBLEVBAR
     "&&",              // DOUBLEAMPER
+    "$",               // DOLLAR
 };
 
 // Errors
@@ -926,7 +929,7 @@ struct Parser* _Parser_New(struct tok_state* tok) {
     p->variables = p->variables_tail = NULL;
     p->head = p->last_token = p->peek = p->tail = NULL;
     p->macros = p->macros_tail = NULL;
-    p->pending_dedents = p->macro_end_cursor = p->macro_expansion_count = p->is_inside_macro_decl = 0;
+    p->ctx_block_cursor = p->pending_dedents = p->macro_end_cursor = p->macro_expansion_count = p->is_inside_macro_decl = 0;
 
     for(unint i=0; i<MAX_MACRO_EXPANSION_LIMIT; ++i) p->macro_ends[i] = NULL;
 
@@ -1078,12 +1081,6 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
                 return NULL;
             }
 
-            // struct Variable* var = get_variable(p, _token->cps, _token->len);
-            // if(var == NULL) {
-            //     _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "variable is not declared");
-            //     return NULL;
-            // }
-
             return new_ast_variable(p, _token);
         case LSQB:
             if((_token = _peek_token(p)) == NULL) return NULL;
@@ -1128,6 +1125,9 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
             }
 
             return new_ast_array(p, _token, arr);
+        case DOLLAR:
+            return new_ast_dollar(p, _token);
+
         default:
             _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "invalid syntax for expression");
             return NULL;
@@ -1340,6 +1340,9 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
                 return FAIL;
             }
             *val = var->val;
+            return SUCCESS;
+        case DOLLAR_NODE:
+            // Grab the current address value as an int
             return SUCCESS;
         case BINOP_NODE:
             struct AstBinOp* binop = &expr->node.binop;
@@ -1835,31 +1838,50 @@ char* cp_string_to_encoding(int32_t* cps, nint cp_len) {
 #define FLAG_MACRO_DECL 1
 #define FLAG_INCLUDE_DECL 2
 
-unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags);
+unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags, unint block_ctx);
 
-unint _parse_block(struct Parser* p, struct AstStatements* statements, unint* found_eof) {
-    if(expect_token(p, INDENT) == NULL) return FAIL;
+unint is_inside_block(struct Parser* p, unint block_ctx) {
+    for(unint i=0; i<p->ctx_block_cursor; ++i) if(p->ctx_block_stack[i] == block_ctx) return SUCCESS;
+    return FAIL;
+}
+
+unint _parse_block(struct Parser* p, struct AstStatements* statements, unint block_ctx) {
+    // Add ctx to the stack
+    if(p->ctx_block_cursor >= MAX_CTX_BLOCK_LEVEL) {
+        memory_error(p, "Too many context blocks");
+        return FAIL;
+    }
+
+    p->ctx_block_stack[p->ctx_block_cursor++] = block_ctx;
+
+    if(block_ctx != CTX_GLOBAL && expect_token(p, INDENT) == NULL) return FAIL;
 
     while(true) {
-        _reset_peek(p);
-        struct token* dedent = _peek_token(p);
-        if(dedent == NULL) return FAIL;
+        if(block_ctx != CTX_GLOBAL) {
+            _reset_peek(p);
+            struct token* dedent = _peek_token(p);
+            if(dedent == NULL) return FAIL;
+    
+            DBG(1, "BLOCK PEEKED: [%s:l%d:c%d]\n", _Parser_TokenNames[dedent->type], dedent->lineno, dedent->col_offset);
+            if(dedent->type == DEDENT) {
+                _read_token(p);
 
-        DBG(1, "BLOCK PEEKED: [%s:l%d:c%d]\n", _Parser_TokenNames[dedent->type], dedent->lineno, dedent->col_offset);
-        if(dedent->type == DEDENT) {
-            _read_token(p);
-            *found_eof = 0;
-            return SUCCESS;
+                // Pop the stack
+                --p->ctx_block_cursor;
+                return SUCCESS;
+            }
         }
         
         // Parse statements
         struct Ast_node* stmt_ast = NULL;
         unint _flags = 0;
-        if(_parse_statement(p, &stmt_ast, &_flags) == FAIL) return FAIL;
+        if(_parse_statement(p, &stmt_ast, &_flags, block_ctx) == FAIL) return FAIL;
 
         if(_flags == FLAG_MACRO_DECL || _flags == FLAG_INCLUDE_DECL) continue; // Skip macro
+        // Eof
         if(stmt_ast == NULL) {
-            *found_eof = 1;
+            // Pop the stack
+            --p->ctx_block_cursor;
             return SUCCESS;
         }
 
@@ -1975,17 +1997,20 @@ _invalid_len:
     return SUCCESS;
 }
 
-unint handle_struct_decl_field(struct Parser* p, struct Ast_node* _struct_decl, struct Ast_node** align_start_expr, struct Ast_node** len_expr, struct Ast_node** align_per_el_expr, struct token** field_name) {
+unint handle_struct_decl_field(struct Parser* p, struct Ast_node* _struct_decl, struct Ast_node** align_start_expr, struct Ast_node** len_expr, struct Ast_node** align_per_el_expr, struct token** field_name, unint is_struct, struct token** struct_name) {
     if(read_possible_array(p, len_expr, align_per_el_expr) == FAIL) return FAIL;
     
     if(read_possible_alignemnt(p, align_start_expr) == FAIL) return FAIL;
+
+    // Struct names
+    if(is_struct && ((*struct_name = expect_token(p, NAME)) == NULL)) return FAIL;
 
     if((*field_name = expect_token(p, NAME)) == NULL) return FAIL;
 
     struct AstStructDecl* struct_decl = &_struct_decl->node.struct_decl;
     for(struct StructDeclField* field = struct_decl->head; field; field = field->next) {
         if(_compare_identifiers(field->name->cps, field->name->len, (*field_name)->cps, (*field_name)->len) == SUCCESS ) {
-            _error_from_token(p, *field_name, ERROR_TYPE_DECLARATION, "redeclared struct field");
+            _error_from_token(p, *field_name, ERROR_TYPE_MESSAGE, "redeclared struct field");
             return FAIL;
         }
     }
@@ -2031,9 +2056,71 @@ struct Ast_node* handle_space_identifiers(struct Parser* p, struct token* _token
     return _space;
 }
 
+unint expect_data_type(struct Parser* p, unint* data_type) {
+    struct token* data_type_tok = _read_token(p);
+    if(data_type_tok == NULL) return FAIL;
+
+    if(is_at_identifier(data_type_tok, BYTE_IDENTIFIER) == SUCCESS) *data_type = BYTE_NODE;
+    else if(is_at_identifier(data_type_tok, WORD_IDENTIFIER) == SUCCESS) *data_type = WORD_NODE;
+    else if(is_at_identifier(data_type_tok, DWORD_IDENTIFIER) == SUCCESS) *data_type = DWORD_NODE;
+    else if(is_at_identifier(data_type_tok, QWORD_IDENTIFIER) == SUCCESS) *data_type = QWORD_NODE;
+    else if(is_at_identifier(data_type_tok, FLOAT_IDENTIFIER) == SUCCESS) *data_type = FLOAT_NODE;
+    else if(is_at_identifier(data_type_tok, DOUBLE_IDENTIFIER) == SUCCESS) *data_type = DOUBLE_NODE;
+    else if(is_at_identifier(data_type_tok, PTR_IDENTIFIER) == SUCCESS) *data_type = PTR_NODE;
+    else {
+        _error_from_token(p, data_type_tok, ERROR_TYPE_MESSAGE, "invalid type");
+        return FAIL;  
+    }
+    return SUCCESS;
+}
+
+unint parse_struct_assign_block(struct Parser* p, struct StructAssignField** head, struct StructAssignField** tail) {
+    if(expect_token(p, INDENT) == NULL) return FAIL;
+    while(true) {
+        struct token* p2 = _peek_token(p);
+        if(p2 == NULL) return FAIL;
+
+        if(p2->type == DEDENT) {
+            _read_token(p);
+            return SUCCESS;
+        }
+
+        struct token *field_name, *_s, *_e;
+        if((field_name = expect_token(p, NAME)) == NULL) return FAIL;
+
+        // Check for duplicate
+        for(struct StructAssignField* field = *head; field; field = field->next) {
+            if(_compare_identifiers(field->field_name->cps, field->field_name->len, field_name->cps, field_name->len) == SUCCESS ) {
+                _error_from_token(p, field_name, ERROR_TYPE_MESSAGE, "duplicate field in stuct variable");
+                return FAIL;
+            }
+        }
+
+        if((p2 = _peek_token(p)) == NULL) return FAIL;
+
+        // Struct
+        if(p2->type == NEWLINE) {
+            _read_token(p);
+            if(insert_struct_field_assignment(p, field_name, head, tail, field_name, NULL) == FAIL) return FAIL;
+            if(parse_struct_assign_block(p, &((*tail)->head), &((*tail)->tail)) == FAIL) return FAIL;
+            continue;
+        }
+
+        // "="
+        if((expect_token(p, EQUAL)) == NULL) return FAIL;
+
+        struct Ast_node* val = parse_expr_with_start_and_end(p, &_s, &_e);
+        if(val == NULL) return FAIL;
+
+        if((expect_token(p, NEWLINE)) == NULL) return FAIL;
+
+        if(insert_struct_field_assignment(p, field_name, head, tail, field_name, val) == FAIL) return FAIL;
+    }
+}
+
 #define IS_ASSIGNMENT(_token) (_token == EQUAL || _token == PLUSEQUAL || _token == MINEQUAL || _token == STAREQUAL || _token == SLASHEQUAL || _token == PERCENTEQUAL || _token == AMPEREQUAL || _token == VBAREQUAL || _token == CIRCUMFLEXEQUAL || _token == LEFTSHIFTEQUAL || _token == RIGHTSHIFTEQUAL)
 
-unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags) {
+unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags, unint block_ctx) {
     struct token* _token;
     // Skip comments && new lines
     _reset_peek(p);
@@ -2310,10 +2397,8 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         struct Ast_node* _if = new_ast_if(p, _token, cond);
         if(_if == NULL) return FAIL;
 
-        unint found_eof = 0;
         // Parse the block
-        if(_parse_block(p, &_if->node._if.statements, &found_eof) == FAIL) return FAIL;
-        if(found_eof == 1) goto _end_if;
+        if(_parse_block(p, &_if->node._if.statements, CTX_IF) == FAIL) return FAIL;
 
         // Elif 
         struct token* _elif;
@@ -2337,8 +2422,8 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
             _if->node._if._elifs_end->cond = elif_cond;
 
             // Block
-            if(_parse_block(p, &_if->node._if._elifs_end->statements, &found_eof) == FAIL) return FAIL;
-            if(found_eof == 1) goto _end_if;
+            if(_parse_block(p, &_if->node._if._elifs_end->statements, CTX_IF) == FAIL) return FAIL;
+
         }
 
         if(is_at_identifier(_elif, ELSE_IDENTIFIER) == FAIL) goto _end_if;
@@ -2350,7 +2435,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         if(insert_else(p, _elif, _if) == FAIL) return FAIL;  
         
         // Block
-        if(_parse_block(p, _if->node._if._else, &found_eof) == FAIL) return FAIL;
+        if(_parse_block(p, _if->node._if._else, CTX_IF) == FAIL) return FAIL;
         
 _end_if:
         _reset_peek(p);
@@ -2368,9 +2453,8 @@ _end_if:
         struct Ast_node* _while = new_ast_while(p, _token, cond);
         if(_while == NULL) return FAIL;
 
-        unint found_eof = 0;
         // Parse the block
-        if(_parse_block(p, &_while->node._while.statements, &found_eof) == FAIL) return FAIL;
+        if(_parse_block(p, &_while->node._while.statements, CTX_LOOP) == FAIL) return FAIL;
 
         *stmt_ast = _while;
         return SUCCESS;
@@ -2387,17 +2471,20 @@ _end_if:
         struct Ast_node* _repeat = new_ast_repeat(p, _token, iter, _s, _e);
         if(_repeat == NULL) return FAIL;
 
-        unint found_eof = 0;
         // Parse the block
-        if(_parse_block(p, &_repeat->node._repeat.statements, &found_eof) == FAIL) return FAIL;
+        if(_parse_block(p, &_repeat->node._repeat.statements, CTX_LOOP) == FAIL) return FAIL;
 
         *stmt_ast = _repeat;
         return SUCCESS;
     }
 
     else if(is_at_identifier(_token, BREAK_IDENTIFIER) == SUCCESS) {
-
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+        if(is_inside_block(p, CTX_LOOP) == FAIL) {
+            _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@break outside loop");
+            return FAIL;
+        }
 
         struct Ast_node* _break = new_ast_break(p, _token);
         if(_break == NULL) return FAIL;
@@ -2444,26 +2531,39 @@ _end_if:
 
     else if(is_at_identifier(_token, STRUCT_IDENTIFIER) == SUCCESS) {
         // Declaration or var
-        struct token* struct_type;
-        if((struct_type = expect_token(p, NAME)) == NULL) return FAIL;
+        struct token* struct_name;
+        if((struct_name = expect_token(p, NAME)) == NULL) return FAIL;
 
         struct token* p1 = _peek_token(p);
         if(p1 == NULL) return FAIL;
 
         // Struct Variable
         if(p1->type != NEWLINE) {
-            struct token* struct_name;
-            if((struct_name = expect_token(p, NAME)) == NULL) return FAIL;
-    
+            struct token* struct_var_name;
+            if((struct_var_name = expect_token(p, NAME)) == NULL) return FAIL;
+
             if(expect_token(p, NEWLINE) == NULL) return FAIL;
-    
-            // AST Struct var
-            // Depends on scope
-            struct Ast_node* struct_var = new_ast_struct_var(p, _token, struct_name);
+
+            struct Ast_node* struct_var = new_ast_struct_var(p, _token, struct_name, struct_var_name);
             if(struct_var == NULL) return FAIL;
+
+            // Both functions / other contexts can have struct variable without values
+            struct token* p1 = _peek_token(p);
+            if(p1 == NULL) return FAIL;
+            _reset_peek(p);
+
+            if(p1->type == INDENT && block_ctx != CTX_FUNC) {
+                if(parse_struct_assign_block(p, &struct_var->node.struct_var.head, &struct_var->node.struct_var.tail) == FAIL) return FAIL;
+            }
+            _reset_peek(p);
 
             *stmt_ast = struct_var;
             return SUCCESS; 
+        }
+
+        if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
+            _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@struct declaration inside function");
+            return FAIL;   
         }
 
         // Struct Declaration
@@ -2471,12 +2571,12 @@ _end_if:
         if(expect_token(p, INDENT) == NULL) return FAIL;
 
         // new ast struct decl
-        struct Ast_node* struct_decl = new_ast_struct_decl(p, _token);
+        struct Ast_node* struct_decl = new_ast_struct_decl(p, _token, struct_name);
         if(struct_decl == NULL) return FAIL;
 
         while(true) {
             struct Ast_node *align_start_expr, *len_expr, *align_per_el_expr;
-            struct token* field_name;
+            struct token *field_name, *struct_name;
             unint data_type;
 
             struct token* type = _read_token(p);
@@ -2488,38 +2588,43 @@ _end_if:
             } 
 
             else if(is_at_identifier(type, BYTE_IDENTIFIER) == SUCCESS) {
-                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name, 0, &struct_name) == FAIL) return FAIL;
                 data_type = BYTE_NODE;
             }
 
             else if(is_at_identifier(type, WORD_IDENTIFIER) == SUCCESS) {
-                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name, 0, &struct_name) == FAIL) return FAIL;
                 data_type = WORD_NODE;
             }
 
             else if(is_at_identifier(type, DWORD_IDENTIFIER) == SUCCESS) {
-                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name, 0, &struct_name) == FAIL) return FAIL;
                 data_type = DWORD_NODE;
             }
 
             else if(is_at_identifier(type, QWORD_IDENTIFIER) == SUCCESS) {
-                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name, 0, &struct_name) == FAIL) return FAIL;
                 data_type = QWORD_NODE;
             }
 
             else if(is_at_identifier(type, FLOAT_IDENTIFIER) == SUCCESS) {
-                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name, 0, &struct_name) == FAIL) return FAIL;
                 data_type = FLOAT_NODE;
             }
 
             else if(is_at_identifier(type, DOUBLE_IDENTIFIER) == SUCCESS) {
-                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name, 0, &struct_name) == FAIL) return FAIL;
                 data_type = DOUBLE_NODE;
             }
 
             else if(is_at_identifier(type, PTR_IDENTIFIER) == SUCCESS) {
-                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name) == FAIL) return FAIL;
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name, 0, &struct_name) == FAIL) return FAIL;
                 data_type = PTR_NODE;
+            }
+
+            else if(is_at_identifier(type, STRUCT_IDENTIFIER) == SUCCESS) {
+                if(handle_struct_decl_field(p, struct_decl, &align_start_expr, &len_expr, &align_per_el_expr, &field_name, 1, &struct_name) == FAIL) return FAIL;
+                data_type = STRUCT_DECL_NODE;
             }
 
             else {
@@ -2528,7 +2633,7 @@ _end_if:
             }
 
             // Append node to struct declaration
-            if(insert_struct_field(p, type, &struct_decl->node.struct_decl, field_name, data_type, len_expr, align_per_el_expr, align_start_expr) == FAIL) return FAIL;
+            if(insert_struct_field(p, type, &struct_decl->node.struct_decl, field_name, struct_name, data_type, len_expr, align_per_el_expr, align_start_expr) == FAIL) return FAIL;
         }
     }
 
@@ -2560,26 +2665,133 @@ _end_if:
         return SUCCESS;
     }
 
+    else if(is_at_identifier(_token, RETURN_IDENTIFIER) == SUCCESS) {
+        struct token* ident = _peek_token(p);
+        if(ident == NULL) return FAIL;
+
+        if(ident->type == NEWLINE) ident = NULL;
+        else if((ident = expect_token(p, NAME)) == NULL) return FAIL;
+
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+        
+        struct Ast_node* _return = new_ast_return(p, _token, ident);
+        if(_return == NULL) return FAIL;
+
+        if(is_inside_block(p, CTX_FUNC) == FAIL) {
+            _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@return outside function");
+            return FAIL;   
+        }
+
+        *stmt_ast = _return;
+        return SUCCESS;
+    }
+
+    else if(is_at_identifier(_token, FUN_IDENTIFIER) == SUCCESS) {
+        if(expect_token(p, LESS) == NULL) return FAIL;
+
+        struct token* calling_conv;
+        if((calling_conv = expect_token(p, NAME)) == NULL) return FAIL;
+
+        if(expect_token(p, GREATER) == NULL) return FAIL;
+
+        struct token* func_name;
+        if((func_name = expect_token(p, NAME)) == NULL) return FAIL;
+
+        if(expect_token(p, LPAR) == NULL) return FAIL;
+
+        struct Ast_node* fun_decl = new_ast_fun_decl(p, _token, calling_conv, func_name, VOID_RETURN_TYPE);
+        if(fun_decl == NULL) return FAIL;
+
+        unint data_type;
+
+        // Arguments
+        struct token* p1 = _peek_token(p);
+        if(p1->type != RPAR) {
+            _reset_peek(p);
+            while(true) {
+                // Data type
+                if(expect_data_type(p, &data_type) == FAIL) return FAIL;
+
+                // Argument name
+                struct token* arg_name;
+                if((arg_name = expect_token(p, NAME)) == NULL) return FAIL;
+
+                // Check for repeated
+                struct AstFuncDecl* _fun_decl = &fun_decl->node.fun_decl;
+                for(struct FuncDeclArg* arg = _fun_decl->head; arg; arg = arg->next) {
+                    if(_compare_identifiers(arg->arg_name->cps, arg->arg_name->len, arg_name->cps, arg_name->len) == SUCCESS ) {
+                        _error_from_token(p, arg_name, ERROR_TYPE_MESSAGE, "duplicate argument name");
+                        return FAIL; 
+                    }
+                }
+
+                if(insert_fun_decl_arg(p, _token, _fun_decl, arg_name, data_type) == FAIL) return FAIL;
+
+                // Do args end?
+                if((p1 = _peek_token(p)) == NULL) return FAIL;
+                _reset_peek(p);
+
+                if(p1->type == RPAR) break;
+                else if(expect_token(p, COMMA) == NULL) return FAIL;
+
+            }
+        }
+
+        if(expect_token(p, RPAR) == NULL) return FAIL;
+
+        // return type
+        struct token* return_type_tok = _peek_token(p);
+        if(return_type_tok == NULL) return FAIL;
+
+        fun_decl->node.fun_decl.return_type = VOID_RETURN_TYPE;
+        if(return_type_tok->type != NEWLINE) {
+            if(expect_data_type(p, &data_type) == FAIL) return FAIL;
+            fun_decl->node.fun_decl.return_type = data_type;
+        }
+
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+        if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
+            _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@fun inside function");
+            return FAIL;
+        }
+
+        if(_parse_block(p, &fun_decl->node.fun_decl.statements, CTX_FUNC) == FAIL) return FAIL;
+
+        *stmt_ast = fun_decl;
+        return SUCCESS;
+
+    }
+
     else if(_token->type == NAME && is_at_identifier(_token, NULL) == FAIL) {
         unint level = 0;
 
-        // Assignment & Labels
+        // Assignment & Labels & function call
+        struct token* _t = _peek_token(p);
+        if(_t == NULL) return FAIL;
+        _reset_peek(p);
+
+        // Labels
+        if(_t->type == COLON) {
+            _read_token(p);
+
+            if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+            struct Ast_node* label = new_ast_label(p, _token, _token);
+            if(label == NULL) return FAIL;
+
+            *stmt_ast = label;
+            return SUCCESS;
+        } 
+        
+        // function call
+        else if(_t->type == LPAR) {
+
+        }
+
+        // Assignment
         while(true) {
-            struct token* _t = _peek_token(p); 
-            if(_t == NULL) return FAIL;
-
-            // Labels
-            if(_t->type == COLON) {
-                _read_token(p);
-
-                if(expect_token(p, NEWLINE) == NULL) return FAIL;
-
-                struct Ast_node* label = new_ast_label(p, _token, _token);
-                if(label == NULL) return FAIL;
-
-                *stmt_ast = label;
-                return SUCCESS;
-            }
+            if((_t = _peek_token(p)) == NULL) return FAIL;
 
             else if(_t->type == LPAR || _t->type == LSQB) ++level;
             else if(_t->type == RPAR || _t->type == RSQB) --level;
@@ -2652,17 +2864,17 @@ _end_if:
                             *stmt_ast = new_ast_assign_variable_idx(p, _token, idx, expr, __t->type);
                             break;
                         case ASSIGN_APPEND_ARRAY_NODE:
-                            *stmt_ast = new_ast_assign_append_array(p, _token, expr, __t->type);
+                            if(__t->type != EQUAL) goto _invalid_assignment;
+                            *stmt_ast = new_ast_assign_append_array(p, _token, expr);
                             break;
                     }
 
                     return (*stmt_ast == NULL) ? FAIL : SUCCESS;
-                } else {
-                    // Invalid assignment
-                    _error_from_token(p, __t, ERROR_TYPE_MESSAGE, "invalid assignment");
-                    return FAIL;
                 }
-
+_invalid_assignment:
+                // Invalid assignment
+                _error_from_token(p, __t, ERROR_TYPE_MESSAGE, "invalid assignment");
+                return FAIL;
             }
         }
 
@@ -2687,13 +2899,6 @@ struct Ast_node* _run_parser(struct Parser* p) {
     struct Ast_node* ast = new_ast(p);
     if(ast == NULL) return NULL;
     
-    while(true) {
-        struct Ast_node* stmt_ast = NULL;
-        unint flags = 0;
-        if(_parse_statement(p, &stmt_ast, &flags) == FAIL) return NULL; // Something wrong that should not recover the AST
-
-        if(flags == FLAG_MACRO_DECL || flags == FLAG_INCLUDE_DECL) continue; // Skip macro
-        if(stmt_ast == NULL) return ast; // Eof
-        if(insert_ast_statement_node(p, &ast->node.statements, stmt_ast) == NULL) return NULL;
-    }
+    if(_parse_block(p, &ast->node.statements, CTX_GLOBAL) == FAIL) return NULL;
+    return ast;
 }

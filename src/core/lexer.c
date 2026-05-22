@@ -110,6 +110,7 @@ const char * const _Parser_TokenNames[] = {
     "<N_TOKENS>",
     "DOUBLEVBAR",
     "DOUBLEAMPER",
+    "DOLLAR",
 };
 
 
@@ -883,6 +884,7 @@ unint _Token_OneChar(int32_t c1){
     case '|': return VBAR;
     // case '}': return RBRACE;
     case '~': return TILDE;
+    case '$': return DOLLAR;
     }
     return OP;
 }

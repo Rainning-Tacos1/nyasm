@@ -47,6 +47,9 @@ struct Parser {
 
     unint macro_end_cursor;
     struct token* macro_ends[MAX_MACRO_EXPANSION_LIMIT];
+
+    unint ctx_block_stack[MAX_CTX_BLOCK_LEVEL];
+    unint ctx_block_cursor;
 };
 
 struct Parser* _Parser_New(struct tok_state* tok);

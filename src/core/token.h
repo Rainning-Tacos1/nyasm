@@ -76,6 +76,7 @@
 
 #define DOUBLEVBAR 70
 #define DOUBLEAMPER 71
+#define DOLLAR 72
 
 #define AT_IDENTIFIER_TOKEN 80
 
