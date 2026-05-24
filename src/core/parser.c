@@ -56,6 +56,8 @@
 #define DEL_IDENTIFIER ((int32_t[]){'d', 'e', 'l', -1})
 #define FUN_IDENTIFIER ((int32_t[]){'f', 'u', 'n', -1})
 
+#define P_IDENTIFIER ((int32_t[]){'p', -1})
+
 #define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
 #define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
 
@@ -1005,14 +1007,15 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
         case LEFTSHIFT:
         case RIGHTSHIFT: { *lbp = 70; *rbp = 71; break; } // Done
 
-        case DOT: { *lbp = 90; *rbp = 80; break; } // Done
-
+        
         case PLUS:
         case MINUS: { *lbp = 100; *rbp = 101; break; } // Done
-
+        
         case SLASH:
         case PERCENT:
         case STAR: { *lbp = 110; *rbp = 111; break; } // Done
+
+        case DOT: { *lbp = 220; *rbp = 221; break; } // Done
 
         default : return FAIL;
     }
@@ -1136,6 +1139,8 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
     return NULL;
 }
 
+struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** _s, struct token** _e, unint stop_on_comma);
+
 struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma) {
     // Prefix
     // On an array, _parse_expr will never be called when _parse_expr_prefix is a comma, no need to do checks
@@ -1154,7 +1159,9 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
 
             if(_read_token(p) == NULL) return NULL;
             
-            struct Ast_node* right = _parse_expr(p, 0, 0); // Do not allow commas
+            struct token *_s, *_e;
+            
+            struct Ast_node* right = parse_expr_with_start_and_end(p, &_s, &_e, 0); // Do not allow commas
             if(right == NULL) return NULL;
 
             struct token * rsqb = _read_token(p);
@@ -1162,7 +1169,29 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
             if(rsqb->type != RSQB) return NULL;
 
             left = new_ast_binop(p, op, LSQB, left, right);
+            if(left == NULL) return NULL;
+
+            left->node.binop._s = _s;
+            left->node.binop._e = _e;
+
             continue;
+        } else if(op->type == DOT) {
+            if(
+                (left->type != VAR_NODE) && (left->type == BINOP_NODE && left->node.binop.op != DOT)
+            ) {
+                _error_from_token(p, op, ERROR_TYPE_MESSAGE, "invalid struct access");
+                return NULL;
+            }
+            
+            // Do some slight peeking
+            struct token* p1 = _peek_token(p);
+            if(p1 == NULL) return NULL;
+
+            if(p1->type != NAME) {
+                _error_from_token(p, p1, ERROR_TYPE_MESSAGE, "invalid struct field");
+                return NULL;
+            }
+            _reset_peek(p);
         }
 
         if(_expr_get_binding_power(op->type, &lbp, &rbp) == FAIL) {
@@ -1190,26 +1219,53 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
 
 unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val);
 
+void _error_from_multiple_tokens(struct Parser* p, struct token* _s, struct token* _e, const char *stype, const char *format) {
+    nint col_offset = -1;
+    struct token* _c = _s;
+
+    while(_c != _e) {
+        if (_c->lineno == _e->lineno) {
+            col_offset = _c->col_offset;
+            break;
+        }
+        _c = _c->next;
+    }
+    // -1 bc failed on expr eval index [100 + 1]
+    _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset-1, stype, format);
+}
+
 unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft, struct Value* vright, unint tcleft, unint tcright) {
     struct token* op_token = binop->op_token;
     unint op = binop->op;
 
     // Type checks
+    // Unary only on numbers
+    DBG(1, "tcright = %d | tcleft = %d\n", tcright, tcleft);
+    if(op == PLUS && binop->right == NULL && (
+        !tcright && (tcleft && (vleft->type != VALUE_DOUBLE && vleft->type != VALUE_INT))
+    )) {
+        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "invalid unary operator");
+        return FAIL;
+    }
 
     // Concatnation only allowed on Strings/characters
-    if(op == DOT && ( 
-        (tcleft && (vleft->type != VALUE_STR)) ||
-        (tcright && (vright->type != VALUE_STR))
+    if(op == PLUS && (tcleft == 1 && tcright == 1) && ( 
+        (vleft->type == VALUE_STR) != (vright->type == VALUE_STR)
     )) {
         _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform concatnation on strings types");
         return FAIL;
     }
 
+
     // Arithmetic only on ints/floats 
     if ((op == PLUS || op == MINUS || op == SLASH || op == STAR || op == PERCENT) && ( 
-        (tcleft && (vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE)) ||
-        (tcright && (vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)) 
-    )) {
+            (tcleft && (vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE)) ||
+            (tcright && (vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)) 
+        ) && (
+            (tcleft && (vleft->type != VALUE_STR)) &&
+            (tcright && (vright->type != VALUE_STR)) 
+        )
+    ) {
         _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types");
         return FAIL;
     }
@@ -1245,7 +1301,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
     if(op == LSQB &&
         (tcright && vright->type != VALUE_INT)
     ) {
-        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "indices can only by of integer type");
+        _error_from_multiple_tokens(p, binop->_s, binop->_e, ERROR_TYPE_TYPE, "indices can only by of integer type");
         return FAIL;
     }
     
@@ -1371,6 +1427,8 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             // Evaluate
             if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
 
+            if(tcleft == 1 && tcright == 1) goto _skip_extra_type_checks;
+
             DBG(DO_EXPRESSION_EVAL_TYPE_CHECK_DBG, "Type check #2: tcleft = %d | tcright = %d\n", 1, 0);
             if(_type_check(p, binop, &vleft, &vright, 1, 0) == FAIL) return FAIL;
 
@@ -1380,14 +1438,45 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             DBG(DO_EXPRESSION_EVAL_TYPE_CHECK_DBG, "Type check #3: tcleft = %d | tcright = %d\n", 0, 1);
             if(pright && _type_check(p, binop, &vleft, &vright, 0, 1) == FAIL) return FAIL;
 
+_skip_extra_type_checks:
             nint a, b;
             double da, db;
 
             // Eval operators
             switch(binop->op) {
                 case PLUS:
+
                     // unary plus, if right is not present, preserve the original type
                     if(!pright) { *val = vleft; return SUCCESS; }
+
+                    // String concatnation
+                    if(vleft.type == VALUE_STR && vright.type == VALUE_STR) {
+                        struct Value* non_empty_str = NULL;
+                        unint alen = vleft.val.string.len;
+                        unint blen = vright.val.string.len;
+                        if(alen == 0) non_empty_str = &vright;
+                        else if(blen == 0) non_empty_str = &vleft;
+                        if(non_empty_str) {
+                            *val = *non_empty_str;
+                            return SUCCESS;
+                        }
+
+                        int32_t* cps = MEM_ALLOC((alen + blen) * sizeof(int32_t), "eval of concatnation");
+                        if(cps == NULL) {
+                            _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "no available memory to concatnate the string");
+                            return FAIL;   
+                        }
+
+                        // Copy
+                        for(unint i=0; i<alen; ++i) cps[i] = vleft.val.string.str[i];
+                        for(unint i=0; i<blen; ++i) cps[alen+i] = vright.val.string.str[i];
+
+                        val->type = VALUE_STR;
+                        val->val.string.str = cps;
+                        val->val.string.len = (alen + blen);
+
+                        return SUCCESS;
+                    }
 
                     // Convert types
                     if(vleft.type == VALUE_INT && vright.type == VALUE_INT) {
@@ -1542,7 +1631,7 @@ mul_overflow:
                     if(index < 0) index = len + index;
 
                     if(index < 0 || index >= len) {
-                        _error_from_token(p, op_token, ERROR_TYPE_INDEX_ERROR, "index out of range");
+                        _error_from_multiple_tokens(p, binop->_s, binop->_e, ERROR_TYPE_INDEX_ERROR, "index out of range");
                         return FAIL;
                     }
 
@@ -1567,32 +1656,6 @@ mul_overflow:
 
                     return SUCCESS;
 
-                case DOT:
-                    struct Value* non_empty_str = NULL;
-                    unint alen = vleft.val.string.len;
-                    unint blen = vright.val.string.len;
-                    if(alen == 0) non_empty_str = &vright;
-                    else if(blen == 0) non_empty_str = &vleft;
-                    if(non_empty_str) {
-                        *val = *non_empty_str;
-                        return SUCCESS;
-                    }
-
-                    int32_t* cps = MEM_ALLOC((alen + blen) * sizeof(int32_t), "eval of concatnation");
-                    if(cps == NULL) {
-                        _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "no available memory to concatnate the string");
-                        return FAIL;   
-                    }
-
-                    // Copy
-                    for(unint i=0; i<alen; ++i) cps[i] = vleft.val.string.str[i];
-                    for(unint i=0; i<blen; ++i) cps[alen+i] = vright.val.string.str[i];
-
-                    val->type = VALUE_STR;
-                    val->val.string.str = cps;
-                    val->val.string.len = (alen + blen);
-
-                    return SUCCESS;
                 case LEFTSHIFT:
                     val->type = VALUE_INT;
                     val->val.number = vleft.val.number << vright.val.number;
@@ -1877,6 +1940,14 @@ unint _parse_block(struct Parser* p, struct AstStatements* statements, unint blo
         unint _flags = 0;
         if(_parse_statement(p, &stmt_ast, &_flags, block_ctx) == FAIL) return FAIL;
 
+        // skip new lines after
+        struct token *nl;
+
+        while ((nl = _peek_token(p)) != NULL && nl->type == NEWLINE) _read_token(p);
+        if (nl == NULL) return FAIL;
+        
+        _reset_peek(p);
+
         if(_flags == FLAG_MACRO_DECL || _flags == FLAG_INCLUDE_DECL) continue; // Skip macro
         // Eof
         if(stmt_ast == NULL) {
@@ -1889,13 +1960,13 @@ unint _parse_block(struct Parser* p, struct AstStatements* statements, unint blo
     }  
 }
 
-struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** _s, struct token** _e) {
+struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** _s, struct token** _e, unint stop_on_comma) {
     *_s = *_e = NULL;
     _reset_peek(p);           
     if((*_s = _peek_token(p)) == NULL) return NULL;
 
     // Expr
-    struct Ast_node* cond = _parse_expr(p, (unint)(0), 0);
+    struct Ast_node* cond = _parse_expr(p, (unint)(0), stop_on_comma);
     if(cond == NULL) {
         DBG(1, "Error building expression\n");
         return NULL;
@@ -1904,10 +1975,6 @@ struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** 
     DBG(1, "#################################\n");
     dbg_ast(cond);
     DBG(1, "#################################\n");
-
-    // New line
-    if((*_e = _peek_token(p)) == NULL) return NULL;
-    _reset_peek(p);
 
     return cond;
 }
@@ -2025,8 +2092,9 @@ unint handle_struct_decl_field(struct Parser* p, struct Ast_node* _struct_decl, 
 
 struct Ast_node* handle_space_identifiers(struct Parser* p, struct token* _token, unint type) {
     struct Ast_node *align_start_expr, *len_expr, *align_per_el_expr;
-    struct token*_s = NULL;
-    struct token*_e = NULL;
+    struct token* _s = NULL;
+    struct token* _e = NULL;
+    struct token* name = NULL;
     struct Ast_node* value = NULL;
 
     // Save types must have array expression
@@ -2043,14 +2111,24 @@ struct Ast_node* handle_space_identifiers(struct Parser* p, struct token* _token
     if(read_possible_alignemnt(p, &align_start_expr) == FAIL) return NULL;
 
     if(!IS_SAVE_TYPE(type)) {
-        value = parse_expr_with_start_and_end(p, &_s, &_e);
-        if(value == NULL) return NULL;
+        // Depending on the context
+
+        if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
+            if((name = expect_token(p, NAME)) == NULL) return NULL;
+        } else {
+            value = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+            if(value == NULL) return NULL;
+        }
+
+    } else if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@save- inside function");
+        return NULL;
     }
 
     // Read new line
     if(expect_token(p, NEWLINE) == NULL) return NULL;
 
-    struct Ast_node* _space = new_ast_space(p, _token, align_start_expr, len_expr, align_per_el_expr, type, /* Extra*/ value, _s, _e);
+    struct Ast_node* _space = new_ast_space(p, _token, align_start_expr, len_expr, align_per_el_expr, type, /* Extra*/ value, _s, _e, name);
     if(_space == NULL) return NULL;
 
     return _space;
@@ -2109,13 +2187,112 @@ unint parse_struct_assign_block(struct Parser* p, struct StructAssignField** hea
         // "="
         if((expect_token(p, EQUAL)) == NULL) return FAIL;
 
-        struct Ast_node* val = parse_expr_with_start_and_end(p, &_s, &_e);
+        struct Ast_node* val = parse_expr_with_start_and_end(p, &_s, &_e, 0);
         if(val == NULL) return FAIL;
 
         if((expect_token(p, NEWLINE)) == NULL) return FAIL;
 
         if(insert_struct_field_assignment(p, field_name, head, tail, field_name, val) == FAIL) return FAIL;
     }
+}
+
+unint _parse_potential_function_call(struct Parser* p, struct token* func_name, struct Ast_node** func_call) {
+    *func_call = NULL;
+    // Function name hasnt been read yet
+    if(func_name == NULL) {
+        if((func_name = _peek_token(p)) == NULL) return FAIL;
+
+        if(func_name->type != NAME || is_at_identifier(func_name, NULL) == SUCCESS) return SUCCESS;
+    }
+
+    struct token* lpar = _peek_token(p);
+    if(lpar == NULL) return FAIL;
+
+    // "("
+    if(lpar->type != LPAR) {
+        _reset_peek(p);
+        return SUCCESS;
+    }
+
+    _read_token(p); // "("
+
+    *func_call = new_ast_function_call(p, func_name, func_name);
+    if(*func_call == NULL) return FAIL;
+    
+    unint is_p = 0;
+    struct token* p1 = _peek_token(p);
+    if(p1 == NULL) return FAIL;
+
+    // No args
+    if(p1->type == RPAR) {
+        _read_token(p);
+        return SUCCESS;
+    }
+
+    _reset_peek(p);
+
+    while(true) {
+        if((p1 = _peek_token(p)) == NULL) return FAIL;
+        // Check for @p
+        if(is_at_identifier(p1, P_IDENTIFIER) == SUCCESS) {
+            _read_token(p);
+            is_p = 1;
+        }
+
+        struct token *_s, *_e;
+        struct Ast_node* arg = parse_expr_with_start_and_end(p, &_s, &_e, 1);
+        if(arg == NULL) return FAIL;
+
+        if(insert_func_call_arg(p, func_name, &((*func_call)->node.func_call), arg, is_p, _s, _e) == FAIL) return FAIL;
+
+        if((p1 = _read_token(p)) == NULL) return FAIL;
+
+        if(p1->type == RPAR) return SUCCESS;
+    }
+}
+
+unint _parse_potential_indexation(struct Parser* p, struct token* var_name, struct Ast_node** idx_expr) {
+
+    struct token* lsqb = _peek_token(p);
+    if(lsqb == NULL) return FAIL;
+
+    if(lsqb->type != LSQB) {
+        _reset_peek(p);
+        return SUCCESS;
+    }
+
+    struct token* rsqb = _peek_token(p);
+    if(rsqb == NULL) return FAIL;
+
+    if(rsqb->type == RSQB) {
+        _reset_peek(p);
+        return SUCCESS;
+    }
+
+    _read_token(p); // "["
+ 
+    struct Ast_node* _idx_expr;
+    struct token *_s, *_e;
+    if((_idx_expr = parse_expr_with_start_and_end(p, &_s, &_e, 0)) == NULL) return FAIL;
+
+    if(expect_token(p, RSQB) == NULL) return FAIL;
+
+    if(*idx_expr == NULL) {
+        struct Ast_node* left = new_ast_variable(p, var_name);
+        if(left == NULL) return FAIL;
+
+        *idx_expr = new_ast_binop(p, lsqb, LSQB, left, _idx_expr);
+    } else {
+
+        *idx_expr = new_ast_binop(p, lsqb, LSQB, *idx_expr, _idx_expr);
+    }
+    
+    if(*idx_expr == NULL) return FAIL;
+    (*idx_expr)->node.binop._s = _s;
+    (*idx_expr)->node.binop._e = _e;
+
+    if(_parse_potential_indexation(p, var_name, idx_expr) == FAIL) return FAIL;
+    return SUCCESS;
 }
 
 #define IS_ASSIGNMENT(_token) (_token == EQUAL || _token == PLUSEQUAL || _token == MINEQUAL || _token == STAREQUAL || _token == SLASHEQUAL || _token == PERCENTEQUAL || _token == AMPEREQUAL || _token == VBAREQUAL || _token == CIRCUMFLEXEQUAL || _token == LEFTSHIFTEQUAL || _token == RIGHTSHIFTEQUAL)
@@ -2347,7 +2524,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
     // Ast stuff
     else if(is_at_identifier(_token, ASSERT_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
         if(expr == NULL) return FAIL;
 
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
@@ -2361,7 +2538,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
     else if(is_at_identifier(_token, WARN_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
         if(expr == NULL) return FAIL;
 
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
@@ -2375,7 +2552,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
     else if(is_at_identifier(_token, ERROR_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
         if(expr == NULL) return FAIL;
 
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
@@ -2462,7 +2639,7 @@ _end_if:
     
     else if(is_at_identifier(_token, REPEAT_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* iter = parse_expr_with_start_and_end(p, &_s, &_e);
+        struct Ast_node* iter = parse_expr_with_start_and_end(p, &_s, &_e, 0);
         if(iter == NULL) return FAIL;
 
         // Read new line
@@ -2552,7 +2729,7 @@ _end_if:
             if(p1 == NULL) return FAIL;
             _reset_peek(p);
 
-            if(p1->type == INDENT && block_ctx != CTX_FUNC) {
+            if(p1->type == INDENT && is_inside_block(p, CTX_FUNC) == FAIL) {
                 if(parse_struct_assign_block(p, &struct_var->node.struct_var.head, &struct_var->node.struct_var.tail) == FAIL) return FAIL;
             }
             _reset_peek(p);
@@ -2638,14 +2815,23 @@ _end_if:
     }
 
     else if(is_at_identifier(_token, STRING_IDENTIFIER) == SUCCESS) {
+
+        struct Ast_node* align_start_expr;
+        if(read_possible_alignemnt(p, &align_start_expr) == FAIL) return FAIL;
+
         struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e);
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
         if(expr == NULL) return FAIL;
 
         // Read new line
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
-        struct Ast_node* string = new_ast_at_string(p, _token, expr, _s, _e);
+        if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
+            _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@string inside function");
+            return FAIL;
+        }
+
+        struct Ast_node* string = new_ast_at_string(p, _token, expr, _s, _e, align_start_expr);
         if(string == NULL) return FAIL;
 
         *stmt_ast = string;
@@ -2784,9 +2970,13 @@ _end_if:
             return SUCCESS;
         } 
         
-        // function call
-        else if(_t->type == LPAR) {
-
+        struct Ast_node* func_call;
+        if(_parse_potential_function_call(p, _token, &func_call) == FAIL) return FAIL;
+        
+        if(func_call != NULL) {
+            if(expect_token(p, NEWLINE) == NULL) return FAIL;
+            *stmt_ast = func_call;
+            return SUCCESS;
         }
 
         // Assignment
@@ -2799,49 +2989,34 @@ _end_if:
             else if((IS_ASSIGNMENT(_t->type)) && level == 0) {
                 _reset_peek(p); // Go back
 
-                struct token *_s, *_e;
-                struct Ast_node* idx;
                 struct Ast_node* expr;
                 unint node_type = ASSIGN_VAR_NODE;
 
-                // After the identifier only "[" or ASSIGNMENT are valid
-                struct token* __t = _read_token(p);
-                if(__t == NULL) return FAIL;
+                // Possible indexation
+                struct Ast_node* idx_expr = NULL;
+                if(_parse_potential_indexation(p, _token, &idx_expr) == FAIL) return FAIL;
+                _reset_peek(p);
 
-                // Append or indexation
-                if(__t->type == LSQB) {
-                    // index or append 
-                    struct token* _p1 = _peek_token(p); // RSQB or start of expression
-                    if(_p1 == NULL) return FAIL;
+                DBG(1, "PARSER INDEXATION\n");
 
-                    // Append
-                    if(_p1->type == RSQB) { _read_token(p); node_type = ASSIGN_APPEND_ARRAY_NODE; }
-                    
-                    // Expression
-                    else {
-                        _reset_peek(p);
+                // Possible append
+                struct token* p1 = _read_token(p);
+                if(p1 == NULL) return FAIL;
 
-                        idx = parse_expr_with_start_and_end(p, &_s, &_e);
-                        if(idx == NULL) {
-                            DBG(1, "Error building expression\n");
-                            return FAIL;
-                        }
+                DBG(1, "ASDXASDASDASDSADSAD [%s]\n", _Parser_TokenNames[p1->type]);
 
-                        DBG(1, "#################################\n");
-                        dbg_ast(idx);
-                        DBG(1, "#################################\n");
+                if(p1->type == LSQB) {
+                    DBG(1, "AAAAPEEEENNDDD\n");
+                    // Next token must be "]"
+                    if(expect_token(p, RSQB) == NULL) return FAIL;
+                    node_type = ASSIGN_APPEND_ARRAY_NODE;
 
-                        // Closing RSQB
-                        if(expect_token(p, RSQB) == NULL) return FAIL;
-                        
-                        node_type = ASSIGN_VAR_IDX_NODE;
-                    }
-                    // After append / idx
-                    if((__t = _read_token(p)) == NULL) return FAIL; // Look forward
-                } 
-                
+                    if((p1 = _read_token(p)) == NULL) return FAIL;
+                }
+
+
                 // Expect a valid assignment
-                if(IS_ASSIGNMENT(__t->type)) {
+                if(IS_ASSIGNMENT(p1->type)) {
                     expr = _parse_expr(p, (unint)(0), 0);
                     if(expr == NULL) {
                         DBG(1, "Error building expression\n");
@@ -2856,24 +3031,15 @@ _end_if:
                     if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
                     *stmt_ast = NULL;
-                    switch(node_type) {
-                        case ASSIGN_VAR_NODE:
-                            *stmt_ast = new_ast_assign_variable(p, _token, expr, __t->type);
-                            break;
-                        case ASSIGN_VAR_IDX_NODE:
-                            *stmt_ast = new_ast_assign_variable_idx(p, _token, idx, expr, __t->type);
-                            break;
-                        case ASSIGN_APPEND_ARRAY_NODE:
-                            if(__t->type != EQUAL) goto _invalid_assignment;
-                            *stmt_ast = new_ast_assign_append_array(p, _token, expr);
-                            break;
-                    }
+                    if(node_type == ASSIGN_APPEND_ARRAY_NODE && p1->type != EQUAL) goto _invalid_assignment;
+
+                    *stmt_ast = new_ast_assign_variable(p, _token, idx_expr, expr, p1->type, node_type);
 
                     return (*stmt_ast == NULL) ? FAIL : SUCCESS;
                 }
 _invalid_assignment:
                 // Invalid assignment
-                _error_from_token(p, __t, ERROR_TYPE_MESSAGE, "invalid assignment");
+                _error_from_token(p, p1, ERROR_TYPE_MESSAGE, "invalid assignment");
                 return FAIL;
             }
         }
@@ -2888,6 +3054,7 @@ _invalid_assignment:
         *stmt_ast = NULL;
         return SUCCESS;
     } else {
+        DBG(1, "_token = %s\n", _Parser_TokenNames[_token->type]);
         _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "invalid syntax");
         return FAIL;
     }
@@ -2898,7 +3065,24 @@ _invalid_assignment:
 struct Ast_node* _run_parser(struct Parser* p) {
     struct Ast_node* ast = new_ast(p);
     if(ast == NULL) return NULL;
-    
+
+    /*
+    struct Ast_node* expr;
+    if((expr = _parse_expr(p, 0, 0)) == NULL) return NULL;
+
+    DBG(1, "#################################\n");
+    dbg_ast(expr);
+    DBG(1, "#################################\n");
+
+    struct Value val;
+    if(_eval_expr(p, expr, &val) == FAIL) return NULL;
+
+    print_value(&val);
+
+    return NULL;    
+
+    */
+
     if(_parse_block(p, &ast->node.statements, CTX_GLOBAL) == FAIL) return NULL;
     return ast;
 }

@@ -221,47 +221,18 @@ unint insert_else(struct Parser* p, struct token* _token, struct Ast_node* _if) 
     return SUCCESS;
 }
 
-struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* expr, unint ass_type) {
-    struct Ast_node* node = new_ast_node();
-    if(node == NULL) {
-        _error_from_token(p, ident, ERROR_TYPE_MEMORY, "no available memory for AST assignment node");
-        return NULL;
-    }
-
-    node->type = ASSIGN_VAR_NODE;
-    node->node.var_assign.expr = expr;
-    node->node.var_assign.name = ident;
-    node->node.var_assign.ass_type = ass_type;
-
-    return node;
-}
-
-struct Ast_node* new_ast_assign_variable_idx(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr, unint ass_type) {
+struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr, unint ass_type, unint type) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, ident, ERROR_TYPE_MEMORY, "no available memory for AST assignment+idx node");
         return NULL;
     }
 
-    node->type = ASSIGN_VAR_IDX_NODE;
-    node->node.var_idx_assign.name = ident;
-    node->node.var_idx_assign.expr = expr;
-    node->node.var_idx_assign.idx = idx;
-    node->node.var_idx_assign.ass_type = ass_type;
-
-    return node;
-}
-
-struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ident, struct Ast_node* expr) {
-    struct Ast_node* node = new_ast_node();
-    if(node == NULL) {
-        _error_from_token(p, ident, ERROR_TYPE_MEMORY, "no available memory for AST append assignment node");
-        return NULL;
-    }
-
-    node->type = ASSIGN_APPEND_ARRAY_NODE;
-    node->node.var_array_append_assign.expr = expr;
-    node->node.var_array_append_assign.name = ident;
+    node->type = type;
+    node->node.var_assign.name = ident;
+    node->node.var_assign.expr = expr;
+    node->node.var_assign.idx = idx;
+    node->node.var_assign.ass_type = ass_type;
 
     return node;
 }
@@ -310,7 +281,7 @@ struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct t
     return node;
 }
 
-struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e) {
+struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e, struct token* name) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST space node");
@@ -326,6 +297,8 @@ struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct As
     node->node.space.value = value;
     node->node.space._s = _s;
     node->node.space._e = _e;
+
+    node->node.space.name = name;
 
     return node;
 }
@@ -475,7 +448,28 @@ unint insert_fun_decl_arg(struct Parser* p, struct token* _token, struct AstFunc
     return SUCCESS;
 }
 
-struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
+unint insert_func_call_arg(struct Parser* p, struct token* _token, struct AstFuncCall* func_call, struct Ast_node* arg_expr, unint is_p, struct token* _s, struct token* _e) {
+    struct FuncCallArg* arg = (struct FuncCallArg*)MEM_ALLOC(sizeof(struct FuncCallArg), "function call arg");
+    if(arg == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for function call arg"); 
+        return FAIL;
+    }
+
+    arg->arg_expr = arg_expr;
+    arg->_s = _s;
+    arg->_e = _e;
+    arg->next = NULL;
+
+    // Link
+    if(func_call->args_head == NULL) func_call->args_head = arg;
+
+    if(func_call->args_tail != NULL) func_call->args_tail->next = arg;
+    func_call->args_tail = arg;
+
+    return SUCCESS;
+}
+
+struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct Ast_node* align_start_expr) {
     struct Ast_node* node = new_ast_node();
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST string node");
@@ -487,6 +481,7 @@ struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struc
     node->node.string.expr = expr;
     node->node.string._s = _s;
     node->node.string._e = _e;
+    node->node.string.align_start_expr = align_start_expr;
 
     return node;
 }
@@ -513,6 +508,21 @@ struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct t
 
     node->type = RETURN_NODE;
     node->node._return.ident = ident;
+
+    return node;
+}
+
+struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, struct token* ident) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST function call node");
+        return NULL;
+    }
+
+    node->type = FUNC_CALL_NODE;
+    node->node.func_call.func_call = ident;
+    node->node.func_call.args_head = NULL;
+    node->node.func_call.args_tail = NULL;
 
     return node;
 }
@@ -602,6 +612,8 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
 
         case FUN_NODE: { LOG("FUN_NODE"); break; }
 
+        case FUNC_CALL_NODE: { LOG("FUNC_CALL_NODE"); break; }
+
         case BYTE_NODE: { LOG("BYTE_NODE"); break; }
         case WORD_NODE: { LOG("WORD_NODE"); break; }
         case DWORD_NODE : { LOG("DWORD_NODE"); break; }
@@ -624,7 +636,6 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case STRUCT_VAR_NODE: { LOG("STRUCT_VAR_NODE"); break; }
 
         case ASSIGN_VAR_NODE: { LOG("ASSIGN_VAR_NODE"); break; }
-        case ASSIGN_VAR_IDX_NODE: { LOG("ASSIGN_VAR_IDX_NODE"); break; }
         case ASSIGN_APPEND_ARRAY_NODE: { LOG("ASSIGN_APPEND_ARRAY_NODE"); break; }
     
         case ERROR_NODE: { LOG("ERROR_NODE"); break; }
@@ -668,7 +679,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                 case DOUBLEAMPER:  { LOG("&&"); break; }
 
                 case LSQB:         { LOG("idx"); break; }
-                case DOT:          { LOG("concat"); break; }
+                case DOT:          { LOG("struct access"); break; }
 
                 default: { LOG("X'\n"); return; }
             };
@@ -795,41 +806,20 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             LOG("\n");
             dbg_ast_recur(ast->node.assert.assert, level+1);
             break;
-
+        
         case ASSIGN_VAR_NODE:
+        case ASSIGN_APPEND_ARRAY_NODE:
             LOG("\n");
             for(unint i=0; i<level+1; ++i) LOG("\t");
             LOG("[VARIABLE] ");
             for(unint i=0; i<ast->node.var_assign.name->len; ++i) LOG_CP(ast->node.var_assign.name->cps[i]);
             LOG("\n");
             for(unint i=0; i<level+1; ++i) LOG("\t");
-            LOG("[%s]\n", assign_token_to_text(ast->node.var_assign.ass_type));
-            dbg_ast_recur(ast->node.var_assign.expr, level+2);
-            break;
-        
-        case ASSIGN_VAR_IDX_NODE:
-            LOG("\n");
-            for(unint i=0; i<level+1; ++i) LOG("\t");
-            LOG("[VARIABLE] ");
-            for(unint i=0; i<ast->node.var_idx_assign.name->len; ++i) LOG_CP(ast->node.var_idx_assign.name->cps[i]);
-            LOG("\n");
-            for(unint i=0; i<level+1; ++i) LOG("\t");
             LOG("[IDX]\n");
-            dbg_ast_recur(ast->node.var_idx_assign.idx, level+2);
+            if(ast->node.var_assign.idx) dbg_ast_recur(ast->node.var_assign.idx, level+2);
             for(unint i=0; i<level+1; ++i) LOG("\t");
             LOG("[=]\n");
-            dbg_ast_recur(ast->node.var_idx_assign.expr, level+2);
-            break;
-        
-        case ASSIGN_APPEND_ARRAY_NODE:
-            LOG("\n");
-            for(unint i=0; i<level+1; ++i) LOG("\t");
-            LOG("[VARIABLE] ");
-            for(unint i=0; i<ast->node.var_array_append_assign.name->len; ++i) LOG_CP(ast->node.var_array_append_assign.name->cps[i]);
-            LOG("\n");
-            for(unint i=0; i<level+1; ++i) LOG("\t");
-            LOG("[=]\n");
-            dbg_ast_recur(ast->node.var_array_append_assign.expr, level+2);
+            dbg_ast_recur(ast->node.var_assign.expr, level+2);
             break;
 
         case BYTE_NODE:
@@ -873,10 +863,19 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             }
             
             if(!IS_SAVE_TYPE(ast->type)) {
-                LOG("\n");
-                for(unint i=0; i<level+1; ++i) LOG("\t");
-                LOG("[VALUE]\n");
-                dbg_ast_recur(ast->node.space.value, level+2);
+                if(ast->node.space.name != NULL) {
+                    LOG("\n");
+                    for(unint i=0; i<level+1; ++i) LOG("\t");
+                    LOG("[NAME] ");
+                    for(unint i=0; i<ast->node.space.name->len; ++i) LOG_CP(ast->node.space.name->cps[i]);
+                    LOG("\n");
+                } else {
+                    LOG("\n");
+                    for(unint i=0; i<level+1; ++i) LOG("\t");
+                    LOG("[VALUE]\n");
+                    dbg_ast_recur(ast->node.space.value, level+2);
+
+                }
             }
             LOG("\n");
             break;
@@ -1009,7 +1008,17 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             stmts.node.statements = ast->node.fun_decl.statements;
             dbg_ast_recur(&stmts, level+2);
             break;
-
+        
+        case FUNC_CALL_NODE:
+            for(unint i=0; i<ast->node.func_call.func_call->len; ++i) LOG_CP(ast->node.func_call.func_call->cps[i]);
+            LOG("\n");
+            for(struct FuncCallArg* arg = ast->node.func_call.args_head; arg; arg = arg->next) {
+                for(unint i=0; i<level+1; ++i) LOG("\t");
+                LOG("[ARGS]\n");
+                dbg_ast_recur(arg->arg_expr, level+2);
+            }
+            LOG("\n");
+            break;
 
         default: { LOG("INVALID_NODE"); break; }
     }

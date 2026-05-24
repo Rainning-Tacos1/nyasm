@@ -79,5 +79,5 @@
 #define DOLLAR 72
 
 #define AT_IDENTIFIER_TOKEN 80
-
+#define ADDRESS_AST 81
 #endif

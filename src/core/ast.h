@@ -55,8 +55,10 @@ enum AST_types {
     DEL_NODE,
     STRING_NODE,
 
+    INSTRUCTION_NODE,
+    FUNC_CALL_NODE,
+
     ASSIGN_VAR_NODE,
-    ASSIGN_VAR_IDX_NODE,
     ASSIGN_APPEND_ARRAY_NODE,
 };
 
@@ -72,6 +74,10 @@ struct AstBinOp {
     unint op; // Uses the token type
     struct Ast_node* left;
     struct Ast_node* right;
+
+    // For indexation
+    struct token* _s;
+    struct token* _e;
 
     struct token* op_token;
 };
@@ -98,20 +104,9 @@ struct Variable {
 
 struct AstAssignVariable {
     struct token* name;
-    struct Ast_node* expr;
-    unint ass_type;
-};
-
-struct AstAssignVariableIdx {
-    struct token* name;
     struct Ast_node* idx;
     struct Ast_node* expr;
     unint ass_type;
-};
-
-struct AstAppendArray {
-    struct token* name;
-    struct Ast_node* expr;
 };
 
 struct AstStatementsNode {
@@ -207,6 +202,9 @@ struct AstSpace {
     struct Ast_node* value;
     struct token* _s; 
     struct token* _e;
+
+    // When inside functions
+    struct token* name;
 };
 
 struct AstLabel {
@@ -268,18 +266,30 @@ struct AstFuncDecl {
     struct AstStatements statements;
 };
 
-struct AstFuncCall {
-    struct token* func_name;
-
-    struct FuncCallArg* head;
-    struct FuncCallArg* tail;
-
-};
-
 struct AstString {
     struct Ast_node* expr;
     struct token* _s; // For error reporting
     struct token* _e; // For error reporting    
+
+    struct Ast_node* align_start_expr;
+};
+
+// Function calls
+struct FuncCallArg {
+    struct Ast_node* arg_expr;
+
+    struct token* _s; // For error reporting
+    struct token* _e; // For error reporting   
+
+    struct FuncCallArg* next;
+};
+
+
+struct AstFuncCall {
+    struct token* func_call;
+
+    struct FuncCallArg* args_head;
+    struct FuncCallArg* args_tail;
 };
 
 // Macros
@@ -333,6 +343,9 @@ struct Ast_node {
         // Fun
         struct AstFuncDecl fun_decl;
 
+        // Function call
+        struct AstFuncCall func_call;
+
         // @byte, @word, @dword, @qword, @float, @double
         // @saveb, @savew, @savedw, @saveq, @savef, @saved
         struct AstSpace space;
@@ -346,8 +359,6 @@ struct Ast_node {
 
         // Assignments
         struct AstAssignVariable var_assign;
-        struct AstAssignVariableIdx var_idx_assign;
-        struct AstAppendArray var_array_append_assign;
 
         // Error, warn, assert, include
         struct AstError error;
@@ -382,13 +393,13 @@ struct Ast_node* new_ast_break(struct Parser* p, struct token* _token);
 
 struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct token* import_token);
 
-struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
+struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct Ast_node* align_start_expr);
 
 struct Ast_node* new_ast_del(struct Parser* p, struct token* _token, struct token* ident);
 
 struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct token* ident);
 
-struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e);
+struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e, struct token* name);
 
 struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name);
 
@@ -401,9 +412,10 @@ unint insert_struct_field_assignment(struct Parser* p, struct token* _token, str
 struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct token* calling_conv, struct token* func_name, unint return_type);
 unint insert_fun_decl_arg(struct Parser* p, struct token* _token, struct AstFuncDecl* func_decl, struct token* arg_name, unint type);
 
-struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* expr, unint ass_type);
-struct Ast_node* new_ast_assign_variable_idx(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr, unint ass_type);
-struct Ast_node* new_ast_assign_append_array(struct Parser* p, struct token* ident, struct Ast_node* expr);
+struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, struct token* ident);
+unint insert_func_call_arg(struct Parser* p, struct token* _token, struct AstFuncCall* func_call, struct Ast_node* arg_expr, unint is_p, struct token* _s, struct token* _e);
+
+struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr, unint ass_type, unint type);
 
 struct Ast_node* new_ast_assert(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
 struct Ast_node* new_ast_warn(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
