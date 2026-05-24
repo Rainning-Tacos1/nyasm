@@ -95,16 +95,6 @@ struct AstIdentifier {
     unint len; 
 };
 
-// VAR_NODE
-
-// Move to parser
-struct Variable {
-    struct token* var_name;
-    struct Value val;
-    struct Variable* next;
-};
-
-
 struct AstAssignVariable {
     struct token* name;
     struct Ast_node* idx;

@@ -48,10 +48,6 @@ struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg);
 struct Value* new_array(struct Parser* p, struct token* _token);
 unint append_array(struct Parser* p, struct token* _token, struct Value* arr, struct Value* val);
 
-struct Variable* new_variable(struct Parser* p, struct token* _token, struct Value* val);
-struct Variable* get_variable(struct Parser* p, struct token* _token);
-unint is_variable_declared(struct Parser* p, struct token* _token);
-
 void print_value(struct Value* val);
 
 #define	ERANGE 34	/* Result too large */

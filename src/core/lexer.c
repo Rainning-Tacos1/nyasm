@@ -1159,11 +1159,15 @@ nextline:
                 //p_end = tok->uc.curr;
                 //return MAKE_TOKEN(COMMENT);
             }
+            
+            else if(*cp != EOF){
+                backup_cp(tok);
+                backup_cp(tok);
+                next_cp(tok);
+                break;
+            }
             backup_cp(tok);
-            p_start = tok->start;
-            p_end = tok->uc.curr;
 
-            return MAKE_TOKEN(SLASH);
         }
         break;
     }

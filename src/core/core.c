@@ -14,6 +14,7 @@
 #include "variables.h"
 #include "ast.h"
 #include "err.h"
+#include "eval.h"
 
 nbool assemble(char* path) {
 
@@ -50,9 +51,21 @@ nbool assemble(char* path) {
     DBG(1, "Start!\n");
 
     struct Ast_node* ast = _run_parser(p);
+    if(ast == NULL) return FAIL;
+
     DBG(1, "End!\n");
     dbg_ast(ast);
     DBG(1, "Done DBG!\n");
     
+    
+    if(eval_ast(p, ast) == FAIL) return FAIL;
+
+    DBG(1, "PRINTING VARTABLES\n");
+    for(struct Variable* var = p->variables; var; var = var->next) {
+        for(unint i=0; i<var->var_name->len; ++i) LOG_CP(var->var_name->cps[i]);
+        LOG(" = ");
+        print_value(&var->val);
+    }
+
     return SUCCESS;
 }

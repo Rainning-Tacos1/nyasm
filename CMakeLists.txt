@@ -14,6 +14,7 @@ add_library(core STATIC
 "src/core/parser.c"
 "src/core/lexer.c"
 "src/core/ctype.c"
+"src/core/eval.c"
 )
 
 # Static lib for implementations

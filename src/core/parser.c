@@ -775,7 +775,7 @@ unint _fill_and_expand_macros(struct Parser* p) {
         else if(s == NULL && e == NULL) {
 
             // We assume that rs != NULL bc the first token ever read cant be a macro
-            //DBG(1, "(*re)->next = %p", (*re)->next);
+            //DBG(DO_PARSER_RADOM_STUFF_DBG, "(*re)->next = %p", (*re)->next);
             rs->next = (*re)->next;
             if((*re)->next == NULL) {
                 re = &p->tail;
@@ -841,7 +841,7 @@ unint _fill_and_expand_macros(struct Parser* p) {
 
         if(*re == p->tail) break;
     } 
-    // DBG(1, "[READ Token] re = %p | &p->tail = %p | p->tail = [%s:l%d:c%d] --------------------------------\n", re, &p->tail, _Parser_TokenNames[p->tail->type], p->tail->lineno, p->tail->col_offset);
+    // DBG(DO_PARSER_RADOM_STUFF_DBG, "[READ Token] re = %p | &p->tail = %p | p->tail = [%s:l%d:c%d] --------------------------------\n", re, &p->tail, _Parser_TokenNames[p->tail->type], p->tail->lineno, p->tail->col_offset);
 
     return SUCCESS;
 }
@@ -1028,7 +1028,7 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
 }
 
 struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma);
-unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val);
+unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val, struct Value** var_ref_idx);
 
 // Will return NULL or an AST
 struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
@@ -1048,10 +1048,10 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
 
             return left;
         case STRING:
-            DBG(1, "Expr pref is string\n");
+            DBG(DO_PARSER_RADOM_STUFF_DBG, "Expr pref is string\n");
             return new_ast_string(p, _token);
         case NUMBER:
-            DBG(1, "Expr pref is number\n");
+            DBG(DO_PARSER_RADOM_STUFF_DBG, "Expr pref is number\n");
             return new_ast_number(p, _token, 0);
         case MINUS:
             // might be a negation or a negative number
@@ -1060,7 +1060,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
 
             // Handle the number
             if(_peek->type == NUMBER) {
-                DBG(1, "Expr pref is negative number\n");
+                DBG(DO_PARSER_RADOM_STUFF_DBG, "Expr pref is negative number\n");
 
                 // Eat the number
                 _token = _read_token(p);
@@ -1105,7 +1105,10 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
 
             while(true) {
                 // Finished
-                if(_token->type == RSQB) break;
+                if(_token->type == RSQB) {
+                    _read_token(p);
+                    break;
+                }
 
                 // parse the expression
                 struct Ast_node* el = _parse_expr(p, 0, 1); // Do stop on commas
@@ -1113,14 +1116,16 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
 
                 // Eval the expression
                 struct Value val;
-                if(_eval_expr(p, el, &val) == FAIL) return NULL;
+                struct Value* var_ref_idx;
+                if(_eval_expr(p, el, &val, &var_ref_idx) == FAIL) return NULL;
 
                 // Append to the array
                 if(append_array(p, _token, arr, &val) == FAIL) return NULL;
 
                 // Read possibly the next comma or ]
-                if((_token = _read_token(p)) == NULL) return NULL;
+                if((_token = _peek_token(p)) == NULL) return NULL;
                 if(_token->type == COMMA) {
+                    _read_token(p); // COMMA
                     struct token* rsqb = _peek_token(p);
                     if(rsqb == NULL) return NULL;
 
@@ -1222,8 +1227,6 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
     return left;
 }
 
-unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val);
-
 void _error_from_multiple_tokens(struct Parser* p, struct token* _s, struct token* _e, const char *stype, const char *format) {
     nint col_offset = -1;
     struct token* _c = _s;
@@ -1237,542 +1240,6 @@ void _error_from_multiple_tokens(struct Parser* p, struct token* _s, struct toke
     }
     // -1 bc failed on expr eval index [100 + 1]
     _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset-1, stype, format);
-}
-
-unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft, struct Value* vright, unint tcleft, unint tcright) {
-    struct token* op_token = binop->op_token;
-    unint op = binop->op;
-
-    // Type checks
-    // Unary only on numbers
-    DBG(1, "tcright = %d | tcleft = %d\n", tcright, tcleft);
-    if(op == PLUS && binop->right == NULL && (
-        !tcright && (tcleft && (vleft->type != VALUE_DOUBLE && vleft->type != VALUE_INT))
-    )) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "invalid unary operator");
-        return FAIL;
-    }
-
-    // Concatnation only allowed on Strings/characters
-    if(op == PLUS && (tcleft == 1 && tcright == 1) && ( 
-        (vleft->type == VALUE_STR) != (vright->type == VALUE_STR)
-    )) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform concatnation on strings types");
-        return FAIL;
-    }
-
-
-    // Arithmetic only on ints/floats 
-    if ((op == PLUS || op == MINUS || op == SLASH || op == STAR || op == PERCENT) && ( 
-            (tcleft && (vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE)) ||
-            (tcright && (vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)) 
-        ) && (
-            (tcleft && (vleft->type != VALUE_STR)) &&
-            (tcright && (vright->type != VALUE_STR)) 
-        )
-    ) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types");
-        return FAIL;
-    }
-    // Bitwise operators only on ints
-    if((op == LEFTSHIFT || op == RIGHTSHIFT || op == AMPER || op == VBAR || op == CIRCUMFLEX || op == TILDE) && (
-        (tcleft && vleft->type != VALUE_INT) ||
-        (tcright && vright->type != VALUE_INT)
-    )) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform bitwise operations on integer types");
-        return FAIL;
-    }
-
-    // Relational operators
-
-    // >= > <= < only to integers/floats
-    if((op == GREATER || op == GREATEREQUAL || op == LESS || op == LESSEQUAL) && (
-        (tcleft && vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE) ||
-        (tcright && vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)
-    )) {
-        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "can only perform comparison on integer/double types");
-        return FAIL;
-    }
-    
-    // Indexation only on array types or strings
-    if(op == LSQB && 
-        (tcleft && vleft->type != VALUE_ARRAY && vleft->type != VALUE_STR)
-    ) {
-        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "can only perform indexation on array/string types");
-        return FAIL;
-    }
-
-    // Index only with integer
-    if(op == LSQB &&
-        (tcright && vright->type != VALUE_INT)
-    ) {
-        _error_from_multiple_tokens(p, binop->_s, binop->_e, ERROR_TYPE_TYPE, "indices can only by of integer type");
-        return FAIL;
-    }
-    
-    return SUCCESS;
-}
-
-
-unint bool_eval(struct Value* val) {
-    switch(val->type) {
-        case VALUE_INT:
-            return !!val->val.number;
-        case VALUE_STR:
-            return !!val->val.string.len;
-        case VALUE_DOUBLE:
-            return !!val->val.flt;
-        case VALUE_ARRAY:
-            return !!val->val.arr.len;
-        default:
-            return 0;
-    }
-}
-
-unint _equality_check(struct Value* vleft, unint op, struct Value* vright) {
-    // except for int and floats, if both types dont match, return false(==), or true(!=)
-    if((vleft->type == VALUE_DOUBLE || vleft->type == VALUE_INT) &&
-        (vright->type == VALUE_DOUBLE || vright->type == VALUE_INT)
-    ) {
-        // if one is float, promote all to float
-        if(vleft->type == VALUE_DOUBLE || vright->type == VALUE_DOUBLE) {
-
-            double da = (vleft->type == VALUE_DOUBLE) ? vleft->val.flt : (double)vleft->val.number;
-            double db = (vright->type == VALUE_DOUBLE) ? vright->val.flt : (double)vright->val.number;
-
-            return (op == EQEQUAL) ? (nint)(da == db) : (nint)(da != db);;
-        }
-
-        nint a = vleft->val.number;
-        nint b = vright->val.number;
-
-        return (op == EQEQUAL) ? (nint)(a == b) : (nint)(a != b);
-
-    }
-
-    // Do types miss-match?
-    if(vleft->type != vright->type) return !(op == EQEQUAL);
-
-    // types left: string == string and array == array
-    unint alen;
-    unint blen;
-
-    if(vleft->type == VALUE_STR) {
-        alen = vleft->val.string.len;
-        blen = vright->val.string.len;
-
-        if(alen != blen) return !(op == EQEQUAL);
-
-        for(unint i=0; i<alen; ++i) if(vleft->val.string.str[i] != vright->val.string.str[i]) return !(op == EQEQUAL);
-
-        // Strings match
-        return (op == EQEQUAL);
-    }
-
-    // Array:
-    alen = vleft->val.arr.len;
-    blen = vright->val.arr.len;
-
-    if(alen != blen) return !(op == EQEQUAL);
-
-    struct ArrayElement* tleft = vleft->val.arr.head;
-    struct ArrayElement* tright = vright->val.arr.head;
-    while(tleft != NULL) {
-        if(_equality_check(&tleft->this, NOTEQUAL, &tright->this)) return !(op == EQEQUAL);
-        tleft = tleft->next;
-        tright = tright->next;
-    }
-
-    // Arrays match
-    return (op == EQEQUAL);
-}
-
-unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
-    switch(expr->type) {
-        case LITERAL_NODE:
-            *val = *expr->node.literal.value;
-            return SUCCESS;
-        case VAR_NODE:
-            // Check if variable is declared
-            // Get the variable
-            struct Variable* var = get_variable(p, expr->node.var);
-            if(var == NULL) {
-                _error_from_token(p, expr->node.var, ERROR_TYPE_EXPRESSION, "variable is not declared");
-                return FAIL;
-            }
-            *val = var->val;
-            return SUCCESS;
-        case DOLLAR_NODE:
-            // Grab the current address value as an int
-            return SUCCESS;
-        case BINOP_NODE:
-            struct AstBinOp* binop = &expr->node.binop;
-            struct Ast_node* pleft = binop->left;
-            struct Ast_node* pright = binop->right;
-            struct token* op_token = binop->op_token;
-            
-            struct Value vleft, vright;
-
-            // && and || have manual evaluation
-            if(binop->op == DOUBLEAMPER || binop->op == DOUBLEVBAR) goto _skip_extra_type_checks;
-
-            // Early type check
-            unint tcleft = 0, tcright = 0;
-
-            if(pleft->type == LITERAL_NODE || pleft->type == VAR_NODE){
-                if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
-                tcleft = 1;
-            }
-
-            if(pright && (pright->type == LITERAL_NODE || pright->type == VAR_NODE)) {
-                if(_eval_expr(p, pright, &vright) == FAIL) return FAIL;
-                tcright = 1;
-            }
-
-            DBG(DO_EXPRESSION_EVAL_TYPE_CHECK_DBG, "Type check #1: tcleft = %d | tcright = %d\n", tcleft, tcright);
-            if(_type_check(p, binop, &vleft, &vright, tcleft, tcright) == FAIL) return FAIL;
-
-            // Evaluate
-            if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
-
-            if(tcleft == 1 && tcright == 1) goto _skip_extra_type_checks;
-
-            DBG(DO_EXPRESSION_EVAL_TYPE_CHECK_DBG, "Type check #2: tcleft = %d | tcright = %d\n", 1, 0);
-            if(_type_check(p, binop, &vleft, &vright, 1, 0) == FAIL) return FAIL;
-
-            // May not exist depending on the operator
-            if(pright && _eval_expr(p, pright, &vright) == FAIL) return FAIL;
-
-            DBG(DO_EXPRESSION_EVAL_TYPE_CHECK_DBG, "Type check #3: tcleft = %d | tcright = %d\n", 0, 1);
-            if(pright && _type_check(p, binop, &vleft, &vright, 0, 1) == FAIL) return FAIL;
-
-_skip_extra_type_checks:
-            nint a, b;
-            double da, db;
-
-            // Eval operators
-            switch(binop->op) {
-                case PLUS:
-
-                    // unary plus, if right is not present, preserve the original type
-                    if(!pright) { *val = vleft; return SUCCESS; }
-
-                    // String concatnation
-                    if(vleft.type == VALUE_STR && vright.type == VALUE_STR) {
-                        struct Value* non_empty_str = NULL;
-                        unint alen = vleft.val.string.len;
-                        unint blen = vright.val.string.len;
-                        if(alen == 0) non_empty_str = &vright;
-                        else if(blen == 0) non_empty_str = &vleft;
-                        if(non_empty_str) {
-                            *val = *non_empty_str;
-                            return SUCCESS;
-                        }
-
-                        int32_t* cps = MEM_ALLOC((alen + blen) * sizeof(int32_t), "eval of concatnation");
-                        if(cps == NULL) {
-                            _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "no available memory to concatnate the string");
-                            return FAIL;   
-                        }
-
-                        // Copy
-                        for(unint i=0; i<alen; ++i) cps[i] = vleft.val.string.str[i];
-                        for(unint i=0; i<blen; ++i) cps[alen+i] = vright.val.string.str[i];
-
-                        val->type = VALUE_STR;
-                        val->val.string.str = cps;
-                        val->val.string.len = (alen + blen);
-
-                        return SUCCESS;
-                    }
-
-                    // Convert types
-                    if(vleft.type == VALUE_INT && vright.type == VALUE_INT) {
-                        val->type = VALUE_INT;
-                        // Check for overflows
-                        
-                        a = vleft.val.number;
-                        b = vright.val.number;
-
-                        // Overflow?
-                        if ((b > 0 && a > NINT_MAX - b) ||
-                            (b < 0 && a < NINT_MIN - b)) {
-                            _error_from_token(p, op_token, ERROR_TYPE_OVERFLOW, "integer overflow in addition");
-                            return FAIL;
-                        }
-
-                        val->type = VALUE_INT;
-                        val->val.number = a + b;
-                        return SUCCESS;
-                    }
-
-                    // Promote to flt
-                    da = (vleft.type == VALUE_INT)  ? (double)vleft.val.number  : vleft.val.flt;
-                    db = (vright.type == VALUE_INT) ? (double)vright.val.number : vright.val.flt;
-
-                    val->type = VALUE_DOUBLE;
-                    val->val.flt = da + db;
-                    return SUCCESS;
-
-                case MINUS:
-                    if(vleft.type == VALUE_INT || (vleft.type == VALUE_INT && (expr->node.binop.right && vright.type == VALUE_INT))) {
-
-                        a = expr->node.binop.right ? vleft.val.number : 0;
-                        b = expr->node.binop.right ? vright.val.number : vleft.val.number;
-
-                        if ((b < 0 && a > NINT_MAX + b) ||
-                            (b > 0 && a < NINT_MIN + b)) {
-                            _error_from_token(p, op_token, ERROR_TYPE_OVERFLOW, "integer overflow in subtraction");
-                            return FAIL;
-                        }
-
-                        val->type = VALUE_INT;
-                        val->val.number = a - b;
-                        return SUCCESS;
-                    }
-
-                    // Promote to flt
-                    da = expr->node.binop.right ? (
-                        (vleft.type == VALUE_INT) ?  (double)vleft.val.number : vleft.val.flt
-                    ) : (
-                        (vleft.type == VALUE_INT) ? 0 : (double)0.0
-                    );
-                    db = expr->node.binop.right ? (
-                        (vright.type == VALUE_INT) ? (double)vright.val.number : vright.val.flt
-                    ) : (
-                        (vleft.type == VALUE_INT) ?  (double)vleft.val.number : vleft.val.flt
-                    );
-                    
-                    val->type = VALUE_DOUBLE;
-                    val->val.flt = da - db;
-                    return SUCCESS;
-                
-                case PERCENT:
-                    if( (vright.type == VALUE_DOUBLE && vright.val.flt == (double)0.0) || (vright.type == VALUE_INT && vright.val.number == 0) ) {
-                        _error_from_token(p, op_token, ERROR_TYPE_DIVISION_ERROR, "modulo by 0");
-                        return FAIL;
-                    }
-                    // if one is float, promote all to float
-                    if(vleft.type == VALUE_DOUBLE || vright.type == VALUE_DOUBLE) {
-                        da = (vleft.type == VALUE_DOUBLE) ? vleft.val.flt : (double)vleft.val.flt;
-                        db = (vright.type == VALUE_DOUBLE) ? vright.val.flt : (double)vright.val.flt;
-
-                        val->type = VALUE_DOUBLE;
-                        val->val.flt = fmod( fmod(da, db) + db, db);
-                        return SUCCESS;
-                    }
-
-                    a = vleft.val.number;
-                    b = vright.val.number;
-
-                    val->type = VALUE_INT;
-                    val->val.number = ((a % b) + b) % b;
-                    return SUCCESS;
-                    
-                case SLASH:
-                    if( (vright.type == VALUE_DOUBLE && vright.val.flt == (double)0.0) || (vright.type == VALUE_INT && vright.val.number == 0) ) {
-                        _error_from_token(p, op_token, ERROR_TYPE_DIVISION_ERROR, "division by 0");
-                        return FAIL;
-                    }
-                    // if one is float, promote all to float
-                    if(vleft.type == VALUE_DOUBLE || vright.type == VALUE_DOUBLE) {
-
-                        da = (vleft.type == VALUE_DOUBLE) ? vleft.val.flt : (double)vleft.val.number;
-                        db = (vright.type == VALUE_DOUBLE) ? vright.val.flt : (double)vright.val.number;
-
-                        val->type = VALUE_DOUBLE;
-                        val->val.flt = da / db;
-                        return SUCCESS;
-                    }
-
-                    a = vleft.val.number;
-                    b = vright.val.number;
-
-                    if(a == NINT_MIN && b == -1) {
-                        _error_from_token(p, op_token, ERROR_TYPE_OVERFLOW, "integer overflow in division");
-                        return FAIL;
-                    }
-                    val->type = VALUE_INT;
-                    val->val.number = a / b;
-                    return SUCCESS;
-
-                case STAR:
-                    // if one is float, promote all to float
-                    if(vleft.type == VALUE_DOUBLE || vright.type == VALUE_DOUBLE) {
-
-                        da = (vleft.type == VALUE_DOUBLE) ? vleft.val.flt : (double)vleft.val.number;
-                        db = (vright.type == VALUE_DOUBLE) ? vright.val.flt : (double)vright.val.number;
-
-                        val->type = VALUE_DOUBLE;
-                        val->val.flt = da * db;
-                        return SUCCESS;
-                    }
-
-                    a = vleft.val.number;
-                    b = vright.val.number;
-
-                    if (a > 0) {
-                        if (b > 0) {
-                            if (a > NINT_MAX / b) goto mul_overflow;
-                        } else {
-                            if (b < NINT_MIN / a) goto mul_overflow;
-                        }
-                    } else {
-                        if (b > 0) {
-                            if (a < NINT_MIN / b) goto mul_overflow;
-                        } else {
-                            if (a != 0 && b < NINT_MAX / a) goto mul_overflow;
-                        }
-                    }
-
-                    val->type = VALUE_INT;
-                    val->val.number = a * b;
-                    return SUCCESS;
-mul_overflow:
-                    _error_from_token(p, op_token, ERROR_TYPE_OVERFLOW, "integer overflow in multiplication");
-                    return FAIL;
-
-                case LSQB:
-                    // Valid index?
-                    nint index = vright.val.number;
-                    unint len = (vleft.type == VALUE_ARRAY) ? vleft.val.arr.len : vleft.val.string.len;
-                    if(index < 0) index = len + index;
-
-                    if(index < 0 || index >= len) {
-                        _error_from_multiple_tokens(p, binop->_s, binop->_e, ERROR_TYPE_INDEX_ERROR, "index out of range");
-                        return FAIL;
-                    }
-
-                    if(vleft.type == VALUE_ARRAY) {
-                        struct ArrayElement* el = vleft.val.arr.head;
-                        for(nint i=0; i<index; ++i) el = el->next;
-
-                        *val = el->this;
-                    } else { // String
-                        int32_t* cp = MEM_ALLOC(sizeof(int32_t), "eval of string index");
-                        if(cp == NULL) {
-                            _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "no available memory to index the string");
-                            return FAIL;   
-                        }
-
-                        *cp = vleft.val.string.str[index];
-
-                        val->type = VALUE_STR;
-                        val->val.string.len = 1;
-                        val->val.string.str = cp;
-                    }
-
-                    return SUCCESS;
-
-                case LEFTSHIFT:
-                    val->type = VALUE_INT;
-                    val->val.number = vleft.val.number << vright.val.number;
-                    return SUCCESS;
-                case RIGHTSHIFT:
-                    val->type = VALUE_INT;
-                    val->val.number = vleft.val.number >> vright.val.number;
-                    return SUCCESS;
-
-                case AMPER:
-                    val->type = VALUE_INT;
-                    val->val.number = vleft.val.number & vright.val.number;
-                    return SUCCESS;
-
-                case VBAR:
-                    val->type = VALUE_INT;
-                    val->val.number = vleft.val.number | vright.val.number;
-                    return SUCCESS;
-
-                case CIRCUMFLEX:
-                    val->type = VALUE_INT;
-                    val->val.number = vleft.val.number ^ vright.val.number;
-                    return SUCCESS;
-
-                case TILDE:
-                    val->type = VALUE_INT;
-                    val->val.number = ~vleft.val.number;
-                    return SUCCESS;
-
-                case EXCLAMATION:
-                    val->type = VALUE_INT;
-                    val->val.number = !bool_eval(&vleft);
-                    return SUCCESS;
-                
-                case DOUBLEAMPER:
-                    val->type = VALUE_INT;
-                    // Eval the left branch and skip the right one if it fails
-                    if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
-                    if(bool_eval(&vleft) == 0) {
-                        val->val.number = 0;
-                        return SUCCESS;
-                    }
-
-                    // Eval the right branch
-                    if(_eval_expr(p, pright, &vright) == FAIL) return FAIL;
-                    val->val.number = bool_eval(&vright);
-                    return SUCCESS;
-
-                case DOUBLEVBAR:
-                    val->type = VALUE_INT;
-
-                    // Eval the left branch and skip the right one if it succeeds
-                    if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
-                    if(bool_eval(&vleft) == 1) {
-                        val->val.number = 1;
-                        return SUCCESS;
-                    }
-
-                    // Eval the right branch
-                    if(_eval_expr(p, pright, &vright) == FAIL) return FAIL;
-                    val->val.number = bool_eval(&vright);
-                    return SUCCESS;
-
-                case NOTEQUAL:
-                case EQEQUAL:
-                    val->type = VALUE_INT;
-                    val->val.number = _equality_check(&vleft, binop->op, &vright);
-                    return SUCCESS;
-
-                case GREATER:
-                case GREATEREQUAL:
-                case LESS:
-                case LESSEQUAL:
-                    // if one is float, promote all to float
-                    val->type = VALUE_INT;
-                    if(vleft.type == VALUE_DOUBLE || vright.type == VALUE_DOUBLE) {
-
-                        da = (vleft.type == VALUE_DOUBLE) ? vleft.val.flt : (double)vleft.val.number;
-                        db = (vright.type == VALUE_DOUBLE) ? vright.val.flt : (double)vright.val.number;
-
-                        switch(binop->op) {
-                            case GREATER:      { val->val.number = da >  db; break; }
-                            case GREATEREQUAL: { val->val.number = da >= db; break; }
-                            case LESS:         { val->val.number = da <  db; break; }
-                            case LESSEQUAL:    { val->val.number = da >= db; break; }
-                        }
-                        return SUCCESS;
-                    }
-
-                    a = vleft.val.number;
-                    b = vright.val.number;
-
-                    switch(binop->op) {
-                        case GREATER:      { val->val.number = a >  b; break; }
-                        case GREATEREQUAL: { val->val.number = a >= b; break; }
-                        case LESS:         { val->val.number = a <  b; break; }
-                        case LESSEQUAL:    { val->val.number = a >= b; break; }
-                    }
-                    return SUCCESS;
-
-                    
-
-                default:
-                    _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "evaluation of that operator hasn't been implemented");
-                    return FAIL;
-            }
-        default:
-            return FAIL;  
-    }
 }
 
 // Macros
@@ -1866,24 +1333,24 @@ unint is_macro_arg(struct Macro* macro, int32_t* cps, unint len) {
 }
 
 void print_macro(struct Macro* macro) {
-    DBG(1, "@macro ");
+    DBG(DO_PARSER_RADOM_STUFF_DBG, "@macro ");
     for(unint i=0; i<macro->name.len; ++i) DBG_CP(1, macro->name.cps[i]);
-    DBG(1, " (");
+    DBG(DO_PARSER_RADOM_STUFF_DBG, " (");
     struct MacroArg* arg = macro->args;
     while(arg != NULL) {
-        DBG(1, "\n\t");
-        if(arg->is_variadic) DBG(1, "*");
+        DBG(DO_PARSER_RADOM_STUFF_DBG, "\n\t");
+        if(arg->is_variadic) DBG(DO_PARSER_RADOM_STUFF_DBG, "*");
         for(unint i=0; i<arg->arg_name.len; ++i) DBG_CP(1, arg->arg_name.cps[i]);
         arg = arg->next;
     }
-    DBG(1, "\n) [ ");
+    DBG(DO_PARSER_RADOM_STUFF_DBG, "\n) [ ");
 
     struct token* tok = macro->tokens;
     for(unint i=0; i<macro->tok_len; ++i) {
-        DBG(1, "%s ", _Parser_TokenNames[tok->type]);
+        DBG(DO_PARSER_RADOM_STUFF_DBG, "%s ", _Parser_TokenNames[tok->type]);
         tok = tok->next;
     }
-    DBG(1, "]\n");
+    DBG(DO_PARSER_RADOM_STUFF_DBG, "]\n");
 
 }
 
@@ -1952,7 +1419,7 @@ unint _parse_block(struct Parser* p, struct AstStatements* statements, unint blo
             struct token* dedent = _peek_token(p);
             if(dedent == NULL) return FAIL;
     
-            DBG(1, "BLOCK PEEKED: [%s:l%d:c%d]\n", _Parser_TokenNames[dedent->type], dedent->lineno, dedent->col_offset);
+            DBG(DO_PARSER_RADOM_STUFF_DBG, "BLOCK PEEKED: [%s:l%d:c%d]\n", _Parser_TokenNames[dedent->type], dedent->lineno, dedent->col_offset);
             if(dedent->type == DEDENT) {
                 _read_token(p);
 
@@ -1995,13 +1462,12 @@ struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** 
     // Expr
     struct Ast_node* cond = _parse_expr(p, (unint)(0), stop_on_comma);
     if(cond == NULL) {
-        DBG(1, "Error building expression\n");
+        DBG(DO_PARSER_RADOM_STUFF_DBG, "Error building expression\n");
         return NULL;
     }
 
-    DBG(1, "#################################\n");
-    dbg_ast(cond);
-    DBG(1, "#################################\n");
+    if((*_e = _peek_token(p)) == NULL) return NULL;
+    _reset_peek(p);
 
     return cond;
 }
@@ -2352,7 +1818,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
     if (_token == NULL) return FAIL;
 
-    DBG(1, "DONE SKIPING (using last)\n");
+    DBG(DO_PARSER_RADOM_STUFF_DBG, "DONE SKIPING (using last)\n");
 
     // Non AST stuff
     if(is_at_identifier(_token, MACRO_IDENTIDIER) == SUCCESS) {
@@ -2465,9 +1931,9 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
         p->is_inside_macro_decl = 0;
 
-        DBG(1, "-----------------------------------------------------------------\n");
+        DBG(DO_PARSER_RADOM_STUFF_DBG, "-----------------------------------------------------------------\n");
         print_macro(macro);
-        DBG(1, "-----------------------------------------------------------------\n");
+        DBG(DO_PARSER_RADOM_STUFF_DBG, "-----------------------------------------------------------------\n");
 
         *flags = FLAG_MACRO_DECL;
         *stmt_ast = NULL;
@@ -2552,7 +2018,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         if(last_token == NULL) p->head = _p->head;
         else {
             last_token->next = _p->head;
-            DBG(1, "last_token: [%p:%s:l%d:c%d]\n", last_token, _Parser_TokenNames[last_token->type], last_token->lineno,last_token->col_offset);
+            DBG(DO_PARSER_RADOM_STUFF_DBG, "last_token: [%p:%s:l%d:c%d]\n", last_token, _Parser_TokenNames[last_token->type], last_token->lineno,last_token->col_offset);
         }
         prev->next = _e;
         p->last_token = (p->peek = last_token);            
@@ -3073,16 +2539,14 @@ _end_if:
                 if(_parse_potential_indexation(p, _token, &idx_expr) == FAIL) return FAIL;
                 _reset_peek(p);
 
-                DBG(1, "PARSER INDEXATION\n");
+                DBG(DO_PARSER_RADOM_STUFF_DBG, "PARSER INDEXATION\n");
 
                 // Possible append
                 struct token* p1 = _read_token(p);
                 if(p1 == NULL) return FAIL;
 
-                DBG(1, "ASDXASDASDASDSADSAD [%s]\n", _Parser_TokenNames[p1->type]);
 
                 if(p1->type == LSQB) {
-                    DBG(1, "AAAAPEEEENNDDD\n");
                     // Next token must be "]"
                     if(expect_token(p, RSQB) == NULL) return FAIL;
                     node_type = ASSIGN_APPEND_ARRAY_NODE;
@@ -3093,16 +2557,14 @@ _end_if:
 
                 // Expect a valid assignment
                 if(IS_ASSIGNMENT(p1->type)) {
+                    DBG(1, "STARTING EXPRE PARSING\n");
                     expr = _parse_expr(p, (unint)(0), 0);
                     if(expr == NULL) {
-                        DBG(1, "Error building expression\n");
+                        DBG(DO_PARSER_RADOM_STUFF_DBG, "Error building expression\n");
                         return FAIL;
                     }
-
-                    DBG(1, "#################################\n");
                     dbg_ast(expr);
-                    DBG(1, "#################################\n");
-
+                    DBG(1, "DONE EXPRE PARSING\n");
                     // expect new line
                     if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
@@ -3161,7 +2623,7 @@ _invalid_assignment:
     }
 
     else if (_token->type == ENDMARKER) {
-        DBG(1, "END OF PARSING\n");
+        DBG(DO_PARSER_RADOM_STUFF_DBG, "END OF PARSING\n");
         *stmt_ast = NULL;
         return SUCCESS;
     } else {
