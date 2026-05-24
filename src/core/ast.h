@@ -1,6 +1,7 @@
 #ifndef AST_H
 #define AST_H
 
+#include "asm_lang.h"
 #include "lexer.h"
 #include "types.h"
 
@@ -54,6 +55,8 @@ enum AST_types {
     IMPORT_NODE,
     DEL_NODE,
     STRING_NODE,
+    CODE_NODE,
+    ALIGN_NODE,
 
     INSTRUCTION_NODE,
     FUNC_CALL_NODE,
@@ -292,6 +295,30 @@ struct AstFuncCall {
     struct FuncCallArg* args_tail;
 };
 
+struct InstructionArg {
+    struct token* _s;
+    struct token* _e;
+
+    struct InstructionArg* next;
+};
+
+struct AstInstruction {
+    struct token* name;
+
+    struct InstructionArg* args_head;
+    struct InstructionArg* args_tail;
+};
+
+struct AstCode {
+    struct asm_lang_t* lang;
+};
+
+struct AstAlign {
+    struct Ast_node* expr;
+    struct token* _s;
+    struct token* _e;
+};
+
 // Macros
 struct MacroArg {
     unint is_variadic;
@@ -346,6 +373,9 @@ struct Ast_node {
         // Function call
         struct AstFuncCall func_call;
 
+        // Instruction
+        struct AstInstruction instruction;
+
         // @byte, @word, @dword, @qword, @float, @double
         // @saveb, @savew, @savedw, @saveq, @savef, @saved
         struct AstSpace space;
@@ -359,6 +389,10 @@ struct Ast_node {
 
         // Assignments
         struct AstAssignVariable var_assign;
+
+        struct AstAlign align;
+
+        struct AstCode code;
 
         // Error, warn, assert, include
         struct AstError error;
@@ -412,8 +446,15 @@ unint insert_struct_field_assignment(struct Parser* p, struct token* _token, str
 struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct token* calling_conv, struct token* func_name, unint return_type);
 unint insert_fun_decl_arg(struct Parser* p, struct token* _token, struct AstFuncDecl* func_decl, struct token* arg_name, unint type);
 
+struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident);
+unint insert_instruction_arg(struct Parser* p, struct token* _token, struct AstInstruction* instruction, struct token* _s, struct token* _e);
+
 struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, struct token* ident);
 unint insert_func_call_arg(struct Parser* p, struct token* _token, struct AstFuncCall* func_call, struct Ast_node* arg_expr, unint is_p, struct token* _s, struct token* _e);
+
+struct Ast_node* new_ast_code(struct Parser* p, struct token* _token, struct asm_lang_t* lang);
+
+struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
 
 struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr, unint ass_type, unint type);
 

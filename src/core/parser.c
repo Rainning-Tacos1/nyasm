@@ -11,6 +11,7 @@
 #include "token.h"
 #include "err.h"
 
+#include "asm_lang.h"
 #include "lexer.h"
 #include "parser.h"
 #include "variables.h"
@@ -49,12 +50,16 @@
 #define SAVED_IDENTIFIER ((int32_t[]){'s', 'a', 'v', 'e', 'd', -1})
 #define SAVEP_IDENTIFIER ((int32_t[]){'s', 'a', 'v', 'e', 'p', -1})
 
+#define ALIGN_IDENTIFIER ((int32_t[]){'a', 'l', 'i', 'g', 'n', -1})
+
 #define IMPORT_IDENTIFIER ((int32_t[]){'i', 'm', 'p', 'o', 'r', 't', -1})
 #define STRUCT_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'u', 'c', 't', -1})
 #define STRING_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'i', 'n', 'g', -1})
 #define RETURN_IDENTIFIER ((int32_t[]){'r', 'e', 't', 'u', 'r', 'n', -1})
 #define DEL_IDENTIFIER ((int32_t[]){'d', 'e', 'l', -1})
 #define FUN_IDENTIFIER ((int32_t[]){'f', 'u', 'n', -1})
+
+#define CODE_IDENTIFIER ((int32_t[]){'c', 'o', 'd', 'e', -1})
 
 #define P_IDENTIFIER ((int32_t[]){'p', -1})
 
@@ -1408,6 +1413,9 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val) {
             
             struct Value vleft, vright;
 
+            // && and || have manual evaluation
+            if(binop->op == DOUBLEAMPER || binop->op == DOUBLEVBAR) goto _skip_extra_type_checks;
+
             // Early type check
             unint tcleft = 0, tcright = 0;
 
@@ -1692,12 +1700,31 @@ mul_overflow:
                 
                 case DOUBLEAMPER:
                     val->type = VALUE_INT;
-                    val->val.number = bool_eval(&vleft) && bool_eval(&vright);
+                    // Eval the left branch and skip the right one if it fails
+                    if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
+                    if(bool_eval(&vleft) == 0) {
+                        val->val.number = 0;
+                        return SUCCESS;
+                    }
+
+                    // Eval the right branch
+                    if(_eval_expr(p, pright, &vright) == FAIL) return FAIL;
+                    val->val.number = bool_eval(&vright);
                     return SUCCESS;
 
                 case DOUBLEVBAR:
                     val->type = VALUE_INT;
-                    val->val.number = bool_eval(&vleft) || bool_eval(&vright);
+
+                    // Eval the left branch and skip the right one if it succeeds
+                    if(_eval_expr(p, pleft, &vleft) == FAIL) return FAIL;
+                    if(bool_eval(&vleft) == 1) {
+                        val->val.number = 1;
+                        return SUCCESS;
+                    }
+
+                    // Eval the right branch
+                    if(_eval_expr(p, pright, &vright) == FAIL) return FAIL;
+                    val->val.number = bool_eval(&vright);
                     return SUCCESS;
 
                 case NOTEQUAL:
@@ -2295,6 +2322,21 @@ unint _parse_potential_indexation(struct Parser* p, struct token* var_name, stru
     return SUCCESS;
 }
 
+unint cstr_equals_codepoints(const char* c_str, const int32_t* cps, unint len) {
+    unint i = 0;
+
+    while (true) {
+        unsigned char c = (unsigned char)c_str[i];
+
+        if (c == '\0') return (i == len) ? SUCCESS : FAIL;
+
+        if (i >= len) return FAIL;
+
+        if ((int32_t)c != cps[i]) return FAIL;
+        i++;
+    }
+}
+
 #define IS_ASSIGNMENT(_token) (_token == EQUAL || _token == PLUSEQUAL || _token == MINEQUAL || _token == STAREQUAL || _token == SLASHEQUAL || _token == PERCENTEQUAL || _token == AMPEREQUAL || _token == VBAREQUAL || _token == CIRCUMFLEXEQUAL || _token == LEFTSHIFTEQUAL || _token == RIGHTSHIFTEQUAL)
 
 unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flags, unint block_ctx) {
@@ -2690,6 +2732,40 @@ _end_if:
         return SUCCESS;
     }
 
+    else if(is_at_identifier(_token, CODE_IDENTIFIER) == SUCCESS) {
+        struct token* name;
+        if((name = expect_token(p, NAME)) == NULL) return FAIL;
+
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+        unint c = langs_count();
+        for(unint i=0; i<c; ++i) {
+            struct asm_lang_t* l = &asm_langs[i];
+            if(cstr_equals_codepoints(l->code_name, name->cps, name->len) == SUCCESS) {    
+                struct Ast_node* code = new_ast_code(p, name, l);
+                if(code == NULL) return FAIL;
+
+                *stmt_ast = code;
+                return SUCCESS;
+            }
+        }
+
+        _error_from_token(p, name, ERROR_TYPE_MESSAGE, "unknown assembly language");
+        return FAIL;
+    }
+
+    else if(is_at_identifier(_token, ALIGN_IDENTIFIER) == SUCCESS) {
+        struct token *_s, *_e;
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+        if(expr == NULL) return FAIL;
+
+        struct Ast_node* align = new_ast_align(p, _token, expr, _s, _e);
+        if(align == NULL) return FAIL;
+
+        *stmt_ast = align;
+        return SUCCESS;
+    }
+
     else if(is_at_identifier(_token, BYTE_IDENTIFIER) == SUCCESS) return   ((*stmt_ast = handle_space_identifiers(p, _token, BYTE_NODE)) == NULL) ? FAIL : SUCCESS;
     else if(is_at_identifier(_token, WORD_IDENTIFIER) == SUCCESS) return   ((*stmt_ast = handle_space_identifiers(p, _token, WORD_NODE)) == NULL) ? FAIL : SUCCESS;
     else if(is_at_identifier(_token, DWORD_IDENTIFIER) == SUCCESS) return  ((*stmt_ast = handle_space_identifiers(p, _token, DWORD_NODE)) == NULL) ? FAIL : SUCCESS;
@@ -3045,8 +3121,43 @@ _invalid_assignment:
         }
 
         // Instruction
-        DBG(1, "INSTRUCTION\n");
-        return FAIL;
+        struct Ast_node* instruction = new_ast_instruction(p, _token, _token);
+        if(instruction == NULL) return FAIL;
+
+        struct token* p1 = _peek_token(p);
+        if(p1 == NULL) return FAIL;
+
+        if(p1->type == NEWLINE) {
+            _read_token(p);
+            *stmt_ast = instruction;
+            return SUCCESS;
+        }
+
+        // Args
+        while(true) {
+            struct token* _s = NULL;
+            struct token* _e = NULL;
+
+            while (true) {
+                unint level = 0;
+
+                if ((p1 = _read_token(p)) == NULL) return FAIL;
+
+                if (level == 0 && (p1->type == COMMA || p1->type == NEWLINE)) break;
+
+                if(!_s) _s = p1;
+                _e = p1;
+            
+                if (p1->type == LPAR) ++level;
+                else if (p1->type == RPAR) --level;
+            }
+
+            if(insert_instruction_arg(p, _token, &instruction->node.instruction, _s, _e) == FAIL) return FAIL;
+            if(p1->type == NEWLINE) break;
+        }
+
+        *stmt_ast = instruction;
+        return SUCCESS;
     }
 
     else if (_token->type == ENDMARKER) {
@@ -3054,7 +3165,6 @@ _invalid_assignment:
         *stmt_ast = NULL;
         return SUCCESS;
     } else {
-        DBG(1, "_token = %s\n", _Parser_TokenNames[_token->type]);
         _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "invalid syntax");
         return FAIL;
     }
@@ -3065,23 +3175,6 @@ _invalid_assignment:
 struct Ast_node* _run_parser(struct Parser* p) {
     struct Ast_node* ast = new_ast(p);
     if(ast == NULL) return NULL;
-
-    /*
-    struct Ast_node* expr;
-    if((expr = _parse_expr(p, 0, 0)) == NULL) return NULL;
-
-    DBG(1, "#################################\n");
-    dbg_ast(expr);
-    DBG(1, "#################################\n");
-
-    struct Value val;
-    if(_eval_expr(p, expr, &val) == FAIL) return NULL;
-
-    print_value(&val);
-
-    return NULL;    
-
-    */
 
     if(_parse_block(p, &ast->node.statements, CTX_GLOBAL) == FAIL) return NULL;
     return ast;

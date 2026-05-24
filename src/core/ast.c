@@ -2,6 +2,7 @@
 #include "api/log.h"
 #include "api/debug.h"
 
+#include "asm_lang.h"
 #include "lexer.h"
 #include "parser.h"
 #include "variables.h"
@@ -9,6 +10,8 @@
 
 #include "types.h"
 #include "token.h"
+
+extern const char * const _Parser_TokenNames[];
 
 struct Ast_node* new_ast_node() {
     return (struct Ast_node*)MEM_ALLOC(sizeof(struct Ast_node), "AST node");
@@ -527,6 +530,69 @@ struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, s
     return node;
 }
 
+unint insert_instruction_arg(struct Parser* p, struct token* _token, struct AstInstruction* instruction, struct token* _s, struct token* _e) {
+    struct InstructionArg* arg = (struct InstructionArg*)MEM_ALLOC(sizeof(struct InstructionArg), "instruction arg");
+    if(arg == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for instruction arg"); 
+        return FAIL;
+    }
+
+    arg->_s = _s;
+    arg->_e = _e;
+    arg->next = NULL;
+
+    // Link
+    if(instruction->args_head == NULL) instruction->args_head = arg;
+
+    if(instruction->args_tail != NULL) instruction->args_tail->next = arg;
+    instruction->args_tail = arg;
+
+    return SUCCESS;
+}
+
+struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST instruction node");
+        return NULL;
+    }
+
+    node->type = INSTRUCTION_NODE;
+    node->node.instruction.name = ident;
+    node->node.instruction.args_head = NULL;
+    node->node.instruction.args_tail = NULL;
+
+    return node;
+}
+
+struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST code node");
+        return NULL;
+    }
+
+    node->type = ALIGN_NODE;
+    node->node.align.expr = expr;
+    node->node.align._s = _s;
+    node->node.align._e = _e;
+
+    return node;
+}
+
+struct Ast_node* new_ast_code(struct Parser* p, struct token* _token, struct asm_lang_t* lang) {
+    struct Ast_node* node = new_ast_node();
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST code node");
+        return NULL;
+    }
+
+    node->type = CODE_NODE;
+    node->node.code.lang = lang;
+
+    return node;
+}
+
 void dbg_ast_recur(struct Ast_node *ast, unint level);
 
 void dbg_struct_var_fields(struct StructAssignField* head, unint level) {
@@ -641,6 +707,12 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case ERROR_NODE: { LOG("ERROR_NODE"); break; }
         case WARN_NODE: { LOG("WARN_NODE"); break; }
         case ASSERT_NODE: { LOG("ASSERT_NODE"); break; }
+
+        case CODE_NODE: {LOG("CODE_NODE"); break; }
+
+        case ALIGN_NODE: {LOG("ALIGN_NODE"); break; }
+
+        case INSTRUCTION_NODE: { LOG("INSTRUCTION_NODE"); break; }
 
         default: { LOG("INVALID_NODE]"); return; }
     }
@@ -1018,6 +1090,39 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                 dbg_ast_recur(arg->arg_expr, level+2);
             }
             LOG("\n");
+            break;
+
+        case INSTRUCTION_NODE:
+            for(unint i=0; i<ast->node.instruction.name->len; ++i) LOG_CP(ast->node.instruction.name->cps[i]);
+            LOG("\n");
+            for(unint i=0; i<level+1; ++i) LOG("\t");
+            LOG("[ARGS]\n");
+            for(struct InstructionArg* arg = ast->node.instruction.args_head; arg; arg = arg->next) {
+                if(!arg->_s) {
+                    for(unint i=0; i<level+2; ++i) LOG("\t");
+                    LOG("<EMPTY>");
+                } else {
+                    struct token* _t = arg->_s;
+                    while(true) {
+                        for(unint i=0; i<level+2; ++i) LOG("\t");
+                        LOG("[%s:l%d:c%d]\n", _Parser_TokenNames[_t->type], _t->lineno, _t->col_offset);
+                        if(_t == arg->_e) break;
+                        _t = _t->next;
+                    }
+                }
+                LOG("\n");
+            }
+            LOG("\n");
+            break;
+
+        case CODE_NODE:
+            for(unsigned char* i=(unsigned char*)ast->node.code.lang->code_name; *i; ++i) LOG_CP((int32_t)*i);
+            LOG("\n");
+            break;
+        
+        case ALIGN_NODE:
+            LOG("\n");
+            dbg_ast_recur(ast->node.align.expr, level+1);
             break;
 
         default: { LOG("INVALID_NODE"); break; }
