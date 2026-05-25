@@ -16,7 +16,7 @@
 #define RSQB            10
 #define COLON           11
 #define COMMA           12
-#define SEMI            13
+// #define SEMI            13
 #define PLUS            14
 #define MINUS           15
 #define STAR            16
@@ -28,8 +28,8 @@
 #define EQUAL           22
 #define DOT             23
 #define PERCENT         24
-#define LBRACE          25
-#define RBRACE          26
+// #define LBRACE          25
+// #define RBRACE          26
 #define EQEQUAL         27
 #define NOTEQUAL        28
 #define LESSEQUAL       29
@@ -38,7 +38,7 @@
 #define CIRCUMFLEX      32
 #define LEFTSHIFT       33
 #define RIGHTSHIFT      34
-#define DOUBLESTAR      35
+// #define DOUBLESTAR      35
 #define PLUSEQUAL       36
 #define MINEQUAL        37
 #define STAREQUAL       38
@@ -49,30 +49,30 @@
 #define CIRCUMFLEXEQUAL 43
 #define LEFTSHIFTEQUAL  44
 #define RIGHTSHIFTEQUAL 45
-#define DOUBLESTAREQUAL 46
-#define DOUBLESLASH     47
-#define DOUBLESLASHEQUAL 48
-#define AT              49
-#define ATEQUAL         50
-#define RARROW          51
-#define ELLIPSIS        52
-#define COLONEQUAL      53
+// #define DOUBLESTAREQUAL 46
+// #define DOUBLESLASH     47
+// #define DOUBLESLASHEQUAL 48
+// #define AT              49
+// #define ATEQUAL         50
+// #define RARROW          51
+// #define ELLIPSIS        52
+// #define COLONEQUAL      53
 #define EXCLAMATION     54
 #define OP              55
-#define TYPE_IGNORE     56
-#define TYPE_COMMENT    57
-#define SOFT_KEYWORD    58
-#define FSTRING_START   59
-#define FSTRING_MIDDLE  60
-#define FSTRING_END     61
-#define TSTRING_START   62
-#define TSTRING_MIDDLE  63
-#define TSTRING_END     64
-#define COMMENT         65
-#define NL              66
+// #define TYPE_IGNORE     56
+// #define TYPE_COMMENT    57
+// #define SOFT_KEYWORD    58
+// #define FSTRING_START   59
+// #define FSTRING_MIDDLE  60
+// #define FSTRING_END     61
+// #define TSTRING_START   62
+// #define TSTRING_MIDDLE  63
+// #define TSTRING_END     64
+// #define COMMENT         65
+// #define NL              66
 #define ERRORTOKEN      67
-#define N_TOKENS        69
-#define NT_OFFSET       256
+// #define N_TOKENS        69
+// #define NT_OFFSET       256
 
 #define DOUBLEVBAR 70
 #define DOUBLEAMPER 71

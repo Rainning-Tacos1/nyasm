@@ -47,6 +47,7 @@
 #define ERROR_TYPE_ASSERT "AssertError"
 #define ERROR_TYPE_PATH "PathError"
 #define ERROR_TYPE_RUNTIME "RunTimeError"
+#define ERROR_TYPE_NAME "NameError"
 
 #define MAX_CTX_BLOCK_LEVEL 100
 

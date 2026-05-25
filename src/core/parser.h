@@ -7,8 +7,11 @@
 struct tok_state;
 struct token;
 struct Ast_node;
-struct Variable;
 struct Macro;
+
+struct Variable;
+struct StructsDecl;
+struct FuncDecl;
 
 struct MacroCallArgs {
     struct token* head;
@@ -34,22 +37,30 @@ struct Parser {
 
     struct Ast_node* ast;
 
-    struct Variable* variables;
-    struct Variable* variables_tail;
-
+    
     struct Macro* macros;
     struct Macro* macros_tail;
     unint is_inside_macro_decl;
-
+    
     unint macro_expansion_count;
-
+    
     unint pending_dedents;
-
+    
     unint macro_end_cursor;
     struct token* macro_ends[MAX_MACRO_EXPANSION_LIMIT];
-
+    
     unint ctx_block_stack[MAX_CTX_BLOCK_LEVEL];
     unint ctx_block_cursor;
+
+    // Evaluation
+    struct Variable* variables;
+    struct Variable* variables_tail;
+
+    struct StructsDecl* struct_decl;
+    struct StructsDecl* struct_decl_tail;
+
+    struct FuncDecl* func_decl;
+    struct FuncDecl* func_decl_tail;
 };
 
 struct Parser* _Parser_New(struct tok_state* tok);

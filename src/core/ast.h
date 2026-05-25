@@ -13,15 +13,17 @@ enum AST_types {
     BINOP_NODE,
     LITERAL_NODE,
     VAR_NODE,
+    LEN_NODE,
     DOLLAR_NODE,
 
     STATEMENTS_NODE,
 
-    IF_NODE,
-    WHILE_NODE,
-    REPEAT_NODE,
+    IF_NODE,       // Done
+    WHILE_NODE,    // Done
+    REPEAT_NODE,   // Done
     
-    BREAK_NODE,
+    BREAK_NODE,    // Done
+    CONTINUE_NODE, // Done
     RETURN_NODE,
     FUN_NODE,
 
@@ -49,11 +51,11 @@ enum AST_types {
 
     LABEL_NODE,
 
-    STRUCT_DECL_NODE,
+    STRUCT_DECL_NODE, // Done
     STRUCT_VAR_NODE,
     
-    IMPORT_NODE,
-    DEL_NODE,
+    IMPORT_NODE, // Plan on removing
+    DEL_NODE,    // Done
     STRING_NODE,
     CODE_NODE,
     ALIGN_NODE,
@@ -61,8 +63,8 @@ enum AST_types {
     INSTRUCTION_NODE,
     FUNC_CALL_NODE,
 
-    ASSIGN_VAR_NODE,
-    ASSIGN_APPEND_ARRAY_NODE,
+    ASSIGN_VAR_NODE,           // Done
+    ASSIGN_APPEND_ARRAY_NODE,  // Done
 };
 
 enum BlockContext {
@@ -89,6 +91,13 @@ struct AstLiteral {
     struct Value* value;
 };
 
+struct AstLen {
+    struct Ast_node* expr;
+
+    struct token* _s;
+    struct token* _e;  
+};
+
 // Used to hold variable names/pure text
 struct AstIdentifier {
     int32_t* cps;
@@ -97,6 +106,7 @@ struct AstIdentifier {
 
 struct AstAssignVariable {
     struct token* name;
+    struct token* ass_token;
     struct Ast_node* idx;
     struct Ast_node* expr;
     unint ass_type;
@@ -331,6 +341,7 @@ struct Macro {
 
 struct Ast_node {
     unint type;
+    unint block_ctx;
 
     union {
 
@@ -340,6 +351,9 @@ struct Ast_node {
 
         // Variable
         struct token* var;
+
+        // Len
+        struct AstLen len_expr;
 
         // Ast
         struct AstStatements statements;
@@ -396,7 +410,7 @@ struct Ast_node {
 
 struct Ast_node* new_ast(struct Parser* p);
 
-struct Ast_node* new_ast_node();
+struct Ast_node* new_ast_node(struct Parser* p);
 
 struct Ast_node* new_ast_string(struct Parser* p, struct token* _token);
 struct Ast_node* new_ast_number(struct Parser* p, struct token* _token, unint is_neg);
@@ -404,6 +418,7 @@ struct Ast_node* new_ast_binop(struct Parser* p, struct token* op_token, unint o
 struct Ast_node* new_ast_variable(struct Parser* p, struct token* _token);
 struct Ast_node* new_ast_array(struct Parser* p, struct token* _token, struct Value* var);
 struct Ast_node* new_ast_dollar(struct Parser* p, struct token* _token);
+struct Ast_node* new_ast_len(struct Parser* p, struct token* _token, struct token* _s, struct token* _e, struct Ast_node* len);
 
 struct AstStatementsNode* insert_ast_statement_node(struct Parser* p, struct AstStatements* ast, struct Ast_node* stmt_ast);
 
@@ -414,6 +429,7 @@ unint insert_else(struct Parser* p, struct token* _token, struct Ast_node* _if);
 struct Ast_node* new_ast_while(struct Parser* p, struct token* _token, struct Ast_node* cond);
 struct Ast_node* new_ast_repeat(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
 struct Ast_node* new_ast_break(struct Parser* p, struct token* _token);
+struct Ast_node* new_ast_continue(struct Parser* p, struct token* _token);
 
 struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct token* import_token);
 
@@ -446,7 +462,7 @@ struct Ast_node* new_ast_code(struct Parser* p, struct token* _token, struct asm
 
 struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
 
-struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr, unint ass_type, unint type);
+struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct token* ass_tok, struct Ast_node* idx, struct Ast_node* expr, unint ass_type, unint type);
 
 struct Ast_node* new_ast_assert(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
 struct Ast_node* new_ast_warn(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);

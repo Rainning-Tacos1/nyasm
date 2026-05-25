@@ -33,6 +33,7 @@
 #define WHILE_IDENTIFIER ((int32_t[]){'w', 'h', 'i', 'l', 'e', -1})
 #define REPEAT_IDENTIFIER ((int32_t[]){'r', 'e', 'p', 'e', 'a', 't', -1})
 #define BREAK_IDENTIFIER ((int32_t[]){'b', 'r', 'e', 'a', 'k', -1})
+#define CONTINUE_IDENTIFIER ((int32_t[]){'c', 'o', 'n', 't', 'i', 'n', 'u', 'e', -1})
 
 #define BYTE_IDENTIFIER ((int32_t[]){'b', 'y', 't', 'e', -1})
 #define WORD_IDENTIFIER ((int32_t[]){'w', 'o', 'r', 'd', -1})
@@ -62,9 +63,7 @@
 #define CODE_IDENTIFIER ((int32_t[]){'c', 'o', 'd', 'e', -1})
 
 #define P_IDENTIFIER ((int32_t[]){'p', -1})
-
-#define EXPORT_IDENTIFIER ((int32_t[]){'e', 'x', 'p', 'o', 'r', 't', -1})
-#define EXTERN_IDENTIFIER ((int32_t[]){'e', 'x', 't', 'e', 'r', 'n', -1})
+#define LEN_IDENTIFIER ((int32_t[]){'l', 'e', 'n', -1})
 
 
 extern const char * const _Parser_TokenNames[];
@@ -938,6 +937,9 @@ struct Parser* _Parser_New(struct tok_state* tok) {
     p->macros = p->macros_tail = NULL;
     p->ctx_block_cursor = p->pending_dedents = p->macro_end_cursor = p->macro_expansion_count = p->is_inside_macro_decl = 0;
 
+    p->struct_decl = p->struct_decl_tail = NULL;
+    p->func_decl = p->func_decl_tail = NULL;
+
     for(unint i=0; i<MAX_MACRO_EXPANSION_LIMIT; ++i) p->macro_ends[i] = NULL;
 
     return p;
@@ -1020,8 +1022,6 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
         case PERCENT:
         case STAR: { *lbp = 110; *rbp = 111; break; } // Done
 
-        case DOT: { *lbp = 220; *rbp = 221; break; } // Done
-
         default : return FAIL;
     }
     return SUCCESS;
@@ -1029,6 +1029,9 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
 
 struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma);
 unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val, struct Value** var_ref_idx);
+struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** _s, struct token** _e, unint min_bp, unint stop_on_comma);
+void _error_from_multiple_tokens(struct Parser* p, struct token* _s, struct token* _e, const char *stype, const char *format);
+
 
 // Will return NULL or an AST
 struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
@@ -1084,7 +1087,14 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
             return new_ast_binop(p, _token, _token->type, node, NULL);
 
         case NAME:
-            if(is_at_identifier(_token, NULL) == SUCCESS) {
+            if(is_at_identifier(_token, LEN_IDENTIFIER) == SUCCESS) {
+                struct token *_s, *_e;
+                struct Ast_node* len = parse_expr_with_start_and_end(p, &_s, &_e, UNARY_BP, stop_on_comma);
+                if(len == NULL) return NULL;
+
+                return new_ast_len(p, _token, _s, _e, len);
+
+            } else if(is_at_identifier(_token, NULL) == SUCCESS) {
                 _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "@ identifiers are not allowed on expressions");
                 return NULL;
             }
@@ -1149,8 +1159,6 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
     return NULL;
 }
 
-struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** _s, struct token** _e, unint stop_on_comma);
-
 struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma) {
     // Prefix
     // On an array, _parse_expr will never be called when _parse_expr_prefix is a comma, no need to do checks
@@ -1171,7 +1179,7 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
             
             struct token *_s, *_e;
             
-            struct Ast_node* right = parse_expr_with_start_and_end(p, &_s, &_e, 0); // Do not allow commas
+            struct Ast_node* right = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0); // Do not allow commas
             if(right == NULL) return NULL;
 
             struct token * rsqb = _read_token(p);
@@ -1185,23 +1193,6 @@ struct Ast_node* _parse_expr(struct Parser* p, unint min_bp, unint stop_on_comma
             left->node.binop._e = _e;
 
             continue;
-        } else if(op->type == DOT) {
-            if(
-                (left->type != VAR_NODE) && (left->type == BINOP_NODE && left->node.binop.op != DOT)
-            ) {
-                _error_from_token(p, op, ERROR_TYPE_MESSAGE, "invalid struct access");
-                return NULL;
-            }
-            
-            // Do some slight peeking
-            struct token* p1 = _peek_token(p);
-            if(p1 == NULL) return NULL;
-
-            if(p1->type != NAME) {
-                _error_from_token(p, p1, ERROR_TYPE_MESSAGE, "invalid struct field");
-                return NULL;
-            }
-            _reset_peek(p);
         }
 
         if(_expr_get_binding_power(op->type, &lbp, &rbp) == FAIL) {
@@ -1454,13 +1445,13 @@ unint _parse_block(struct Parser* p, struct AstStatements* statements, unint blo
     }  
 }
 
-struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** _s, struct token** _e, unint stop_on_comma) {
+struct Ast_node* parse_expr_with_start_and_end(struct Parser* p, struct token** _s, struct token** _e, unint min_bp, unint stop_on_comma) {
     *_s = *_e = NULL;
     _reset_peek(p);           
     if((*_s = _peek_token(p)) == NULL) return NULL;
 
     // Expr
-    struct Ast_node* cond = _parse_expr(p, (unint)(0), stop_on_comma);
+    struct Ast_node* cond = _parse_expr(p, min_bp, stop_on_comma);
     if(cond == NULL) {
         DBG(DO_PARSER_RADOM_STUFF_DBG, "Error building expression\n");
         return NULL;
@@ -1609,7 +1600,7 @@ struct Ast_node* handle_space_identifiers(struct Parser* p, struct token* _token
         if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
             if((name = expect_token(p, NAME)) == NULL) return NULL;
         } else {
-            value = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+            value = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
             if(value == NULL) return NULL;
         }
 
@@ -1680,7 +1671,7 @@ unint parse_struct_assign_block(struct Parser* p, struct StructAssignField** hea
         // "="
         if((expect_token(p, EQUAL)) == NULL) return FAIL;
 
-        struct Ast_node* val = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+        struct Ast_node* val = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
         if(val == NULL) return FAIL;
 
         if((expect_token(p, NEWLINE)) == NULL) return FAIL;
@@ -1733,7 +1724,7 @@ unint _parse_potential_function_call(struct Parser* p, struct token* func_name, 
         }
 
         struct token *_s, *_e;
-        struct Ast_node* arg = parse_expr_with_start_and_end(p, &_s, &_e, 1);
+        struct Ast_node* arg = parse_expr_with_start_and_end(p, &_s, &_e, 0, 1);
         if(arg == NULL) return FAIL;
 
         if(insert_func_call_arg(p, func_name, &((*func_call)->node.func_call), arg, is_p, _s, _e) == FAIL) return FAIL;
@@ -1766,7 +1757,7 @@ unint _parse_potential_indexation(struct Parser* p, struct token* var_name, stru
  
     struct Ast_node* _idx_expr;
     struct token *_s, *_e;
-    if((_idx_expr = parse_expr_with_start_and_end(p, &_s, &_e, 0)) == NULL) return FAIL;
+    if((_idx_expr = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0)) == NULL) return FAIL;
 
     if(expect_token(p, RSQB) == NULL) return FAIL;
 
@@ -1811,8 +1802,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
     _reset_peek(p);
     struct token* last_token = p->last_token;
 
-    while ((_token = _read_token(p)) != NULL &&
-        (_token->type == COMMENT || _token->type == NEWLINE)) {
+    while ((_token = _read_token(p)) != NULL && (_token->type == NEWLINE)) {
         last_token = _token;
     }
 
@@ -2032,7 +2022,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
     // Ast stuff
     else if(is_at_identifier(_token, ASSERT_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
         if(expr == NULL) return FAIL;
 
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
@@ -2046,7 +2036,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
     else if(is_at_identifier(_token, WARN_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
         if(expr == NULL) return FAIL;
 
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
@@ -2060,7 +2050,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
 
     else if(is_at_identifier(_token, ERROR_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
         if(expr == NULL) return FAIL;
 
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
@@ -2147,7 +2137,7 @@ _end_if:
     
     else if(is_at_identifier(_token, REPEAT_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* iter = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+        struct Ast_node* iter = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
         if(iter == NULL) return FAIL;
 
         // Read new line
@@ -2176,6 +2166,21 @@ _end_if:
 
         *stmt_ast = _break;
         return SUCCESS; 
+    }
+
+    else if(is_at_identifier(_token, CONTINUE_IDENTIFIER) == SUCCESS) {
+        if(expect_token(p, NEWLINE) == NULL) return FAIL;
+
+        if(is_inside_block(p, CTX_LOOP) == FAIL) {
+            _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@continue outside loop");
+            return FAIL;
+        }
+
+        struct Ast_node* _continue = new_ast_continue(p, _token);
+        if(_continue == NULL) return FAIL;
+
+        *stmt_ast = _continue;
+        return SUCCESS;     
     }
 
     else if(is_at_identifier(_token, IMPORT_IDENTIFIER) == SUCCESS) {
@@ -2222,7 +2227,7 @@ _end_if:
 
     else if(is_at_identifier(_token, ALIGN_IDENTIFIER) == SUCCESS) {
         struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
         if(expr == NULL) return FAIL;
 
         struct Ast_node* align = new_ast_align(p, _token, expr, _s, _e);
@@ -2362,7 +2367,7 @@ _end_if:
         if(read_possible_alignemnt(p, &align_start_expr) == FAIL) return FAIL;
 
         struct token *_s, *_e;
-        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0);
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
         if(expr == NULL) return FAIL;
 
         // Read new line
@@ -2571,7 +2576,7 @@ _end_if:
                     *stmt_ast = NULL;
                     if(node_type == ASSIGN_APPEND_ARRAY_NODE && p1->type != EQUAL) goto _invalid_assignment;
 
-                    *stmt_ast = new_ast_assign_variable(p, _token, idx_expr, expr, p1->type, node_type);
+                    *stmt_ast = new_ast_assign_variable(p, _token, p1, idx_expr, expr, p1->type, node_type);
 
                     return (*stmt_ast == NULL) ? FAIL : SUCCESS;
                 }
@@ -2626,7 +2631,14 @@ _invalid_assignment:
         DBG(DO_PARSER_RADOM_STUFF_DBG, "END OF PARSING\n");
         *stmt_ast = NULL;
         return SUCCESS;
-    } else {
+    } 
+    
+    else if (_token->type == INDENT){
+        _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "unexpected indent");
+        return FAIL;
+    }    
+    
+    else {
         _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "invalid syntax");
         return FAIL;
     }

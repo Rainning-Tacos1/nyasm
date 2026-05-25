@@ -13,8 +13,13 @@
 
 extern const char * const _Parser_TokenNames[];
 
-struct Ast_node* new_ast_node() {
-    return (struct Ast_node*)MEM_ALLOC(sizeof(struct Ast_node), "AST node");
+struct Ast_node* new_ast_node(struct Parser* p) {
+    struct Ast_node* node = (struct Ast_node*)MEM_ALLOC(sizeof(struct Ast_node), "AST node");
+    if(node == NULL) return NULL;
+
+    node->block_ctx = p->ctx_block_stack[p->ctx_block_cursor-1];
+
+    return node;
 }
 
 struct Ast_node* new_ast(struct Parser* p) {
@@ -32,7 +37,7 @@ struct Ast_node* new_ast(struct Parser* p) {
 }
 
 struct Ast_node* new_ast_string(struct Parser* p, struct token* _token) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the AST string");
         return NULL;
@@ -45,7 +50,7 @@ struct Ast_node* new_ast_string(struct Parser* p, struct token* _token) {
 }
 
 struct Ast_node* new_ast_number(struct Parser* p, struct token* _token, unint is_neg) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the AST number");
         return NULL;
@@ -58,7 +63,7 @@ struct Ast_node* new_ast_number(struct Parser* p, struct token* _token, unint is
 }
 
 struct Ast_node* new_ast_dollar(struct Parser* p, struct token* _token) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the AST dollar node");
         return NULL;
@@ -69,7 +74,7 @@ struct Ast_node* new_ast_dollar(struct Parser* p, struct token* _token) {
 }
 
 struct Ast_node* new_ast_binop(struct Parser* p, struct token* op_token, unint op, struct Ast_node* left, struct Ast_node* right) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, op_token, ERROR_TYPE_MEMORY, "no available memory for the AST binop node");
         return NULL;
@@ -85,8 +90,23 @@ struct Ast_node* new_ast_binop(struct Parser* p, struct token* op_token, unint o
     return node;
 }
 
+struct Ast_node* new_ast_len(struct Parser* p, struct token* _token, struct token* _s, struct token* _e, struct Ast_node* len) {
+    struct Ast_node* node = new_ast_node(p);
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the @len AST node");
+        return NULL;
+    }
+
+    node->type = LEN_NODE;
+    node->node.len_expr.expr = len;
+    node->node.len_expr._s = _s;
+    node->node.len_expr._e = _e;
+
+    return node;
+}
+
 struct Ast_node* new_ast_variable(struct Parser* p, struct token* _token) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the AST variable node");
         return NULL;
@@ -99,7 +119,7 @@ struct Ast_node* new_ast_variable(struct Parser* p, struct token* _token) {
 }
 
 struct Ast_node* new_ast_array(struct Parser* p, struct token* _token, struct Value* var) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for the AST array");
         return NULL;
@@ -131,7 +151,7 @@ struct AstStatementsNode* insert_ast_statement_node(struct Parser* p, struct Ast
 }
 
 struct Ast_node* new_ast_if(struct Parser* p, struct token* _token, struct Ast_node* cond) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST if node");
         return NULL;
@@ -151,7 +171,7 @@ struct Ast_node* new_ast_if(struct Parser* p, struct token* _token, struct Ast_n
 }
 
 struct Ast_node* new_ast_while(struct Parser* p, struct token* _token, struct Ast_node* cond) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST while node");
         return NULL;
@@ -167,7 +187,7 @@ struct Ast_node* new_ast_while(struct Parser* p, struct token* _token, struct As
 }
 
 struct Ast_node* new_ast_repeat(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST repeat node");
         return NULL;
@@ -185,13 +205,24 @@ struct Ast_node* new_ast_repeat(struct Parser* p, struct token* _token, struct A
 }
 
 struct Ast_node* new_ast_break(struct Parser* p, struct token* _token) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST break node");
         return NULL;
     }
 
     node->type = BREAK_NODE;
+    return node;
+}
+
+struct Ast_node* new_ast_continue(struct Parser* p, struct token* _token) {
+    struct Ast_node* node = new_ast_node(p);
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST continue node");
+        return NULL;
+    }
+
+    node->type = CONTINUE_NODE;
     return node;
 }
 
@@ -224,14 +255,15 @@ unint insert_else(struct Parser* p, struct token* _token, struct Ast_node* _if) 
     return SUCCESS;
 }
 
-struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct Ast_node* idx, struct Ast_node* expr, unint ass_type, unint type) {
-    struct Ast_node* node = new_ast_node();
+struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct token* ass_tok, struct Ast_node* idx, struct Ast_node* expr, unint ass_type, unint type) {
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, ident, ERROR_TYPE_MEMORY, "no available memory for AST assignment+idx node");
         return NULL;
     }
 
     node->type = type;
+    node->node.var_assign.ass_token = ass_tok;
     node->node.var_assign.name = ident;
     node->node.var_assign.expr = expr;
     node->node.var_assign.idx = idx;
@@ -242,7 +274,7 @@ struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, 
 
 // Warn, error, include, assert
 struct Ast_node* new_ast_error(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST error node");
         return NULL;
@@ -257,7 +289,7 @@ struct Ast_node* new_ast_error(struct Parser* p, struct token* _token, struct As
 }
 
 struct Ast_node* new_ast_warn(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST warn node");
         return NULL;
@@ -272,7 +304,7 @@ struct Ast_node* new_ast_warn(struct Parser* p, struct token* _token, struct Ast
 }
 
 struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct token* import_token) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST import node");
         return NULL;
@@ -285,7 +317,7 @@ struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct t
 }
 
 struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e, struct token* name) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST space node");
         return NULL;
@@ -307,7 +339,7 @@ struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct As
 }
 
 struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST label node"); 
         return NULL;
@@ -320,7 +352,7 @@ struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct to
 }
 
 struct Ast_node* new_ast_assert(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST assert node");
         return NULL;
@@ -335,7 +367,7 @@ struct Ast_node* new_ast_assert(struct Parser* p, struct token* _token, struct A
 }
 
 struct Ast_node* new_ast_struct_decl(struct Parser* p, struct token* _token, struct token* struct_name) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST struct declaration node");
         return NULL;
@@ -374,7 +406,7 @@ unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStru
 }
 
 struct Ast_node* new_ast_struct_var(struct Parser* p, struct token* _token, struct token* struct_name, struct token* struct_var_name) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST struct variable node");
         return NULL;
@@ -413,7 +445,7 @@ unint insert_struct_field_assignment(struct Parser* p, struct token* _token, str
 }
 
 struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct token* calling_conv, struct token* func_name, unint return_type) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST function node");
         return NULL;
@@ -473,7 +505,7 @@ unint insert_func_call_arg(struct Parser* p, struct token* _token, struct AstFun
 }
 
 struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct Ast_node* align_start_expr) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST string node");
         return NULL;
@@ -490,7 +522,7 @@ struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struc
 }
 
 struct Ast_node* new_ast_del(struct Parser* p, struct token* _token, struct token* ident) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST string node");
         return NULL;
@@ -503,7 +535,7 @@ struct Ast_node* new_ast_del(struct Parser* p, struct token* _token, struct toke
 }
 
 struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct token* ident) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST return node");
         return NULL;
@@ -516,7 +548,7 @@ struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct t
 }
 
 struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, struct token* ident) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST function call node");
         return NULL;
@@ -551,7 +583,7 @@ unint insert_instruction_arg(struct Parser* p, struct token* _token, struct AstI
 }
 
 struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST instruction node");
         return NULL;
@@ -566,7 +598,7 @@ struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, str
 }
 
 struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST code node");
         return NULL;
@@ -581,7 +613,7 @@ struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct As
 }
 
 struct Ast_node* new_ast_code(struct Parser* p, struct token* _token, struct asm_lang_t* lang) {
-    struct Ast_node* node = new_ast_node();
+    struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST code node");
         return NULL;
@@ -657,6 +689,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case BINOP_NODE: { LOG("BINOP_NODE"); break; }
         case LITERAL_NODE: { LOG("LITERAL_NODE"); break; }
         case VAR_NODE: { LOG("VARIABLE_NODE"); break; }
+        case LEN_NODE: { LOG("LEN_NODE"); break; }
         case DOLLAR_NODE: { LOG("DOLLAR_NODE]\n"); return; }
 
 
@@ -667,6 +700,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case WHILE_NODE: { LOG("WHILE_NODE"); break; }
         case REPEAT_NODE: { LOG("REPEAT_NODE"); break; }
         case BREAK_NODE: { LOG("BREAK_NODE]\n"); return; }
+        case CONTINUE_NODE: { LOG("CONTINUE]\n"); return; }
 
         case IMPORT_NODE: { LOG("IMPORT_NODE"); break; }
 
@@ -740,7 +774,6 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                 case MINUS:        { LOG("-"); break; }
 
                 case SLASH:        { LOG("/"); break; }
-                case DOUBLESLASH:  { LOG("//"); break; }
                 case PERCENT:      { LOG("%%"); break; }
                 case STAR:         { LOG("*"); break; }
 
@@ -751,7 +784,6 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                 case DOUBLEAMPER:  { LOG("&&"); break; }
 
                 case LSQB:         { LOG("idx"); break; }
-                case DOT:          { LOG("struct access"); break; }
 
                 default: { LOG("X'\n"); return; }
             };
@@ -763,6 +795,11 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                 for(unint i=0; i<level+1; ++i) LOG("\t");
                 LOG("NULL\n");
             }
+            break;
+
+        case LEN_NODE:
+            LOG("\n");
+            dbg_ast_recur(ast->node.len_expr.expr, level+1);
             break;
 
         case LITERAL_NODE:

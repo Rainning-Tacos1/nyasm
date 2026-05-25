@@ -11,12 +11,28 @@ struct Variable {
     struct token* var_name;
     struct Value val;
     struct Variable* next;
+    struct Variable* prev;
 };
 
+struct StructsDecl {
+    struct AstStructDecl* ast_struct_decl;
+    struct StructsDecl* next; 
+};
 
-struct Variable* new_variable(struct Parser* p, struct token* _token, struct Value* val);
-struct Variable* get_variable(struct Parser* p, struct token* _token);
-unint is_variable_declared(struct Parser* p, struct token* _token);
+struct FuncDecl {
+    struct AstFuncDecl* ast_func_decl;
+    struct FuncDecl* next; 
+};
+
+enum EvalTypes {
+    EVAL_OK,
+    EVAL_ERROR,
+    EVAL_BREAK,
+    EVAL_CONTINUE,
+    EVAL_RETURN
+};
+
+// Ast Evaluation
 
 unint eval_ast(struct Parser* p, struct Ast_node* ast);
 

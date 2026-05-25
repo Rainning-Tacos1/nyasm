@@ -57,10 +57,12 @@ nbool assemble(char* path) {
     dbg_ast(ast);
     DBG(1, "Done DBG!\n");
     
-    
-    if(eval_ast(p, ast) == FAIL) return FAIL;
-
-    DBG(1, "PRINTING VARTABLES\n");
+    unint result = eval_ast(p, ast);
+    if(result != EVAL_OK) {
+        LOG("EVALUATION FAILED. %d\n", result);
+        return FAIL;
+    }
+    DBG(1, "PRINTING VARIABLES\n");
     for(struct Variable* var = p->variables; var; var = var->next) {
         for(unint i=0; i<var->var_name->len; ++i) LOG_CP(var->var_name->cps[i]);
         LOG(" = ");

@@ -925,7 +925,6 @@ unint _Token_TwoChars(int32_t c1, int32_t c2) {
         break;
     case '/':
         switch (c2) {
-        case '/': return DOUBLESLASH;
         case '=': return SLASHEQUAL;
         }
         break;

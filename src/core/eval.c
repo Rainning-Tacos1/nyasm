@@ -10,6 +10,8 @@
 void _error_from_token(struct Parser* p, struct token* _token, const char *stype, const char *format, ...);
 void _error_from_multiple_tokens(struct Parser* p, struct token* _s, struct token* _e, const char *stype, const char *format);
 
+// Variables
+
 struct Variable* new_variable(struct Parser* p, struct token* _token, struct Value* val) {
     struct Variable* var = (struct Variable*)MEM_ALLOC(sizeof(struct Variable), "new variable");
     if(var == NULL) {
@@ -24,11 +26,12 @@ struct Variable* new_variable(struct Parser* p, struct token* _token, struct Val
     // Copy
     var->val = *val;
 
-    // First Variable
-    if(p->variables == NULL) p->variables = var;
+    // Link
+    var->prev = p->variables_tail;
 
-    // Link the new variable
-    if(p->variables_tail != NULL) p->variables_tail->next = var;
+    if (p->variables_tail) p->variables_tail->next = var;
+    else p->variables = var;
+
     p->variables_tail = var;
 
     return var;
@@ -52,6 +55,93 @@ struct Variable* get_variable(struct Parser* p, struct token* _token) {
 unint is_variable_declared(struct Parser* p, struct token* _token) {
     return (get_variable(p, _token) == NULL) ? FAIL : SUCCESS;
 }
+
+// Struct declarations
+
+struct StructsDecl* new_struct_decl(struct Parser* p, struct AstStructDecl* struct_decl) {
+    struct StructsDecl* var = (struct StructsDecl*)MEM_ALLOC(sizeof(struct StructsDecl), "eval: new struct decl");
+    if(var == NULL) {
+        _error_from_token(p, struct_decl->struct_name, ERROR_TYPE_MEMORY, "no available memory for struct declaration");
+        return NULL;
+    }
+
+    var->ast_struct_decl = struct_decl;
+
+    // First Variable
+    if(p->struct_decl == NULL) p->struct_decl = var;
+
+    // Link the new variable
+    if(p->struct_decl_tail != NULL) p->struct_decl_tail->next = var;
+    p->struct_decl_tail = var;
+
+    return var;
+
+}
+
+struct StructsDecl* get_struct_decl(struct Parser* p, struct token* _token) {
+    if(p == NULL || p->struct_decl == NULL) return NULL;
+
+    for(struct StructsDecl* var = p->struct_decl; var != NULL; var = var->next) {
+        if(var->ast_struct_decl->struct_name->len != _token->len) continue;
+
+        unint i;
+        for(i = 0; i < _token->len; ++i) if(var->ast_struct_decl->struct_name->cps[i] != _token->cps[i]) break;
+        
+        // Full match
+        if(i == _token->len) return var;
+    }
+    return NULL;   
+}
+
+unint is_struct_declared(struct Parser* p, struct token* _token) {
+    return (get_struct_decl(p, _token) == NULL) ? FAIL : SUCCESS;
+}
+
+// Function declaration
+
+struct FuncDecl* new_func_decl(struct Parser* p, struct AstFuncDecl* ast_func_decl) {
+    struct FuncDecl* var = (struct FuncDecl*)MEM_ALLOC(sizeof(struct FuncDecl), "eval: new func decl");
+    if(var == NULL) {
+        _error_from_token(p, ast_func_decl->func_name, ERROR_TYPE_MEMORY, "no available memory for function declaration");
+        return NULL;
+    }
+
+    var->ast_func_decl = ast_func_decl;
+
+    // First Variable
+    if(p->func_decl == NULL) p->func_decl = var;
+
+    // Link the new variable
+    if(p->func_decl_tail != NULL) p->func_decl_tail->next = var;
+    p->func_decl_tail = var;
+
+    return var;
+
+}
+
+struct FuncDecl* get_func_decl(struct Parser* p, struct token* _token) {
+    if(p == NULL || p->func_decl == NULL) return NULL;
+
+    for(struct FuncDecl* var = p->func_decl; var != NULL; var = var->next) {
+        if(var->ast_func_decl->func_name->len != _token->len) continue;
+
+        unint i;
+        for(i = 0; i < _token->len; ++i) if(var->ast_func_decl->func_name->cps[i] != _token->cps[i]) break;
+        
+        // Full match
+        if(i == _token->len) return var;
+    }
+    return NULL;   
+}
+
+unint is_func_declared(struct Parser* p, struct token* _token) {
+    return (get_func_decl(p, _token) == NULL) ? FAIL : SUCCESS;
+}
+
+// Label declaration
+
+
+// Expression evaluation
 
 unint _equality_check(struct Value* vleft, unint op, struct Value* vright) {
     // except for int and floats, if both types dont match, return false(==), or true(!=)
@@ -118,7 +208,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
     // Type checks
     // Unary only on numbers
     DBG(DO_PARSER_RADOM_STUFF_DBG, "tcright = %d | tcleft = %d\n", tcright, tcleft);
-    if(op == PLUS && binop->right == NULL && (
+    if((op == PLUS || op == MINUS) && binop->right == NULL && (
         !tcright && (tcleft && (vleft->type != VALUE_DOUBLE && vleft->type != VALUE_INT))
     )) {
         _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "invalid unary operator");
@@ -135,16 +225,28 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
 
 
     // Arithmetic only on ints/floats 
-    if ((op == PLUS || op == MINUS || op == SLASH || op == STAR || op == PERCENT) && ( 
-            (tcleft && (vleft->type != VALUE_INT && vleft->type != VALUE_DOUBLE)) ||
-            (tcright && (vright->type != VALUE_INT && vright->type != VALUE_DOUBLE)) 
-        ) && (
-            (tcleft && (vleft->type != VALUE_STR)) &&
-            (tcright && (vright->type != VALUE_STR)) 
-        )
-    ) {
-        _error_from_token(p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types");
-        return FAIL;
+    if ( op == PLUS || op == MINUS || op == SLASH || op == STAR || op == PERCENT ) {
+
+        unint left_numeric =
+            !tcleft ||
+            vleft->type == VALUE_INT ||
+            vleft->type == VALUE_DOUBLE;
+
+        unint right_numeric =
+            !tcright ||
+            vright->type == VALUE_INT ||
+            vright->type == VALUE_DOUBLE;
+
+        unint string_concat =
+            op == PLUS &&
+            tcleft && tcright &&
+            vleft->type == VALUE_STR &&
+            vright->type == VALUE_STR;
+
+        if (!(left_numeric && right_numeric) && !string_concat) {
+            _error_from_token( p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types" );
+            return FAIL;
+        }
     }
     // Bitwise operators only on ints
     if((op == LEFTSHIFT || op == RIGHTSHIFT || op == AMPER || op == VBAR || op == CIRCUMFLEX || op == TILDE) && (
@@ -170,6 +272,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
     if(op == LSQB && 
         (tcleft && vleft->type != VALUE_ARRAY && vleft->type != VALUE_STR)
     ) {
+        // _error_from_multiple_tokens(p, binop->_s, binop->_e, ERROR_TYPE_TYPE, "can only perform indexation on array/string types");
         _error_from_token(p, op_token, ERROR_TYPE_TYPE, "can only perform indexation on array/string types");
         return FAIL;
     }
@@ -205,6 +308,28 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val, str
         case LITERAL_NODE:
             *val = *expr->node.literal.value;
             return SUCCESS;
+        case LEN_NODE:
+            struct Value len_val;
+            struct Value* len_val_ref_idx;
+            if(_eval_expr(p, expr->node.len_expr.expr, &len_val, &len_val_ref_idx) == FAIL) return FAIL;
+
+            if(len_val.type == VALUE_ARRAY || len_val.type == VALUE_STR) {
+
+                unint u_len = (len_val.type == VALUE_ARRAY) ? 
+                    len_val.val.arr.len : 
+                    len_val.val.string.len;
+
+                if (u_len > NINT_MAX) {
+                    _error_from_multiple_tokens(p, expr->node.len_expr._s, expr->node.len_expr._e, ERROR_TYPE_OVERFLOW, "indice is too big to store in signed nint");
+                    return FAIL;
+                }
+                val->type = VALUE_INT;
+                val->val.number = (nint)u_len;
+                return SUCCESS;
+            } else {
+                _error_from_multiple_tokens(p, expr->node.len_expr._s, expr->node.len_expr._e, ERROR_TYPE_TYPE, "invalid type for @len");
+                return FAIL;
+            }
         case VAR_NODE:
             // Check if variable is declared
             // Get the variable
@@ -213,6 +338,7 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val, str
                 _error_from_token(p, expr->node.var, ERROR_TYPE_EXPRESSION, "variable is not declared");
                 return FAIL;
             }
+
             *val = var->val;
             return SUCCESS;
         case DOLLAR_NODE:
@@ -232,12 +358,12 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val, str
             // Early type check
             unint tcleft = 0, tcright = 0;
 
-            if(pleft->type == LITERAL_NODE || pleft->type == VAR_NODE){
+            if(pleft->type == LITERAL_NODE || pleft->type == VAR_NODE || pleft->type == LEN_NODE){
                 if(_eval_expr(p, pleft, &vleft, var_ref_idx) == FAIL) return FAIL;
                 tcleft = 1;
             }
 
-            if(pright && (pright->type == LITERAL_NODE || pright->type == VAR_NODE)) {
+            if(pright && (pright->type == LITERAL_NODE || pright->type == VAR_NODE || pright->type == LEN_NODE)) {
                 if(_eval_expr(p, pright, &vright, var_ref_idx) == FAIL) return FAIL;
                 tcright = 1;
             }
@@ -605,24 +731,28 @@ unint asssign_type_without_equal(unint assign_type) {
     return ERRORTOKEN;
 }
 
+// AST evaluation
+
 unint eval_ast(struct Parser* p, struct Ast_node* ast) {
     // We already failed :(
-    if(ast->type != STATEMENTS_NODE) return FAIL;
+    if(ast->type != STATEMENTS_NODE) return EVAL_ERROR;
 
     struct AstStatements* statements = &ast->node.statements;
     for(struct AstStatementsNode* stmt = statements->head; stmt; stmt = stmt->next) {
         struct Ast_node* ast = stmt->ast;
+        // dbg_ast(ast);
+        // DBG(1, "\n#############################################\n");
         switch(ast->type) {
             case ASSIGN_VAR_NODE:
-            case ASSIGN_APPEND_ARRAY_NODE:
+            case ASSIGN_APPEND_ARRAY_NODE: {
                 struct AstAssignVariable* var_assign = &stmt->ast->node.var_assign;
                 struct token* var_name = var_assign->name;
 
                 struct Variable* var = get_variable(p, var_name);
 
                 if(var == NULL && (var_assign->idx != NULL || ast->type == ASSIGN_APPEND_ARRAY_NODE || var_assign->ass_type != EQUAL)) {
-                    _error_from_token(p, var_name, ERROR_TYPE_RUNTIME, "variable is not defined");
-                    return FAIL;
+                    _error_from_token(p, var_name, ERROR_TYPE_NAME, "variable is not defined");
+                    return EVAL_ERROR;
                 }
 
                 // Variables are defined OR we need to create a new one
@@ -632,7 +762,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                     if(var_assign->idx) {
                         struct Value val;
                         struct Value* var_ref_idx = NULL;
-                        if(_eval_expr(p, var_assign->idx, &val, &var_ref_idx) == FAIL) return FAIL;
+                        if(_eval_expr(p, var_assign->idx, &val, &var_ref_idx) == FAIL) return EVAL_ERROR;
                         variable = var_ref_idx;
                     } else variable = &var->val;
 
@@ -640,18 +770,18 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                     if(ast->type == ASSIGN_APPEND_ARRAY_NODE) {
                         if((*variable).type != VALUE_ARRAY) {
                             _error_from_token(p, var_name, ERROR_TYPE_TYPE, "variable is not an array");
-                            return FAIL;
+                            return EVAL_ERROR;
                         }
 
                         // get the new object
                         struct Value tmp;
-                        if(append_array(p, var_name, variable, &tmp) == FAIL) return FAIL;
+                        if(append_array(p, var_name, variable, &tmp) == FAIL) return EVAL_ERROR;
                         variable = &(*variable).val.arr.tail->this;
                     }
                 } else {
                     // just a simple var assignment
                     struct Value val;
-                    if((var = new_variable(p, var_name, &val)) == NULL) return FAIL;
+                    if((var = new_variable(p, var_name, &val)) == NULL) return EVAL_ERROR;
                     variable = &var->val;
                 }
 
@@ -659,16 +789,16 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 struct Value* _var_ref_idx;
 
                 if(var_assign->ass_type == EQUAL) {
-                    if(_eval_expr(p, var_assign->expr, &_val, &_var_ref_idx) == FAIL) return FAIL;
+                    if(_eval_expr(p, var_assign->expr, &_val, &_var_ref_idx) == FAIL) return EVAL_ERROR;
 
                     *variable = _val;
                 } else {
                     struct Ast_node* ast_var;
+                    struct Ast_node _ast_variable;
 
                     // get the first variable itself
                     if(var_assign->idx) ast_var = var_assign->idx;
                     else {
-                        struct Ast_node _ast_variable;
                         _ast_variable.type = VAR_NODE;
                         _ast_variable.node.var = var_name;
                         ast_var = &_ast_variable;
@@ -678,21 +808,171 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                     struct Ast_node full_expr;
                     full_expr.type = BINOP_NODE;
                     full_expr.node.binop.left = ast_var;
-                    full_expr.node.binop.op_token = var_name;
+                    full_expr.node.binop.op_token = var_assign->ass_token;
                     full_expr.node.binop.op = asssign_type_without_equal(var_assign->ass_type);
                     full_expr.node.binop.right = var_assign->expr;
 
                     full_expr.node.binop._s = NULL;
                     full_expr.node.binop._e = NULL;
 
-                    if(_eval_expr(p, &full_expr, &_val, &_var_ref_idx) == FAIL) return FAIL;
+                    if(_eval_expr(p, &full_expr, &_val, &_var_ref_idx) == FAIL) return EVAL_ERROR;
 
                     *variable = _val;
                 }
+                break;
+            }
+
+            case IF_NODE: {
+                struct Value val;
+                struct Value* var_ref_idx;
+
+                if(_eval_expr(p, ast->node._if.cond, &val, &var_ref_idx) == FAIL) return EVAL_ERROR;
+
+                // wrap statements in an AST node
+                struct Ast_node body;
+                body.type = STATEMENTS_NODE;
+                
+                // if
+                if(bool_eval(&val)) {  
+                    body.node.statements = ast->node._if.statements;
+                    unint state = eval_ast(p, &body);
+
+                    // Ifs propagate everything execpt normal execution
+                    if(state != EVAL_OK) return state;
+                    break; // Next statement
+                }
+                
+                for(struct ElifCondBlock* elif = ast->node._if._elifs_start; elif; elif = elif->next) {
+
+                    if(_eval_expr(p, elif->cond, &val, &var_ref_idx) == FAIL) return EVAL_ERROR;
+
+                    // elif
+                    if(bool_eval(&val)) {  
+                        body.node.statements = elif->statements;
+
+                        unint state = eval_ast(p, &body);
+                        if(state != EVAL_OK) return state;
+                    }
+                }
+
+                if(ast->node._if._else) {
+                    body.node.statements = *ast->node._if._else;
+                    unint state = eval_ast(p, &body);
+                    if(state != EVAL_OK) return state;
+                }
+                break;
+            }
+
+            case WHILE_NODE: {
+                struct Value val;
+                struct Value* var_ref_idx;
+
+                while(true) {
+                    if(_eval_expr(p, ast->node._while.cond, &val, &var_ref_idx) == FAIL) return EVAL_ERROR;
+
+                    if(!bool_eval(&val)) break;
+
+                    // wrap statements in an AST node
+                    struct Ast_node body;
+                    body.type = STATEMENTS_NODE;
+                    body.node.statements = ast->node._while.statements;
+
+                    unint state = eval_ast(p, &body);
+
+                    if(state == EVAL_ERROR) return EVAL_ERROR;
+                    else if(state == RETURN_NODE) return EVAL_RETURN;
+                    else if(state == EVAL_BREAK) break;
+                }
+                // Next statement
+                break;
+            }
+
+            case REPEAT_NODE: {
+                struct Value val;
+                struct Value* var_ref_idx;
+
+                if(_eval_expr(p, ast->node._repeat.expr, &val, &var_ref_idx) == FAIL) return EVAL_ERROR;
+                
+                if(val.type != VALUE_INT) {
+                    _error_from_multiple_tokens(p, ast->node._repeat._s, ast->node._repeat._e, ERROR_TYPE_TYPE, "invalid type for @repeat");
+                    return EVAL_ERROR;
+                }
+
+                if(val.val.number < 0) {
+                    _error_from_multiple_tokens(p, ast->node._repeat._s, ast->node._repeat._e, ERROR_TYPE_RUNTIME, "expression must be greater than 0");
+                    return EVAL_ERROR;                
+                }
+
+                while(val.val.number--) {
+                    // wrap statements in an AST node
+                    struct Ast_node body;
+                    body.type = STATEMENTS_NODE;
+                    body.node.statements = ast->node._repeat.statements;
+
+                    unint state = eval_ast(p, &body);
+
+                    if(state == EVAL_ERROR) return EVAL_ERROR;
+                    else if(state == RETURN_NODE) return EVAL_RETURN;
+                    else if(state == EVAL_BREAK) break;
+                }
+                // Next statement
+                break;
+            }
+
+            case STRUCT_DECL_NODE : {
+                if(is_struct_declared(p, ast->node.struct_decl.struct_name) == SUCCESS) {
+                    _error_from_token(p, ast->node.struct_decl.struct_name, ERROR_TYPE_NAME, "struct is already declared");
+                    return EVAL_ERROR;
+                }
+
+                if(new_struct_decl(p, &ast->node.struct_decl) == NULL) return EVAL_ERROR;
+                break;
+            }
+
+            case FUN_NODE: {
+                if(is_func_declared(p, ast->node.fun_decl.func_name) == SUCCESS) {
+                    _error_from_token(p, ast->node.fun_decl.func_name, ERROR_TYPE_NAME, "function is already declared");
+                    return EVAL_ERROR;
+                }
+
+                if(new_func_decl(p, &ast->node.fun_decl) == NULL) return EVAL_ERROR;
+
+                // Eval its statements
 
                 break;
+            }
+
+            case DEL_NODE: {
+                struct Variable* var = get_variable(p, ast->node.del.ident);
+
+                if(var == NULL) break;
+
+                // Remove and link
+                if (var->prev) var->prev->next = var->next;
+                else p->variables = var->next;
+
+                if (var->next) var->next->prev = var->prev;
+                else p->variables_tail = var->prev;
+
+                break;
+            }
+
+            case BREAK_NODE: {
+                return EVAL_BREAK;
+            }
+
+            case CONTINUE_NODE: {
+                return EVAL_CONTINUE;
+            }
+
+            case RETURN_NODE: {
+                return EVAL_RETURN;
+            }
+
+            default:
+                return EVAL_ERROR;
         }
     }
-
-    return SUCCESS;
+    
+    return EVAL_OK;
 }
