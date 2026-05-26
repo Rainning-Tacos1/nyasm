@@ -4,6 +4,7 @@
 #include "api/memory.h"
 #include "api/debug.h"
 
+#include "asm_lang.h"
 #include "eval.h"
 #include "token.h"
 
@@ -66,6 +67,7 @@ struct StructsDecl* new_struct_decl(struct Parser* p, struct AstStructDecl* stru
     }
 
     var->ast_struct_decl = struct_decl;
+    var->next = NULL;
 
     // First Variable
     if(p->struct_decl == NULL) p->struct_decl = var;
@@ -107,6 +109,7 @@ struct FuncDecl* new_func_decl(struct Parser* p, struct AstFuncDecl* ast_func_de
     }
 
     var->ast_func_decl = ast_func_decl;
+    var->next = NULL;
 
     // First Variable
     if(p->func_decl == NULL) p->func_decl = var;
@@ -140,6 +143,61 @@ unint is_func_declared(struct Parser* p, struct token* _token) {
 
 // Label declaration
 
+struct LabelDecl* new_label_decl(struct Parser* p, struct AstLabel* ast_label_decl) {
+    struct LabelDecl* label = (struct LabelDecl*)MEM_ALLOC(sizeof(struct FuncDecl), "eval: new label decl");
+    if(label == NULL) {
+        _error_from_token(p, ast_label_decl->name, ERROR_TYPE_MEMORY, "no available memory for label declaration");
+        return NULL;
+    }
+
+    label->label = ast_label_decl;
+    label->next = NULL;
+
+    struct LabelDecl** head = ast_label_decl->is_inside_func ? &p->func_label_decl : &p->global_label_decl;
+    struct LabelDecl** tail = ast_label_decl->is_inside_func ? &p->func_label_decl_tail : &p->global_label_decl_tail;
+
+    // First Variable
+    if(*head == NULL) *head = label;
+
+    // Link the new variable
+    if(*tail != NULL) (*tail)->next = label;
+    *tail = label;
+
+    return label;
+
+}
+
+struct LabelDecl* get_label_decl(struct Parser* p, struct token* _token, unint is_inside_func) {
+    if(p == NULL || (is_inside_func && (p->func_label_decl == NULL)) || (!is_inside_func && (p->global_label_decl == NULL))) return NULL;
+
+    if(is_inside_func) {
+        for(struct LabelDecl* label = p->func_label_decl; label != NULL; label = label->next) {
+            if(label->label->name->len != _token->len) continue;
+
+            unint i;
+            for(i = 0; i < _token->len; ++i) if(label->label->name->cps[i] != _token->cps[i]) break;
+            
+            // Full match
+            if(i == _token->len) return label;
+        }
+    }
+
+    for(struct LabelDecl* label = p->global_label_decl; label != NULL; label = label->next) {
+        if(label->label->name->len != _token->len) continue;
+
+        unint i;
+        for(i = 0; i < _token->len; ++i) if(label->label->name->cps[i] != _token->cps[i]) break;
+        
+        // Full match
+        if(i == _token->len) return label;
+    }
+
+    return NULL;   
+}
+
+unint is_label_declared(struct Parser* p, struct token* _token, unint is_inside_func) {
+    return (get_label_decl(p, _token, is_inside_func) == NULL) ? FAIL : SUCCESS;
+}
 
 // Expression evaluation
 
@@ -929,6 +987,16 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 break;
             }
 
+            case LABEL_NODE: {
+                if(is_label_declared(p, ast->node.label.name, ast->node.label.is_inside_func) == SUCCESS) {
+                    _error_from_token(p, ast->node.label.name, ERROR_TYPE_NAME, "redeclaration of label");
+                    return EVAL_ERROR;
+                }
+
+                if(new_label_decl(p, &ast->node.label) == NULL) return EVAL_ERROR;
+                break;
+            }
+
             case FUN_NODE: {
                 if(is_func_declared(p, ast->node.fun_decl.func_name) == SUCCESS) {
                     _error_from_token(p, ast->node.fun_decl.func_name, ERROR_TYPE_NAME, "function is already declared");
@@ -938,6 +1006,10 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 if(new_func_decl(p, &ast->node.fun_decl) == NULL) return EVAL_ERROR;
 
                 // Eval its statements
+
+                // Remove local labels
+                p->func_label_decl = p->func_label_decl_tail = NULL;
+
 
                 break;
             }
@@ -967,6 +1039,27 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
 
             case RETURN_NODE: {
                 return EVAL_RETURN;
+            }
+
+            case CODE_NODE: {
+                p->active_lang = ast->node.code.lang;
+                break;
+            }
+
+            case INSTRUCTION_NODE: {
+                if( p->active_lang == NULL) {
+                    _error_from_token(p, ast->node.instruction.name, ERROR_TYPE_RUNTIME, "no language selected");
+                    return EVAL_ERROR;
+                }
+
+                // Make sure vars are declared
+                // or args or function vars
+                unint nbytes = p->active_lang->exec(p, &ast->node.instruction);
+                if(nbytes == INSTRUCTION_FAILED) return EVAL_ERROR;
+
+                // check if unresolved
+
+                break;
             }
 
             default:

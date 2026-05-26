@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # Project name
-project(x86 C)
+project(i386 C)
 
 add_library(${PROJECT_NAME} STATIC
     "main.c"

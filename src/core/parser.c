@@ -59,6 +59,7 @@
 #define RETURN_IDENTIFIER ((int32_t[]){'r', 'e', 't', 'u', 'r', 'n', -1})
 #define DEL_IDENTIFIER ((int32_t[]){'d', 'e', 'l', -1})
 #define FUN_IDENTIFIER ((int32_t[]){'f', 'u', 'n', -1})
+#define ORG_IDENTIFIER ((int32_t[]){'o', 'r', 'g', -1})
 
 #define CODE_IDENTIFIER ((int32_t[]){'c', 'o', 'd', 'e', -1})
 
@@ -939,6 +940,9 @@ struct Parser* _Parser_New(struct tok_state* tok) {
 
     p->struct_decl = p->struct_decl_tail = NULL;
     p->func_decl = p->func_decl_tail = NULL;
+
+    p->global_label_decl = p->global_label_decl_tail = NULL;
+    p->func_label_decl = p->func_label_decl_tail = NULL;
 
     for(unint i=0; i<MAX_MACRO_EXPANSION_LIMIT; ++i) p->macro_ends[i] = NULL;
 
@@ -2253,6 +2257,18 @@ _end_if:
     else if(is_at_identifier(_token, SAVED_IDENTIFIER) == SUCCESS) return ((*stmt_ast = handle_space_identifiers(p, _token, SAVED_NODE)) == NULL) ? FAIL : SUCCESS;
     else if(is_at_identifier(_token, SAVEP_IDENTIFIER) == SUCCESS) return ((*stmt_ast = handle_space_identifiers(p, _token, SAVEP_NODE)) == NULL) ? FAIL : SUCCESS;
 
+    else if(is_at_identifier(_token, ORG_IDENTIFIER) == SUCCESS) {
+        struct token *_s, *_e;
+        struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
+        if(expr == NULL) return FAIL;
+
+        struct Ast_node* org = new_ast_org(p, _token, expr, _s, _e);
+        if(org == NULL) return FAIL;
+
+        *stmt_ast = org;
+        return SUCCESS;
+    }
+
     else if(is_at_identifier(_token, STRUCT_IDENTIFIER) == SUCCESS) {
         // Declaration or var
         struct token* struct_name;
@@ -2510,7 +2526,7 @@ _end_if:
 
             if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
-            struct Ast_node* label = new_ast_label(p, _token, _token);
+            struct Ast_node* label = new_ast_label(p, _token, _token, is_inside_block(p, CTX_FUNC) == SUCCESS);
             if(label == NULL) return FAIL;
 
             *stmt_ast = label;
@@ -2587,8 +2603,10 @@ _invalid_assignment:
             }
         }
 
+        _reset_peek(p); // Go back
         // Instruction
-        struct Ast_node* instruction = new_ast_instruction(p, _token, _token);
+        DBG(1, "PARSING INSTRUCTION\n");
+        struct Ast_node* instruction = new_ast_instruction(p, _token, _token, is_inside_block(p, CTX_FUNC) == SUCCESS);
         if(instruction == NULL) return FAIL;
 
         struct token* p1 = _peek_token(p);
@@ -2601,6 +2619,7 @@ _invalid_assignment:
         }
 
         // Args
+
         while(true) {
             struct token* _s = NULL;
             struct token* _e = NULL;
@@ -2610,7 +2629,11 @@ _invalid_assignment:
 
                 if ((p1 = _read_token(p)) == NULL) return FAIL;
 
-                if (level == 0 && (p1->type == COMMA || p1->type == NEWLINE)) break;
+                if(is_at_identifier(p1, NULL) == SUCCESS) {
+                    _error_from_token(p, p1, ERROR_TYPE_MESSAGE, "instructions cannot contain at identifiers");
+                    return FAIL;
+                }
+                else if(level == 0 && (p1->type == COMMA || p1->type == NEWLINE)) break;
 
                 if(!_s) _s = p1;
                 _e = p1;

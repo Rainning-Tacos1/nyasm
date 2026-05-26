@@ -1,6 +1,8 @@
 #ifndef TOKENIZER_H
 #define TOKENIZER_H
 
+#include <stdarg.h>
+
 #include "types.h"
 #include "config.h"
 #include "../unicode/api.h"

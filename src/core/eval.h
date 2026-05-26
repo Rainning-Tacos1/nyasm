@@ -24,6 +24,11 @@ struct FuncDecl {
     struct FuncDecl* next; 
 };
 
+struct LabelDecl {
+    struct AstLabel* label;
+    struct LabelDecl* next;
+};
+
 enum EvalTypes {
     EVAL_OK,
     EVAL_ERROR,

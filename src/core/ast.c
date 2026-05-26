@@ -338,7 +338,7 @@ struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct As
     return node;
 }
 
-struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name) {
+struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name, unint is_inside_func) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST label node"); 
@@ -347,6 +347,7 @@ struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct to
 
     node->type = LABEL_NODE;
     node->node.label.name = name;
+    node->node.label.is_inside_func = is_inside_func;
 
     return node;
 }
@@ -579,10 +580,12 @@ unint insert_instruction_arg(struct Parser* p, struct token* _token, struct AstI
     if(instruction->args_tail != NULL) instruction->args_tail->next = arg;
     instruction->args_tail = arg;
 
+    instruction->arg_count += 1;
+
     return SUCCESS;
 }
 
-struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident) {
+struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident, unint is_inside_func) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST instruction node");
@@ -590,9 +593,11 @@ struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, str
     }
 
     node->type = INSTRUCTION_NODE;
+    node->node.instruction.arg_count = 0;
     node->node.instruction.name = ident;
     node->node.instruction.args_head = NULL;
     node->node.instruction.args_tail = NULL;
+    node->node.instruction.is_inside_func = is_inside_func;
 
     return node;
 }
@@ -600,7 +605,7 @@ struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, str
 struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
-        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST code node");
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST align node");
         return NULL;
     }
 
@@ -608,6 +613,21 @@ struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct As
     node->node.align.expr = expr;
     node->node.align._s = _s;
     node->node.align._e = _e;
+
+    return node;
+}
+
+struct Ast_node* new_ast_org(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
+    struct Ast_node* node = new_ast_node(p);
+    if(node == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST org node");
+        return NULL;
+    }
+
+    node->type = ORG_NODE;
+    node->node.org.expr = expr;
+    node->node.org._s = _s;
+    node->node.org._e = _e;
 
     return node;
 }
@@ -745,6 +765,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case CODE_NODE: {LOG("CODE_NODE"); break; }
 
         case ALIGN_NODE: {LOG("ALIGN_NODE"); break; }
+        case ORG_NODE: {LOG("ORG_NODE"); break; }
 
         case INSTRUCTION_NODE: { LOG("INSTRUCTION_NODE"); break; }
 
@@ -1162,6 +1183,10 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             dbg_ast_recur(ast->node.align.expr, level+1);
             break;
 
+        case ORG_NODE:
+            LOG("\n");
+            dbg_ast_recur(ast->node.align.expr, level+1);
+            break;
         default: { LOG("INVALID_NODE"); break; }
     }
 }

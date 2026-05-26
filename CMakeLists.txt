@@ -15,6 +15,7 @@ add_library(core STATIC
 "src/core/lexer.c"
 "src/core/ctype.c"
 "src/core/eval.c"
+"src/core/helper.c"
 )
 
 # Static lib for implementations
@@ -69,17 +70,22 @@ endif()
 ### Custom languages
 
 # Add languages to build individually or with the assembler
-add_subdirectory(langs/x86)
+add_subdirectory(langs/i386)
 add_subdirectory(langs/6502)
 
 ### Links
 
 # Link the language to include in the assembler
 target_link_libraries(nyasm PRIVATE
-    core
-    impl
-    m
-    "-Wl,--whole-archive" x86 _6502 "-Wl,--no-whole-archive"
+    "-Wl,--start-group"
+        core
+        impl
+        m
+        "-Wl,--whole-archive" 
+            i386 
+            _6502 
+        "-Wl,--no-whole-archive"
+    "-Wl,--end-group"
 )
 
 target_link_options(nyasm PRIVATE -T ${CMAKE_SOURCE_DIR}/src/linker.ld)

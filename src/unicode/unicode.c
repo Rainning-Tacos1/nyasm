@@ -72,20 +72,18 @@ void unicode_init(struct unicode* uc) {
     1      : Error
 */
 nbool backup_codepoint(struct unicode* uc) {
-    if (uc->err != UNICODE_OK || uc->nread == 0)
+    if (uc->err != UNICODE_OK || uc->curr <= uc->buf || uc->cp == -1 || uc->nread == 0)
         return FAIL;
 
-    // Step 1: go to start of current codepoint
-    const char* p = uc->curr - uc->nread;
+    const unsigned char* p = (const unsigned char*)uc->curr - 1;
 
-    if (p < uc->buf) return FAIL; 
-
-    // Human: We assume that if the first condition doesn't fail, there must be a valid utf-8 sequence that wont make p go below uc->buf
-    while (p > uc->buf && ((*p & 0xC0) == 0x80)) {
+    while (p > (const unsigned char*)uc->buf &&
+           ((*p & 0xC0) == 0x80))
+    {
         p--;
     }
 
-    uc->curr = p;
+    uc->curr = (const char*)p;
     return SUCCESS;
 }
 

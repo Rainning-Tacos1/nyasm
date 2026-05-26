@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "config.h"
+#include "asm_lang.h"
 
 struct tok_state;
 struct token;
@@ -12,6 +13,7 @@ struct Macro;
 struct Variable;
 struct StructsDecl;
 struct FuncDecl;
+struct LabelDecl;
 
 struct MacroCallArgs {
     struct token* head;
@@ -61,7 +63,28 @@ struct Parser {
 
     struct FuncDecl* func_decl;
     struct FuncDecl* func_decl_tail;
+
+    struct LabelDecl* global_label_decl;
+    struct LabelDecl* global_label_decl_tail;
+
+    struct LabelDecl* func_label_decl;
+    struct LabelDecl* func_label_decl_tail;
+
+    struct asm_lang_t* active_lang;
+
 };
+
+/*
+Priority:
+ - registers
+ - func args
+ - func vars
+ - structs
+ - func labels
+ - labels
+ - vars
+
+*/
 
 struct Parser* _Parser_New(struct tok_state* tok);
 struct Ast_node* _run_parser(struct Parser* p);

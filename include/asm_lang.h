@@ -2,10 +2,20 @@
 #define ASM_LANG_H
 
 #include <stdint.h>
+#include "../src/core/ast.h"
+#include "../src/core/parser.h"
+#include "types.h"
+
+#define INSTRUCTION_FAILED -1
+#define INSTRUCTION_UNRESOLVED -2
+
+typedef nint (*instruction_t)(struct Parser*, struct AstInstruction* inst);
 
 struct asm_lang_t {
     const char* const lang_name;
     const char* const code_name;
+
+    instruction_t exec;
 };
 
 extern struct asm_lang_t asm_langs[];

@@ -24,8 +24,8 @@ enum AST_types {
     
     BREAK_NODE,    // Done
     CONTINUE_NODE, // Done
-    RETURN_NODE,
-    FUN_NODE,
+    RETURN_NODE,   // Done
+    FUN_NODE,      // Done
 
     ERROR_NODE,
     WARN_NODE,
@@ -49,7 +49,7 @@ enum AST_types {
     SAVED_NODE,
     SAVEP_NODE,
 
-    LABEL_NODE,
+    LABEL_NODE,       // Done
 
     STRUCT_DECL_NODE, // Done
     STRUCT_VAR_NODE,
@@ -57,8 +57,9 @@ enum AST_types {
     IMPORT_NODE, // Plan on removing
     DEL_NODE,    // Done
     STRING_NODE,
-    CODE_NODE,
+    CODE_NODE,   // Done
     ALIGN_NODE,
+    ORG_NODE,
 
     INSTRUCTION_NODE,
     FUNC_CALL_NODE,
@@ -212,6 +213,7 @@ struct AstSpace {
 
 struct AstLabel {
     struct token* name;
+    unint is_inside_func;
 };
 
 struct StructDeclField {
@@ -305,8 +307,11 @@ struct InstructionArg {
 struct AstInstruction {
     struct token* name;
 
+    unint arg_count;
     struct InstructionArg* args_head;
     struct InstructionArg* args_tail;
+
+    unint is_inside_func;
 };
 
 struct AstCode {
@@ -314,6 +319,12 @@ struct AstCode {
 };
 
 struct AstAlign {
+    struct Ast_node* expr;
+    struct token* _s;
+    struct token* _e;
+};
+
+struct AstOrg {
     struct Ast_node* expr;
     struct token* _s;
     struct token* _e;
@@ -396,6 +407,8 @@ struct Ast_node {
 
         struct AstAlign align;
 
+        struct AstOrg org;
+
         struct AstCode code;
 
         // Error, warn, assert, include
@@ -441,7 +454,7 @@ struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct t
 
 struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e, struct token* name);
 
-struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name);
+struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name, unint is_inside_func);
 
 struct Ast_node* new_ast_struct_decl(struct Parser* p, struct token* _token, struct token* struct_name);
 unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStructDecl* struct_decl, struct token* name, struct token* struct_name, unint type, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, struct Ast_node* align_start_expr);
@@ -452,7 +465,7 @@ unint insert_struct_field_assignment(struct Parser* p, struct token* _token, str
 struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct token* calling_conv, struct token* func_name, unint return_type);
 unint insert_fun_decl_arg(struct Parser* p, struct token* _token, struct AstFuncDecl* func_decl, struct token* arg_name, unint type);
 
-struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident);
+struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident, unint is_inside_func);
 unint insert_instruction_arg(struct Parser* p, struct token* _token, struct AstInstruction* instruction, struct token* _s, struct token* _e);
 
 struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, struct token* ident);
@@ -461,6 +474,8 @@ unint insert_func_call_arg(struct Parser* p, struct token* _token, struct AstFun
 struct Ast_node* new_ast_code(struct Parser* p, struct token* _token, struct asm_lang_t* lang);
 
 struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
+
+struct Ast_node* new_ast_org(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
 
 struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct token* ass_tok, struct Ast_node* idx, struct Ast_node* expr, unint ass_type, unint type);
 
