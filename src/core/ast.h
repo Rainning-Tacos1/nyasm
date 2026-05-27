@@ -72,7 +72,7 @@ enum BlockContext {
     CTX_GLOBAL,
     CTX_IF,
     CTX_LOOP,
-    CTX_FUNC,
+    // CTX_FUNC,
 };
 
 // An AstBinOp with token type MINUS and right == NULL is the same as negation: -a
@@ -182,10 +182,12 @@ struct AstRepeat {
 };
 
 // Import
+/*
 struct AstImport {
     // May change for an expression later
     struct token* import;
 };
+*/
 
 // del
 struct AstDel {
@@ -197,23 +199,25 @@ struct AstReturn {
 };
 
 struct AstSpace {
+    // type: literal
     struct Ast_node* align_start_expr;
     struct Ast_node* len_expr;
     struct Ast_node* align_per_el_expr;
-    unint type;
     
+    struct token* space_ident;
+
     /* For @byte, ... */ 
     struct Ast_node* value;
     struct token* _s; 
     struct token* _e;
 
     // When inside functions
-    struct token* name;
+    // struct token* name;
 };
 
 struct AstLabel {
     struct token* name;
-    unint is_inside_func;
+    // unint is_inside_func;
 };
 
 struct StructDeclField {
@@ -253,13 +257,13 @@ struct AstStructVar {
     struct StructAssignField* tail;
 };
 
+/*
 struct FuncDeclArg {
     unint type;
     struct token* arg_name;
 
     struct FuncDeclArg* next;
 };
-
 struct AstFuncDecl {
     struct token* calling_conv;
     struct token* func_name;
@@ -270,7 +274,7 @@ struct AstFuncDecl {
     unint return_type;
     struct AstStatements statements;
 };
-
+*/
 struct AstString {
     struct Ast_node* expr;
     struct token* _s; // For error reporting
@@ -278,7 +282,7 @@ struct AstString {
 
     struct Ast_node* align_start_expr;
 };
-
+/*
 // Function calls
 struct FuncCallArg {
     struct Ast_node* arg_expr;
@@ -296,7 +300,7 @@ struct AstFuncCall {
     struct FuncCallArg* args_head;
     struct FuncCallArg* args_tail;
 };
-
+*/
 struct InstructionArg {
     struct token* _s;
     struct token* _e;
@@ -311,7 +315,7 @@ struct AstInstruction {
     struct InstructionArg* args_head;
     struct InstructionArg* args_tail;
 
-    unint is_inside_func;
+    /* unint is_inside_func; */
 };
 
 struct AstCode {
@@ -374,7 +378,7 @@ struct Ast_node {
         struct AstRepeat _repeat;
 
         // Import
-        struct AstImport import;
+        // struct AstImport import;
 
         // String
         struct AstString string;
@@ -383,13 +387,15 @@ struct Ast_node {
         struct AstReturn _return;
 
         // Fun
-        struct AstFuncDecl fun_decl;
+        // struct AstFuncDecl fun_decl;
 
         // Function call
-        struct AstFuncCall func_call;
+        // struct AstFuncCall func_call;
 
         // Instruction
         struct AstInstruction instruction;
+
+        struct token* dollar;
 
         // @byte, @word, @dword, @qword, @float, @double
         // @saveb, @savew, @savedw, @saveq, @savef, @saved
@@ -452,9 +458,9 @@ struct Ast_node* new_ast_del(struct Parser* p, struct token* _token, struct toke
 
 struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct token* ident);
 
-struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e, struct token* name);
+struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e/*, struct token* name */);
 
-struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name, unint is_inside_func);
+struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name/*, unint is_inside_func */);
 
 struct Ast_node* new_ast_struct_decl(struct Parser* p, struct token* _token, struct token* struct_name);
 unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStructDecl* struct_decl, struct token* name, struct token* struct_name, unint type, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, struct Ast_node* align_start_expr);
@@ -462,14 +468,14 @@ unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStru
 struct Ast_node* new_ast_struct_var(struct Parser* p, struct token* _token, struct token* struct_name, struct token* struct_var_name);
 unint insert_struct_field_assignment(struct Parser* p, struct token* _token, struct StructAssignField** head, struct StructAssignField** tail, struct token* field_name, struct Ast_node* value);
 
-struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct token* calling_conv, struct token* func_name, unint return_type);
-unint insert_fun_decl_arg(struct Parser* p, struct token* _token, struct AstFuncDecl* func_decl, struct token* arg_name, unint type);
+// struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct token* calling_conv, struct token* func_name, unint return_type);
+// unint insert_fun_decl_arg(struct Parser* p, struct token* _token, struct AstFuncDecl* func_decl, struct token* arg_name, unint type);
 
-struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident, unint is_inside_func);
+struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident/*, unint is_inside_func */);
 unint insert_instruction_arg(struct Parser* p, struct token* _token, struct AstInstruction* instruction, struct token* _s, struct token* _e);
 
-struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, struct token* ident);
-unint insert_func_call_arg(struct Parser* p, struct token* _token, struct AstFuncCall* func_call, struct Ast_node* arg_expr, unint is_p, struct token* _s, struct token* _e);
+// struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, struct token* ident);
+// unint insert_func_call_arg(struct Parser* p, struct token* _token, struct AstFuncCall* func_call, struct Ast_node* arg_expr, unint is_p, struct token* _s, struct token* _e);
 
 struct Ast_node* new_ast_code(struct Parser* p, struct token* _token, struct asm_lang_t* lang);
 

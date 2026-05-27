@@ -100,7 +100,7 @@ unint is_struct_declared(struct Parser* p, struct token* _token) {
 }
 
 // Function declaration
-
+/*
 struct FuncDecl* new_func_decl(struct Parser* p, struct AstFuncDecl* ast_func_decl) {
     struct FuncDecl* var = (struct FuncDecl*)MEM_ALLOC(sizeof(struct FuncDecl), "eval: new func decl");
     if(var == NULL) {
@@ -140,21 +140,23 @@ struct FuncDecl* get_func_decl(struct Parser* p, struct token* _token) {
 unint is_func_declared(struct Parser* p, struct token* _token) {
     return (get_func_decl(p, _token) == NULL) ? FAIL : SUCCESS;
 }
+*/
 
 // Label declaration
 
-struct LabelDecl* new_label_decl(struct Parser* p, struct AstLabel* ast_label_decl) {
-    struct LabelDecl* label = (struct LabelDecl*)MEM_ALLOC(sizeof(struct FuncDecl), "eval: new label decl");
+struct LabelDecl* new_label_decl(struct Parser* p, struct AstLabel* ast_label_decl, nint addr) {
+    struct LabelDecl* label = (struct LabelDecl*)MEM_ALLOC(sizeof(struct LabelDecl), "eval: new label decl");
     if(label == NULL) {
         _error_from_token(p, ast_label_decl->name, ERROR_TYPE_MEMORY, "no available memory for label declaration");
         return NULL;
     }
 
     label->label = ast_label_decl;
+    label->addr = addr;
     label->next = NULL;
 
-    struct LabelDecl** head = ast_label_decl->is_inside_func ? &p->func_label_decl : &p->global_label_decl;
-    struct LabelDecl** tail = ast_label_decl->is_inside_func ? &p->func_label_decl_tail : &p->global_label_decl_tail;
+    struct LabelDecl** head = &p->global_label_decl; // ast_label_decl->is_inside_func ? &p->func_label_decl : &p->global_label_decl;
+    struct LabelDecl** tail = &p->global_label_decl_tail; // ast_label_decl->is_inside_func ? &p->func_label_decl_tail : &p->global_label_decl_tail;
 
     // First Variable
     if(*head == NULL) *head = label;
@@ -167,7 +169,8 @@ struct LabelDecl* new_label_decl(struct Parser* p, struct AstLabel* ast_label_de
 
 }
 
-struct LabelDecl* get_label_decl(struct Parser* p, struct token* _token, unint is_inside_func) {
+struct LabelDecl* get_label_decl(struct Parser* p, struct token* _token /*, unint is_inside_func */) {
+    /*
     if(p == NULL || (is_inside_func && (p->func_label_decl == NULL)) || (!is_inside_func && (p->global_label_decl == NULL))) return NULL;
 
     if(is_inside_func) {
@@ -181,6 +184,7 @@ struct LabelDecl* get_label_decl(struct Parser* p, struct token* _token, unint i
             if(i == _token->len) return label;
         }
     }
+    */
 
     for(struct LabelDecl* label = p->global_label_decl; label != NULL; label = label->next) {
         if(label->label->name->len != _token->len) continue;
@@ -195,8 +199,8 @@ struct LabelDecl* get_label_decl(struct Parser* p, struct token* _token, unint i
     return NULL;   
 }
 
-unint is_label_declared(struct Parser* p, struct token* _token, unint is_inside_func) {
-    return (get_label_decl(p, _token, is_inside_func) == NULL) ? FAIL : SUCCESS;
+unint is_label_declared(struct Parser* p, struct token* _token/* , unint is_inside_func*/) {
+    return (get_label_decl(p, _token/*, is_inside_func */) == NULL) ? FAIL : SUCCESS;
 }
 
 // Expression evaluation
@@ -400,7 +404,9 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val, str
             *val = var->val;
             return SUCCESS;
         case DOLLAR_NODE:
-            // Grab the current address value as an int
+            val->type = VALUE_INT;
+            val->val.number = p->addr;
+
             return SUCCESS;
         case BINOP_NODE:
             struct AstBinOp* binop = &expr->node.binop;
@@ -773,7 +779,7 @@ mul_overflow:
     }
 }
 
-unint asssign_type_without_equal(unint assign_type) {
+unint assign_type_without_equal(unint assign_type) {
     switch(assign_type) {
         case PLUSEQUAL: { return PLUS; }
         case MINEQUAL: { return MINUS; }
@@ -789,6 +795,97 @@ unint asssign_type_without_equal(unint assign_type) {
     return ERRORTOKEN;
 }
 
+// Space identifiers
+
+unint align_address_safe(nint address, nint alignment, nint* out) {
+    if (!out) return FAIL;
+
+    nint rem = address % alignment;
+
+    if (alignment == 0 || rem == 0) {
+        *out = address;
+        return SUCCESS;
+    }
+
+    nint m = alignment - rem;
+    if (address > NINT_MAX - m) return FAIL;
+
+    *out = address + m;
+    return SUCCESS;
+}
+
+unint mul_nint_safe(nint a, nint b, nint* out) {
+    if (!out) return FAIL;
+
+    if (a == 0 || b == 0) {
+        *out = 0;
+        return SUCCESS;
+    }
+
+    if (a > NINT_MAX / b) {
+        return FAIL;
+    }
+
+    *out = a * b;
+    return SUCCESS;
+}
+
+/*
+  base_address - current address where allocation begins
+  n            - number of elements
+  elem_size    - size of each element
+  elem_align   - alignment of each element
+  array_align  - alignment of array start
+  out_size     - output variable
+*/
+unint array_total_size_safe(
+    nint base_address,
+    nint n,
+    nint elem_size,
+    nint elem_align,
+    nint array_align,
+    nint *out_size)
+{
+    if (!out_size) return FAIL;
+
+    nint aligned_start;
+
+    if (align_address_safe(base_address, array_align, &aligned_start) == FAIL) return FAIL;
+
+    nint front_padding = aligned_start - base_address;
+
+    nint stride;
+
+    if (align_address_safe( elem_size, elem_align, &stride) == FAIL) return FAIL;
+
+    nint body;
+
+    if (mul_nint_safe(n, stride, &body) == FAIL) return FAIL;
+
+
+    if (front_padding > NINT_MAX - body) return FAIL;
+
+    *out_size = front_padding + body;
+    return SUCCESS;
+}
+
+// Misc
+
+unint increment_addr(struct Parser* p, nint val) {
+    if (p->addr > NINT_MAX - p->addr) return FAIL;
+    else if(p->addr + val > p->active_lang->max_addr) return FAIL;
+    p->addr += val;
+    return SUCCESS;
+}
+
+unint ensure_lang(struct Parser* p, struct token* _token) {
+    if( p->active_lang == NULL) {
+        _error_from_token(p, _token, ERROR_TYPE_RUNTIME, "no language selected");
+        return FAIL;
+    }
+    return SUCCESS;
+}
+
 // AST evaluation
 
 unint eval_ast(struct Parser* p, struct Ast_node* ast) {
@@ -798,8 +895,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
     struct AstStatements* statements = &ast->node.statements;
     for(struct AstStatementsNode* stmt = statements->head; stmt; stmt = stmt->next) {
         struct Ast_node* ast = stmt->ast;
-        // dbg_ast(ast);
-        // DBG(1, "\n#############################################\n");
+
         switch(ast->type) {
             case ASSIGN_VAR_NODE:
             case ASSIGN_APPEND_ARRAY_NODE: {
@@ -867,7 +963,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                     full_expr.type = BINOP_NODE;
                     full_expr.node.binop.left = ast_var;
                     full_expr.node.binop.op_token = var_assign->ass_token;
-                    full_expr.node.binop.op = asssign_type_without_equal(var_assign->ass_type);
+                    full_expr.node.binop.op = assign_type_without_equal(var_assign->ass_type);
                     full_expr.node.binop.right = var_assign->expr;
 
                     full_expr.node.binop._s = NULL;
@@ -938,7 +1034,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                     unint state = eval_ast(p, &body);
 
                     if(state == EVAL_ERROR) return EVAL_ERROR;
-                    else if(state == RETURN_NODE) return EVAL_RETURN;
+                    // else if(state == RETURN_NODE) return EVAL_RETURN;
                     else if(state == EVAL_BREAK) break;
                 }
                 // Next statement
@@ -957,7 +1053,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 }
 
                 if(val.val.number < 0) {
-                    _error_from_multiple_tokens(p, ast->node._repeat._s, ast->node._repeat._e, ERROR_TYPE_RUNTIME, "expression must be greater than 0");
+                    _error_from_multiple_tokens(p, ast->node._repeat._s, ast->node._repeat._e, ERROR_TYPE_RUNTIME, "value must be greater than 0");
                     return EVAL_ERROR;                
                 }
 
@@ -970,7 +1066,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                     unint state = eval_ast(p, &body);
 
                     if(state == EVAL_ERROR) return EVAL_ERROR;
-                    else if(state == RETURN_NODE) return EVAL_RETURN;
+                    // else if(state == RETURN_NODE) return EVAL_RETURN;
                     else if(state == EVAL_BREAK) break;
                 }
                 // Next statement
@@ -987,16 +1083,37 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 break;
             }
 
+            case ORG_NODE: {
+                struct Value val;
+                struct Value* var_ref_idx;
+
+                if(_eval_expr(p, ast->node.org.expr, &val, &var_ref_idx) == FAIL) return EVAL_ERROR;
+                
+                if(val.type != VALUE_INT) {
+                    _error_from_multiple_tokens(p, ast->node.org._s, ast->node.org._e, ERROR_TYPE_TYPE, "invalid type for @org");
+                    return EVAL_ERROR;
+                }
+
+                if(val.val.number < 0) {
+                    _error_from_multiple_tokens(p, ast->node.org._s, ast->node.org._e, ERROR_TYPE_RUNTIME, "value must be greater than 0");
+                    return EVAL_ERROR;                
+                }
+
+                p->addr = val.val.number;
+                break;
+            }
+
             case LABEL_NODE: {
-                if(is_label_declared(p, ast->node.label.name, ast->node.label.is_inside_func) == SUCCESS) {
+                if(is_label_declared(p, ast->node.label.name/* , ast->node.label.is_inside_func */) == SUCCESS) {
                     _error_from_token(p, ast->node.label.name, ERROR_TYPE_NAME, "redeclaration of label");
                     return EVAL_ERROR;
                 }
 
-                if(new_label_decl(p, &ast->node.label) == NULL) return EVAL_ERROR;
+                if(new_label_decl(p, &ast->node.label, p->addr) == NULL) return EVAL_ERROR;
                 break;
             }
 
+            /*
             case FUN_NODE: {
                 if(is_func_declared(p, ast->node.fun_decl.func_name) == SUCCESS) {
                     _error_from_token(p, ast->node.fun_decl.func_name, ERROR_TYPE_NAME, "function is already declared");
@@ -1013,7 +1130,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
 
                 break;
             }
-
+            */
             case DEL_NODE: {
                 struct Variable* var = get_variable(p, ast->node.del.ident);
 
@@ -1029,6 +1146,61 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 break;
             }
 
+            case BYTE_NODE:
+            case WORD_NODE:
+            case DWORD_NODE:
+            case QWORD_NODE:
+            case FLOAT_NODE:
+            case DOUBLE_NODE:
+            case PTR_NODE:
+            case SAVEB_NODE:
+            case SAVEW_NODE:
+            case SAVEDW_NODE:
+            case SAVEQ_NODE:
+            case SAVEF_NODE:
+            case SAVED_NODE:
+            case SAVEP_NODE: {
+
+                if(ensure_lang(p, ast->node.space.space_ident) == FAIL) return EVAL_ERROR;
+
+                nint size_of_el;
+                switch(ast->type) {
+                    case BYTE_NODE:
+                    case SAVEB_NODE: {size_of_el = 1; break; }
+                    case WORD_NODE:
+                    case SAVEW_NODE: {size_of_el = 2; break; }
+                    case DWORD_NODE:
+                    case SAVEDW_NODE: {size_of_el = 4; break; }
+                    case QWORD_NODE:
+                    case SAVEQ_NODE: {size_of_el = 8; break; }
+                    case FLOAT_NODE:
+                    case SAVEF_NODE: {size_of_el = 4; break; }
+                    case DOUBLE_NODE:
+                    case SAVED_NODE: {size_of_el = 8; break; }
+                    case PTR_NODE:
+                    case SAVEP_NODE: {
+                        // make sure lang is set and get the size of a pointer
+                    }
+                }
+
+                nint total = 0;
+                if(
+                    array_total_size_safe(
+                        p->addr,
+                        (ast->node.space.len_expr == NULL ? 1 : ast->node.space.len_expr->node.literal.value->val.number),
+                        size_of_el,
+                        (ast->node.space.align_per_el_expr == NULL ? 1 : ast->node.space.align_per_el_expr->node.literal.value->val.number),
+                        (ast->node.space.align_start_expr == NULL ? 1 : ast->node.space.align_start_expr->node.literal.value->val.number),
+                        &total
+                    ) == FAIL
+                ) goto _space_size_overflow;
+
+                if(increment_addr(p, total) == SUCCESS) break;
+_space_size_overflow:
+                _error_from_token(p, ast->node.space.space_ident, ERROR_TYPE_OVERFLOW, "size overflow");
+                return EVAL_ERROR;
+            }
+
             case BREAK_NODE: {
                 return EVAL_BREAK;
             }
@@ -1037,9 +1209,11 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 return EVAL_CONTINUE;
             }
 
+            /*
             case RETURN_NODE: {
                 return EVAL_RETURN;
             }
+            */
 
             case CODE_NODE: {
                 p->active_lang = ast->node.code.lang;
@@ -1047,18 +1221,14 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
             }
 
             case INSTRUCTION_NODE: {
-                if( p->active_lang == NULL) {
-                    _error_from_token(p, ast->node.instruction.name, ERROR_TYPE_RUNTIME, "no language selected");
-                    return EVAL_ERROR;
-                }
-
+                if(ensure_lang(p, ast->node.instruction.name) == FAIL) return EVAL_ERROR;
                 // Make sure vars are declared
                 // or args or function vars
                 unint nbytes = p->active_lang->exec(p, &ast->node.instruction);
                 if(nbytes == INSTRUCTION_FAILED) return EVAL_ERROR;
 
                 // check if unresolved
-
+                p->addr += nbytes;
                 break;
             }
 

@@ -49,6 +49,7 @@ nint _86_exec(struct Parser* p, struct AstInstruction* inst);
 ASM_LANG i386 = {
     .lang_name = "i386 assembly v0.0.1",
     .code_name = "i386",
+    .max_addr = 0Xffff,
 
     .exec = _86_exec,
 };
@@ -60,7 +61,7 @@ nint _86_exec(struct Parser* p, struct AstInstruction* inst) {
             _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
             return INSTRUCTION_FAILED;
         }
-
+        return 5; // 5 bytes for now
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "not implemented yet");
 
     }

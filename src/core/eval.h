@@ -19,13 +19,17 @@ struct StructsDecl {
     struct StructsDecl* next; 
 };
 
+/*
 struct FuncDecl {
     struct AstFuncDecl* ast_func_decl;
     struct FuncDecl* next; 
 };
+*/
 
 struct LabelDecl {
     struct AstLabel* label;
+    nint addr;
+
     struct LabelDecl* next;
 };
 
@@ -34,7 +38,7 @@ enum EvalTypes {
     EVAL_ERROR,
     EVAL_BREAK,
     EVAL_CONTINUE,
-    EVAL_RETURN
+    // EVAL_RETURN
 };
 
 // Ast Evaluation

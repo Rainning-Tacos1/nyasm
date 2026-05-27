@@ -70,6 +70,7 @@ struct Ast_node* new_ast_dollar(struct Parser* p, struct token* _token) {
     }
 
     node->type = DOLLAR_NODE;
+    node->node.dollar = _token;
     return node;
 }
 
@@ -302,7 +303,7 @@ struct Ast_node* new_ast_warn(struct Parser* p, struct token* _token, struct Ast
 
     return node;
 }
-
+/*
 struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct token* import_token) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
@@ -315,8 +316,9 @@ struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct t
 
     return node;
 }
+*/
 
-struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e, struct token* name) {
+struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct Ast_node* align_start_expr, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, unint type, /* Extra*/ struct Ast_node* value, struct token* _s, struct token* _e/*, struct token* name */) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST space node");
@@ -333,12 +335,13 @@ struct Ast_node* new_ast_space(struct Parser* p, struct token* _token, struct As
     node->node.space._s = _s;
     node->node.space._e = _e;
 
-    node->node.space.name = name;
+    // node->node.space.name = name;
+    node->node.space.space_ident = _token;
 
     return node;
 }
 
-struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name, unint is_inside_func) {
+struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct token* name/*,  unint is_inside_func */) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST label node"); 
@@ -347,7 +350,7 @@ struct Ast_node* new_ast_label(struct Parser* p, struct token* _token, struct to
 
     node->type = LABEL_NODE;
     node->node.label.name = name;
-    node->node.label.is_inside_func = is_inside_func;
+    // node->node.label.is_inside_func = is_inside_func;
 
     return node;
 }
@@ -445,6 +448,7 @@ unint insert_struct_field_assignment(struct Parser* p, struct token* _token, str
     return SUCCESS;
 }
 
+/*
 struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct token* calling_conv, struct token* func_name, unint return_type) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
@@ -463,6 +467,7 @@ struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct
 
     return node;
 }
+
 
 unint insert_fun_decl_arg(struct Parser* p, struct token* _token, struct AstFuncDecl* func_decl, struct token* arg_name, unint type) {
     struct FuncDeclArg* arg = (struct FuncDeclArg*)MEM_ALLOC(sizeof(struct FuncDeclArg), "function declaration arg");
@@ -504,6 +509,7 @@ unint insert_func_call_arg(struct Parser* p, struct token* _token, struct AstFun
 
     return SUCCESS;
 }
+*/
 
 struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct Ast_node* align_start_expr) {
     struct Ast_node* node = new_ast_node(p);
@@ -548,6 +554,7 @@ struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct t
     return node;
 }
 
+/*
 struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, struct token* ident) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
@@ -562,6 +569,7 @@ struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, s
 
     return node;
 }
+*/
 
 unint insert_instruction_arg(struct Parser* p, struct token* _token, struct AstInstruction* instruction, struct token* _s, struct token* _e) {
     struct InstructionArg* arg = (struct InstructionArg*)MEM_ALLOC(sizeof(struct InstructionArg), "instruction arg");
@@ -585,7 +593,7 @@ unint insert_instruction_arg(struct Parser* p, struct token* _token, struct AstI
     return SUCCESS;
 }
 
-struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident, unint is_inside_func) {
+struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, struct token* ident/*, unint is_inside_func */) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST instruction node");
@@ -597,7 +605,7 @@ struct Ast_node* new_ast_instruction(struct Parser* p, struct token* _token, str
     node->node.instruction.name = ident;
     node->node.instruction.args_head = NULL;
     node->node.instruction.args_tail = NULL;
-    node->node.instruction.is_inside_func = is_inside_func;
+    // node->node.instruction.is_inside_func = is_inside_func;
 
     return node;
 }
@@ -993,13 +1001,13 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             }
             
             if(!IS_SAVE_TYPE(ast->type)) {
-                if(ast->node.space.name != NULL) {
+                /* if(ast->node.space.name != NULL) {
                     LOG("\n");
                     for(unint i=0; i<level+1; ++i) LOG("\t");
                     LOG("[NAME] ");
                     for(unint i=0; i<ast->node.space.name->len; ++i) LOG_CP(ast->node.space.name->cps[i]);
                     LOG("\n");
-                } else {
+                } else */{
                     LOG("\n");
                     for(unint i=0; i<level+1; ++i) LOG("\t");
                     LOG("[VALUE]\n");
@@ -1090,6 +1098,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             dbg_struct_var_fields(ast->node.struct_var.head, level+1);
             break;
 
+        /*
         case FUN_NODE:
             LOG("\n");
             for(unint i=0; i<level+1; ++i) LOG("\t");
@@ -1149,7 +1158,7 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             }
             LOG("\n");
             break;
-
+        */
         case INSTRUCTION_NODE:
             for(unint i=0; i<ast->node.instruction.name->len; ++i) LOG_CP(ast->node.instruction.name->cps[i]);
             LOG("\n");

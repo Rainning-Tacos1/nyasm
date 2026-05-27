@@ -53,17 +53,17 @@
 
 #define ALIGN_IDENTIFIER ((int32_t[]){'a', 'l', 'i', 'g', 'n', -1})
 
-#define IMPORT_IDENTIFIER ((int32_t[]){'i', 'm', 'p', 'o', 'r', 't', -1})
+// #define IMPORT_IDENTIFIER ((int32_t[]){'i', 'm', 'p', 'o', 'r', 't', -1})
 #define STRUCT_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'u', 'c', 't', -1})
 #define STRING_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'i', 'n', 'g', -1})
 #define RETURN_IDENTIFIER ((int32_t[]){'r', 'e', 't', 'u', 'r', 'n', -1})
 #define DEL_IDENTIFIER ((int32_t[]){'d', 'e', 'l', -1})
-#define FUN_IDENTIFIER ((int32_t[]){'f', 'u', 'n', -1})
+// #define FUN_IDENTIFIER ((int32_t[]){'f', 'u', 'n', -1})
 #define ORG_IDENTIFIER ((int32_t[]){'o', 'r', 'g', -1})
 
 #define CODE_IDENTIFIER ((int32_t[]){'c', 'o', 'd', 'e', -1})
 
-#define P_IDENTIFIER ((int32_t[]){'p', -1})
+// #define P_IDENTIFIER ((int32_t[]){'p', -1})
 #define LEN_IDENTIFIER ((int32_t[]){'l', 'e', 'n', -1})
 
 
@@ -939,12 +939,14 @@ struct Parser* _Parser_New(struct tok_state* tok) {
     p->ctx_block_cursor = p->pending_dedents = p->macro_end_cursor = p->macro_expansion_count = p->is_inside_macro_decl = 0;
 
     p->struct_decl = p->struct_decl_tail = NULL;
-    p->func_decl = p->func_decl_tail = NULL;
+    // p->func_decl = p->func_decl_tail = NULL;
 
     p->global_label_decl = p->global_label_decl_tail = NULL;
-    p->func_label_decl = p->func_label_decl_tail = NULL;
+    // p->func_label_decl = p->func_label_decl_tail = NULL;
 
     for(unint i=0; i<MAX_MACRO_EXPANSION_LIMIT; ++i) p->macro_ends[i] = NULL;
+
+    p->addr = 0;
 
     return p;
 }
@@ -1499,7 +1501,7 @@ unint read_possible_alignemnt(struct Parser* p, struct Ast_node** align_expr) {
             *align_expr = new_ast_number(p, align_tok, 0);
             if(*align_expr == NULL) return FAIL;
 
-            if((*align_expr)->node.literal.value->type != VALUE_INT) goto _invalid_alignment;
+            if((*align_expr)->node.literal.value->type != VALUE_INT || (*align_expr)->node.literal.value->val.number == 0) goto _invalid_alignment;
 
             return (align_expr == NULL) ? FAIL : SUCCESS;
         } else {
@@ -1531,7 +1533,7 @@ unint read_possible_array(struct Parser* p, struct Ast_node** len_expr, struct A
             *len_expr = new_ast_number(p, len_tok, 0);
             if(*len_expr == NULL) return FAIL;
 
-            if((*len_expr)->node.literal.value->type != VALUE_INT) goto _invalid_len;
+            if((*len_expr)->node.literal.value->type != VALUE_INT || (*len_expr)->node.literal.value->val.number == 0) goto _invalid_len;
 
         } else {
 _invalid_len:
@@ -1582,7 +1584,7 @@ struct Ast_node* handle_space_identifiers(struct Parser* p, struct token* _token
     struct Ast_node *align_start_expr, *len_expr, *align_per_el_expr;
     struct token* _s = NULL;
     struct token* _e = NULL;
-    struct token* name = NULL;
+    // struct token* name = NULL;
     struct Ast_node* value = NULL;
 
     // Save types must have array expression
@@ -1601,22 +1603,22 @@ struct Ast_node* handle_space_identifiers(struct Parser* p, struct token* _token
     if(!IS_SAVE_TYPE(type)) {
         // Depending on the context
 
-        if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
+        /* if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
             if((name = expect_token(p, NAME)) == NULL) return NULL;
-        } else {
+        } else */{
             value = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
             if(value == NULL) return NULL;
         }
 
-    } else if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
+    } /* else if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
         _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@save- inside function");
         return NULL;
-    }
+    } */
 
     // Read new line
     if(expect_token(p, NEWLINE) == NULL) return NULL;
 
-    struct Ast_node* _space = new_ast_space(p, _token, align_start_expr, len_expr, align_per_el_expr, type, /* Extra*/ value, _s, _e, name);
+    struct Ast_node* _space = new_ast_space(p, _token, align_start_expr, len_expr, align_per_el_expr, type, /* Extra*/ value, _s, _e/*, name */);
     if(_space == NULL) return NULL;
 
     return _space;
@@ -1683,7 +1685,7 @@ unint parse_struct_assign_block(struct Parser* p, struct StructAssignField** hea
         if(insert_struct_field_assignment(p, field_name, head, tail, field_name, val) == FAIL) return FAIL;
     }
 }
-
+/*
 unint _parse_potential_function_call(struct Parser* p, struct token* func_name, struct Ast_node** func_call) {
     *func_call = NULL;
     // Function name hasnt been read yet
@@ -1738,6 +1740,7 @@ unint _parse_potential_function_call(struct Parser* p, struct token* func_name, 
         if(p1->type == RPAR) return SUCCESS;
     }
 }
+*/
 
 unint _parse_potential_indexation(struct Parser* p, struct token* var_name, struct Ast_node** idx_expr) {
 
@@ -2186,7 +2189,7 @@ _end_if:
         *stmt_ast = _continue;
         return SUCCESS;     
     }
-
+    /*
     else if(is_at_identifier(_token, IMPORT_IDENTIFIER) == SUCCESS) {
         // Include path
         struct token* _import = _read_token(p);
@@ -2206,6 +2209,7 @@ _end_if:
         *stmt_ast = _i;
         return SUCCESS;
     }
+    */
 
     else if(is_at_identifier(_token, CODE_IDENTIFIER) == SUCCESS) {
         struct token* name;
@@ -2292,7 +2296,7 @@ _end_if:
             if(p1 == NULL) return FAIL;
             _reset_peek(p);
 
-            if(p1->type == INDENT && is_inside_block(p, CTX_FUNC) == FAIL) {
+            if(p1->type == INDENT /*&& is_inside_block(p, CTX_FUNC) == FAIL */) {
                 if(parse_struct_assign_block(p, &struct_var->node.struct_var.head, &struct_var->node.struct_var.tail) == FAIL) return FAIL;
             }
             _reset_peek(p);
@@ -2301,10 +2305,12 @@ _end_if:
             return SUCCESS; 
         }
 
+        /*
         if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
             _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@struct declaration inside function");
             return FAIL;   
         }
+        */
 
         // Struct Declaration
         _read_token(p);
@@ -2389,10 +2395,12 @@ _end_if:
         // Read new line
         if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
+        /*
         if(is_inside_block(p, CTX_FUNC) == SUCCESS) {
             _error_from_token(p, _token, ERROR_TYPE_MESSAGE, "@string inside function");
             return FAIL;
         }
+        */
 
         struct Ast_node* string = new_ast_at_string(p, _token, expr, _s, _e, align_start_expr);
         if(string == NULL) return FAIL;
@@ -2413,7 +2421,7 @@ _end_if:
         *stmt_ast = del;
         return SUCCESS;
     }
-
+    /*
     else if(is_at_identifier(_token, RETURN_IDENTIFIER) == SUCCESS) {
         struct token* ident = _peek_token(p);
         if(ident == NULL) return FAIL;
@@ -2511,7 +2519,7 @@ _end_if:
         return SUCCESS;
 
     }
-
+    */
     else if(_token->type == NAME && is_at_identifier(_token, NULL) == FAIL) {
         unint level = 0;
 
@@ -2526,13 +2534,15 @@ _end_if:
 
             if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
-            struct Ast_node* label = new_ast_label(p, _token, _token, is_inside_block(p, CTX_FUNC) == SUCCESS);
+            //struct Ast_node* label = new_ast_label(p, _token, _token, is_inside_block(p, CTX_FUNC) == SUCCESS);
+            struct Ast_node* label = new_ast_label(p, _token, _token);
             if(label == NULL) return FAIL;
 
             *stmt_ast = label;
             return SUCCESS;
         } 
         
+        /*
         struct Ast_node* func_call;
         if(_parse_potential_function_call(p, _token, &func_call) == FAIL) return FAIL;
         
@@ -2541,6 +2551,7 @@ _end_if:
             *stmt_ast = func_call;
             return SUCCESS;
         }
+        */
 
         // Assignment
         while(true) {
@@ -2606,7 +2617,7 @@ _invalid_assignment:
         _reset_peek(p); // Go back
         // Instruction
         DBG(1, "PARSING INSTRUCTION\n");
-        struct Ast_node* instruction = new_ast_instruction(p, _token, _token, is_inside_block(p, CTX_FUNC) == SUCCESS);
+        struct Ast_node* instruction = new_ast_instruction(p, _token, _token/*, is_inside_block(p, CTX_FUNC) == SUCCESS*/);
         if(instruction == NULL) return FAIL;
 
         struct token* p1 = _peek_token(p);

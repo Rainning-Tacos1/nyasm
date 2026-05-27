@@ -15,6 +15,8 @@ struct asm_lang_t {
     const char* const lang_name;
     const char* const code_name;
 
+    nint max_addr;
+
     instruction_t exec;
 };
 

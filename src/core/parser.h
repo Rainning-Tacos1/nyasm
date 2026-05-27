@@ -61,26 +61,24 @@ struct Parser {
     struct StructsDecl* struct_decl;
     struct StructsDecl* struct_decl_tail;
 
-    struct FuncDecl* func_decl;
-    struct FuncDecl* func_decl_tail;
+    // struct FuncDecl* func_decl;
+    // struct FuncDecl* func_decl_tail;
 
     struct LabelDecl* global_label_decl;
     struct LabelDecl* global_label_decl_tail;
 
-    struct LabelDecl* func_label_decl;
-    struct LabelDecl* func_label_decl_tail;
+    // struct LabelDecl* func_label_decl;
+    // struct LabelDecl* func_label_decl_tail;
 
     struct asm_lang_t* active_lang;
 
+    nint addr;
 };
 
 /*
 Priority:
  - registers
- - func args
- - func vars
  - structs
- - func labels
  - labels
  - vars
 
