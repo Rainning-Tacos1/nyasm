@@ -44,4 +44,6 @@ unint mem_size();
 
 void mem_stats();
 
+void* mem_cpy(void* dst, const void* src, nint n);
+
 #endif

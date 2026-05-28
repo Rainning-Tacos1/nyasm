@@ -195,3 +195,15 @@ void mem_stats() {
     DBG(DO_MEM_DBG, "[MEM_STAT]: Total(ovh): %10.6f (%%)     | Alloc: %10.6f (%%)     |\n", ovh_full, ovh_alloc);
 }
 #endif
+
+void* mem_cpy(void* dst, const void* src, nint n) {
+
+    unsigned char*       d = (unsigned char*)dst;
+    const unsigned char* s = (const unsigned char*)src;
+
+    for (nint i = 0; i < n; i++) {
+        d[i] = s[i];
+    }
+
+    return dst;
+}

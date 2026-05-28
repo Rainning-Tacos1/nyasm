@@ -49,7 +49,7 @@ struct Value* new_array(struct Parser* p, struct token* _token) {
     return array;
 }
 
-unint append_array(struct Parser* p, struct token* _token, struct Value* arr, struct Value* val) {
+unint append_array(struct Parser* p, struct token* _token, struct Value* arr, struct Ast_node* val_expr) {
     if(arr->type != VALUE_ARRAY) return FAIL;
 
     // Array Element
@@ -68,7 +68,7 @@ unint append_array(struct Parser* p, struct token* _token, struct Value* arr, st
     
     // Value
     arr->val.arr.tail->next = NULL;
-    arr->val.arr.tail->this = *val;
+    arr->val.arr.tail->this_expr = val_expr;
 
     // Update Len
     arr->val.arr.len += 1;
@@ -477,7 +477,8 @@ void print_value_recur(struct Value* val, unint level) {
             LOG("[\n");
             struct ArrayElement* el = val->val.arr.head;
             while(el) {
-                print_value_recur(&el->this, level+1);
+                if(el->this_expr->type == LITERAL_NODE) print_value_recur(el->this_expr->node.literal.value, level+1);
+                else LOG("<NOT EVALUATED YET>\n");
                 el = el->next;
             }
             for(unint i=0; i<level; ++i) LOG("\t");

@@ -3,6 +3,7 @@
 
 #include "api/memory.h"
 #include "api/debug.h"
+#include "api/unicode.h"
 
 #include "asm_lang.h"
 #include "eval.h"
@@ -254,7 +255,7 @@ unint _equality_check(struct Value* vleft, unint op, struct Value* vright) {
     struct ArrayElement* tleft = vleft->val.arr.head;
     struct ArrayElement* tright = vright->val.arr.head;
     while(tleft != NULL) {
-        if(_equality_check(&tleft->this, NOTEQUAL, &tright->this)) return !(op == EQEQUAL);
+        if(_equality_check(tleft->this_expr->node.literal.value, NOTEQUAL, tright->this_expr->node.literal.value)) return !(op == EQEQUAL);
         tleft = tleft->next;
         tright = tright->next;
     }
@@ -335,7 +336,7 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         (tcleft && vleft->type != VALUE_ARRAY && vleft->type != VALUE_STR)
     ) {
         // _error_from_multiple_tokens(p, binop->_s, binop->_e, ERROR_TYPE_TYPE, "can only perform indexation on array/string types");
-        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "can only perform indexation on array/string types");
+        _error_from_token(p, op_token, ERROR_TYPE_TYPE, "can only perform indexation on array/string types %d", vleft->type);
         return FAIL;
     }
 
@@ -368,6 +369,35 @@ unint bool_eval(struct Value* val) {
 unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val, struct Value** var_ref_idx) {
     switch(expr->type) {
         case LITERAL_NODE:
+            if(expr->node.literal.value->type != VALUE_ARRAY) {
+                *val = *expr->node.literal.value;
+                return SUCCESS;
+            }
+
+            // Arrays
+            struct ArrayElement* el = expr->node.literal.value->val.arr.head;
+            while (el != NULL) {
+                if (el->this_expr->type == LITERAL_NODE) goto _el_iter;
+
+                DBG(1, "NEW ALLOC\n");
+                // Freeze each element
+                struct Value* el_val = (struct Value*)MEM_ALLOC(sizeof(struct Value), "array el value");
+                if(el_val == NULL) {
+                    memory_error(p, "no available memory for the array value");
+                    return FAIL;
+                }
+
+                if(_eval_expr(p, el->this_expr, el_val, var_ref_idx) == FAIL) return FAIL;
+                el->this_expr->type = LITERAL_NODE;
+                el->this_expr->node.literal.value = el_val;
+
+_el_iter:
+
+                if (el == expr->node.literal.value->val.arr.tail) break;
+
+                el = el->next;
+            }
+
             *val = *expr->node.literal.value;
             return SUCCESS;
         case LEN_NODE:
@@ -636,6 +666,8 @@ mul_overflow:
                     return FAIL;
 
                 case LSQB:
+
+                    
                     // Valid index?
                     nint index = vright.val.number;
                     unint len = (vleft.type == VALUE_ARRAY) ? vleft.val.arr.len : vleft.val.string.len;
@@ -650,8 +682,10 @@ mul_overflow:
                         struct ArrayElement* el = vleft.val.arr.head;
                         for(nint i=0; i<index; ++i) el = el->next;
 
-                        *val = el->this;
-                        *var_ref_idx = &el->this;
+                        // Value is assured to exitst
+                        *val = *el->this_expr->node.literal.value;
+                        *var_ref_idx = el->this_expr->node.literal.value;
+
                     } else { // String
                         int32_t* cp = MEM_ALLOC(sizeof(int32_t), "eval of string index");
                         if(cp == NULL) {
@@ -850,13 +884,19 @@ unint array_total_size_safe(
 
     nint aligned_start;
 
-    if (align_address_safe(base_address, array_align, &aligned_start) == FAIL) return FAIL;
+    nint effective_align = array_align;
+
+    if (elem_align > array_align)
+        effective_align = elem_align;
+
+    if (align_address_safe(base_address, effective_align, &aligned_start) == FAIL)
+        return FAIL;
 
     nint front_padding = aligned_start - base_address;
 
     nint stride;
-
-    if (align_address_safe( elem_size, elem_align, &stride) == FAIL) return FAIL;
+    if(n == 1) stride = 1;
+    else if (align_address_safe( elem_size, elem_align, &stride) == FAIL) return FAIL;
 
     nint body;
 
@@ -869,7 +909,34 @@ unint array_total_size_safe(
     return SUCCESS;
 }
 
+
 // Misc
+
+#define IS_SAVE_TYPE(type) ((type) == SAVEB_NODE || (type) == SAVEW_NODE || (type) == SAVEDW_NODE || (type) == SAVEQ_NODE || (type) == SAVEF_NODE || (type) == SAVED_NODE || (type) == SAVEP_NODE)
+
+void overflow(struct Parser* p, struct token* _token) {
+    _error_from_token(p, _token, ERROR_TYPE_OVERFLOW, "size overflow");
+}
+
+unint get_size_of_type(struct Parser* p, unint type) {
+    switch(type) {
+        case BYTE_NODE:
+        case SAVEB_NODE: return 1;
+        case WORD_NODE:
+        case SAVEW_NODE: return 2;
+        case DWORD_NODE:
+        case SAVEDW_NODE: return 4;
+        case QWORD_NODE:
+        case SAVEQ_NODE: return 8;
+        case FLOAT_NODE:
+        case SAVEF_NODE: return sizeof(float);
+        case DOUBLE_NODE:
+        case SAVED_NODE: return sizeof(double);
+        case PTR_NODE:
+        case SAVEP_NODE: return p->active_lang->size_of_ptr;
+    }
+    return 0;
+}
 
 unint increment_addr(struct Parser* p, nint val) {
     if (p->addr > NINT_MAX - p->addr) return FAIL;
@@ -886,8 +953,162 @@ unint ensure_lang(struct Parser* p, struct token* _token) {
     return SUCCESS;
 }
 
-// AST evaluation
+unint encode_integer(struct Parser* p, nint value, unint type, unint le, uint8_t* out_buf) {
+    if (!out_buf) return FAIL;
 
+    unint width = get_size_of_type(p, type);
+
+    unint bits = (unint)value;
+
+    if (le) {
+        for (nint i = 0; i < width; i++) out_buf[i] = (uint8_t)((bits >> (i * 8)) & 0xFF);
+
+    } else {
+        for (nint i = 0; i < width; i++) {
+            nint shift = (width - 1 - i) * 8;
+            out_buf[i] = (uint8_t)((bits >> shift) & 0xFF);
+        }
+    }
+
+    return SUCCESS;
+}
+
+unint host_is_little_endian() {
+    uint16_t x = 1;
+    return *((uint8_t*)&x) == 1;
+}
+
+void encode_floats_doubles(void* buf, nint size, unint le) {
+    uint8_t* bytes = (uint8_t*)buf;
+
+    unint host_le = host_is_little_endian();
+
+    unint need_swap = (host_le  && !le) || (!host_le && le);
+
+    if (!need_swap) return;
+
+    for (size_t i = 0; i < size / 2; i++) {
+        uint8_t tmp = bytes[i];
+
+        bytes[i] = bytes[size - 1 - i];
+
+        bytes[size - 1 - i] = tmp;
+    }
+}
+
+unint encode_space_ident(struct Parser* p, unint type, struct AstSpace* space, nint* total) {
+    if(ensure_lang(p, space->space_ident) == FAIL) return FAIL;
+
+    nint el_size = (nint)get_size_of_type(p, type);
+
+    nint el_align = (space->align_per_el_expr == NULL ? 1 : space->align_per_el_expr->node.literal.value->val.number);
+    nint st_align = (space->align_start_expr  == NULL ? 1 : space->align_start_expr->node.literal.value->val.number);
+    nint el_num =   (space->len_expr          == NULL ? 1 : space->len_expr->node.literal.value->val.number);
+
+    if(array_total_size_safe(p->addr, el_num, el_size, el_align, st_align, total) == FAIL) {
+        overflow(p, space->space_ident);
+        return FAIL;
+    }
+
+    struct Value val;
+    struct Value* var_ref_idx;
+
+    nint array_vals;
+    if(!IS_SAVE_TYPE(type)) {
+        if(_eval_expr(p, space->value, &val, &var_ref_idx) == FAIL) return EVAL_ERROR;
+
+        // Errors
+        if(
+            ((type == BYTE_NODE  || type == WORD_NODE || type == DWORD_NODE || type == QWORD_NODE) && (val.type != VALUE_INT && val.type != VALUE_ARRAY)) ||
+            ((type == FLOAT_NODE || type == DOUBLE_NODE) && (val.type != VALUE_DOUBLE && val.type != VALUE_ARRAY)) ||
+            ((type == PTR_NODE) && (val.type != VALUE_INT && val.type != VALUE_ARRAY)) 
+        ) goto _invalid_type;       
+
+        if((array_vals = (val.type == VALUE_ARRAY))) {
+            if(val.val.arr.len != el_num) {
+                _error_from_multiple_tokens(p, space->_s, space->_e, ERROR_TYPE_RUNTIME, "lengths dont match");
+                return FAIL;
+            } else {
+                // type check
+                struct ArrayElement* el = val.val.arr.head;
+                while(el != NULL) {
+                    unint el_type = el->this_expr->node.literal.value->type;
+                    if(
+                        ((type == BYTE_NODE  || type == WORD_NODE || type == DWORD_NODE || type == QWORD_NODE) && (el_type != VALUE_INT)) ||
+                        ((type == FLOAT_NODE || type == DOUBLE_NODE) && (el_type != VALUE_DOUBLE)) ||
+                        ((type == PTR_NODE) && (el_type != VALUE_INT)) 
+                    ) goto _invalid_type;       
+
+                    if(el == val.val.arr.tail) break;
+                    el = el->next;
+                }
+            }
+        }
+    } else {
+        val.type = VALUE_INT;
+        val.val.number = 0x00;
+        array_vals = 0;
+    }
+
+    // Last pass
+
+    DBG(1, "array_vals = %d el_num = %d\n", array_vals, el_num);
+
+    nint aligned_start;
+    nint effective_align = (st_align > el_align) ? st_align : el_align;
+
+    if (align_address_safe(p->addr, effective_align, &aligned_start) == FAIL) return FAIL;
+
+    for(nint i=p->addr; i<aligned_start; ++i) DBG(1, "00\n");
+    DBG(1, "\n");
+    nint stride;
+    if(el_num == 1) stride = el_size;
+    else if (align_address_safe(el_size, el_align, &stride) == FAIL) return FAIL;
+
+    void* dst = MEM_ALLOC(el_size, "space ident buf");
+    if(dst == NULL) {
+        _error_from_multiple_tokens(p, space->_s, space->_e, ERROR_TYPE_MEMORY, "no available memory for the buffer");
+        return EVAL_ERROR;                        
+    }
+
+    struct ArrayElement* curr;
+    struct Value* el_val;
+    if(array_vals) {
+        curr = val.val.arr.head;
+        el_val = curr->this_expr->node.literal.value;
+    } else el_val = &val;
+
+    for(nint n=0; n<el_num; ++n) {
+        
+        if(el_val->type == VALUE_DOUBLE) {
+            DBG(1, "FLOAT: %.6f\n", el_val->val.flt);
+
+            float flt;
+            void* data;
+            if(type == FLOAT_NODE || type == SAVEF_NODE) {
+                flt = (float)el_val->val.flt;
+                data = &flt;
+            } else data = &el_val->val.flt;
+
+            MEM_CPY(dst, data, el_size);
+            encode_floats_doubles(dst, el_size, 1);
+        } else {
+            if(encode_integer(p, el_val->val.number, type, 1, dst) == FAIL) return FAIL;
+        }
+
+        for(nint j=0; j<(stride - el_size); ++j) DBG(1, "00\n");
+        for(nint i=0; i<el_size; ++i) DBG(1, "%02X\n", ((unsigned char*)dst)[i]);
+    
+        if(array_vals) { curr = curr->next; if(curr) el_val = curr->this_expr->node.literal.value; }
+    }
+
+    return SUCCESS;
+_invalid_type:
+    _error_from_multiple_tokens(p, space->_s, space->_e, ERROR_TYPE_TYPE, "invalid type");
+    return FAIL;
+}
+
+// AST evaluation
 unint eval_ast(struct Parser* p, struct Ast_node* ast) {
     // We already failed :(
     if(ast->type != STATEMENTS_NODE) return EVAL_ERROR;
@@ -927,10 +1148,24 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                             return EVAL_ERROR;
                         }
 
-                        // get the new object
-                        struct Value tmp;
-                        if(append_array(p, var_name, variable, &tmp) == FAIL) return EVAL_ERROR;
-                        variable = &(*variable).val.arr.tail->this;
+                        // Append a literal
+                        struct Ast_node* el_ast = new_ast_node(p);
+                        if(el_ast == NULL) {
+                            memory_error(p, "no available memory for the appended array value");
+                            return EVAL_ERROR;
+                        }
+
+                        struct Value* el_val = (struct Value*)MEM_ALLOC(sizeof(struct Value), "array append el value");
+                        if(el_val == NULL) {
+                            memory_error(p, "no available memory for the array value");
+                            return FAIL;
+                        }
+
+                        el_ast->type = LITERAL_NODE;
+                        el_ast->node.literal.value = el_val;
+
+                        if(append_array(p, var_name, variable, el_ast) == FAIL) return EVAL_ERROR;
+                        variable = el_val;
                     }
                 } else {
                     // just a simple var assignment
@@ -944,7 +1179,6 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
 
                 if(var_assign->ass_type == EQUAL) {
                     if(_eval_expr(p, var_assign->expr, &_val, &_var_ref_idx) == FAIL) return EVAL_ERROR;
-
                     *variable = _val;
                 } else {
                     struct Ast_node* ast_var;
@@ -1146,6 +1380,11 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 break;
             }
 
+            case STRUCT_VAR_NODE: {
+
+                break;
+            }
+
             case BYTE_NODE:
             case WORD_NODE:
             case DWORD_NODE:
@@ -1160,44 +1399,13 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
             case SAVEF_NODE:
             case SAVED_NODE:
             case SAVEP_NODE: {
+                nint total;
+                if(encode_space_ident(p, ast->type, &ast->node.space, &total) == FAIL) return EVAL_ERROR;
 
-                if(ensure_lang(p, ast->node.space.space_ident) == FAIL) return EVAL_ERROR;
-
-                nint size_of_el;
-                switch(ast->type) {
-                    case BYTE_NODE:
-                    case SAVEB_NODE: {size_of_el = 1; break; }
-                    case WORD_NODE:
-                    case SAVEW_NODE: {size_of_el = 2; break; }
-                    case DWORD_NODE:
-                    case SAVEDW_NODE: {size_of_el = 4; break; }
-                    case QWORD_NODE:
-                    case SAVEQ_NODE: {size_of_el = 8; break; }
-                    case FLOAT_NODE:
-                    case SAVEF_NODE: {size_of_el = 4; break; }
-                    case DOUBLE_NODE:
-                    case SAVED_NODE: {size_of_el = 8; break; }
-                    case PTR_NODE:
-                    case SAVEP_NODE: {
-                        // make sure lang is set and get the size of a pointer
-                    }
-                }
-
-                nint total = 0;
-                if(
-                    array_total_size_safe(
-                        p->addr,
-                        (ast->node.space.len_expr == NULL ? 1 : ast->node.space.len_expr->node.literal.value->val.number),
-                        size_of_el,
-                        (ast->node.space.align_per_el_expr == NULL ? 1 : ast->node.space.align_per_el_expr->node.literal.value->val.number),
-                        (ast->node.space.align_start_expr == NULL ? 1 : ast->node.space.align_start_expr->node.literal.value->val.number),
-                        &total
-                    ) == FAIL
-                ) goto _space_size_overflow;
-
+                DBG(1, "total = %d\n", total);
                 if(increment_addr(p, total) == SUCCESS) break;
-_space_size_overflow:
-                _error_from_token(p, ast->node.space.space_ident, ERROR_TYPE_OVERFLOW, "size overflow");
+
+                overflow(p, ast->node.space.space_ident);
                 return EVAL_ERROR;
             }
 

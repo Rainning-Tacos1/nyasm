@@ -24,22 +24,22 @@ enum AST_types {
     
     BREAK_NODE,    // Done
     CONTINUE_NODE, // Done
-    RETURN_NODE,   // Done
-    FUN_NODE,      // Done
+    // RETURN_NODE,   // Done
+    // FUN_NODE,      // Done
 
     ERROR_NODE,
     WARN_NODE,
     ASSERT_NODE,
 
-    BYTE_NODE,
-    WORD_NODE,
-    DWORD_NODE,
-    QWORD_NODE,
-    FLOAT_NODE,
-    DOUBLE_NODE,
-    PTR_NODE,
+    BYTE_NODE,   // Done
+    WORD_NODE,   // Done
+    DWORD_NODE,  // Done
+    QWORD_NODE,  // Done
+    FLOAT_NODE,  // Done
+    DOUBLE_NODE, // Done
+    PTR_NODE,    // Done
 
-    VOID_RETURN_TYPE,
+    // VOID_RETURN_TYPE,
 
     SAVEB_NODE,
     SAVEW_NODE,
@@ -54,7 +54,7 @@ enum AST_types {
     STRUCT_DECL_NODE, // Done
     STRUCT_VAR_NODE,
     
-    IMPORT_NODE, // Plan on removing
+    // IMPORT_NODE, // Plan on removing
     DEL_NODE,    // Done
     STRING_NODE,
     CODE_NODE,   // Done
@@ -62,7 +62,7 @@ enum AST_types {
     ORG_NODE,
 
     INSTRUCTION_NODE,
-    FUNC_CALL_NODE,
+    // FUNC_CALL_NODE,
 
     ASSIGN_VAR_NODE,           // Done
     ASSIGN_APPEND_ARRAY_NODE,  // Done

@@ -38,7 +38,8 @@ struct Value {
 };
 
 struct ArrayElement {
-    struct Value this;
+    struct Ast_node* this_expr;
+
     struct ArrayElement* next;
 };
 
@@ -46,7 +47,7 @@ struct Value* new_string(struct Parser* p, struct token* _token);
 struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg);
 
 struct Value* new_array(struct Parser* p, struct token* _token);
-unint append_array(struct Parser* p, struct token* _token, struct Value* arr, struct Value* val);
+unint append_array(struct Parser* p, struct token* _token, struct Value* arr, struct Ast_node* val_expr);
 
 void print_value(struct Value* val);
 

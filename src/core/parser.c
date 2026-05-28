@@ -1131,12 +1131,12 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
                 if(el == NULL) return NULL;
 
                 // Eval the expression
-                struct Value val;
-                struct Value* var_ref_idx;
-                if(_eval_expr(p, el, &val, &var_ref_idx) == FAIL) return NULL;
+                // struct Value val;
+                // struct Value* var_ref_idx;
+                // if(_eval_expr(p, el, &val, &var_ref_idx) == FAIL) return NULL;
 
                 // Append to the array
-                if(append_array(p, _token, arr, &val) == FAIL) return NULL;
+                if(append_array(p, _token, arr, el) == FAIL) return NULL;
 
                 // Read possibly the next comma or ]
                 if((_token = _peek_token(p)) == NULL) return NULL;
@@ -1235,8 +1235,11 @@ void _error_from_multiple_tokens(struct Parser* p, struct token* _s, struct toke
         }
         _c = _c->next;
     }
-    // -1 bc failed on expr eval index [100 + 1]
-    _error_line_with_cursor(p, _e, col_offset, _e->end_col_offset-1, stype, format);
+
+    struct token* _v = _s;
+    while (_v && _v->next != _e) _v = _v->next;
+
+    _error_line_with_cursor(p, _c, col_offset, _v->end_col_offset, stype, format);
 }
 
 // Macros

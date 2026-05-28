@@ -51,4 +51,6 @@
 
 #define MEM_GET_LAST() mem_get_last()
 
+#define MEM_CPY(dst, src, n) mem_cpy(dst, src, n)
+
 #endif

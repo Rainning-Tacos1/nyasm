@@ -541,6 +541,7 @@ struct Ast_node* new_ast_del(struct Parser* p, struct token* _token, struct toke
     return node;
 }
 
+/*
 struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct token* ident) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
@@ -554,7 +555,7 @@ struct Ast_node* new_ast_return(struct Parser* p, struct token* _token, struct t
     return node;
 }
 
-/*
+
 struct Ast_node* new_ast_function_call(struct Parser* p, struct token* _token, struct token* ident) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
@@ -730,17 +731,17 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
         case BREAK_NODE: { LOG("BREAK_NODE]\n"); return; }
         case CONTINUE_NODE: { LOG("CONTINUE]\n"); return; }
 
-        case IMPORT_NODE: { LOG("IMPORT_NODE"); break; }
+        // case IMPORT_NODE: { LOG("IMPORT_NODE"); break; }
 
         case STRING_NODE: { LOG("STRING_NODE"); break; }
 
         case DEL_NODE: { LOG("DEL_NODE"); break; }
 
-        case RETURN_NODE: { LOG("RETURN_NODE"); break; }
+        // case RETURN_NODE: { LOG("RETURN_NODE"); break; }
 
-        case FUN_NODE: { LOG("FUN_NODE"); break; }
+        // case FUN_NODE: { LOG("FUN_NODE"); break; }
 
-        case FUNC_CALL_NODE: { LOG("FUNC_CALL_NODE"); break; }
+        // case FUNC_CALL_NODE: { LOG("FUNC_CALL_NODE"); break; }
 
         case BYTE_NODE: { LOG("BYTE_NODE"); break; }
         case WORD_NODE: { LOG("WORD_NODE"); break; }
@@ -843,6 +844,21 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
 
             }
             LOG("]\n");
+
+            if(ast->node.literal.value->type == VALUE_ARRAY) {
+                struct ArrayElement* el = ast->node.literal.value->val.arr.head;
+
+                while (el != NULL) {
+
+                    dbg_ast_recur(el->this_expr, level+1);
+                    LOG("\n");
+
+                    if (el == ast->node.literal.value->val.arr.tail)
+                        break;
+
+                    el = el->next;
+                }
+            }
             break;
  
         case VAR_NODE:
@@ -1082,12 +1098,13 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
             LOG("\n");
             break;
 
+        /*
         case RETURN_NODE:
             if(ast->node._return.ident == NULL) LOG("<NULL>");
             else for(unint i=0; i<ast->node._return.ident->len; ++i) LOG_CP(ast->node._return.ident->cps[i]);
             LOG("\n");
             break;
-
+        */
         case STRUCT_VAR_NODE:
             for(unint i=0; i<ast->node.struct_var.struct_name->len; ++i) LOG_CP(ast->node.struct_var.struct_name->cps[i]);
             LOG("\n");
