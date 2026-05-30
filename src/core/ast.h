@@ -222,6 +222,7 @@ struct AstLabel {
 
 struct StructDeclField {
     struct token* name;
+    struct token* struct_name;
 
     unint type;
 
@@ -244,6 +245,9 @@ struct StructAssignField {
     struct token* field_name;
 
     struct Ast_node* value;
+    struct token* _s;
+    struct token* _e;
+
     struct StructAssignField* head;
     struct StructAssignField* tail;
 
@@ -466,7 +470,7 @@ struct Ast_node* new_ast_struct_decl(struct Parser* p, struct token* _token, str
 unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStructDecl* struct_decl, struct token* name, struct token* struct_name, unint type, struct Ast_node* len_expr, struct Ast_node* align_per_el_expr, struct Ast_node* align_start_expr);
 
 struct Ast_node* new_ast_struct_var(struct Parser* p, struct token* _token, struct token* struct_name, struct token* struct_var_name);
-unint insert_struct_field_assignment(struct Parser* p, struct token* _token, struct StructAssignField** head, struct StructAssignField** tail, struct token* field_name, struct Ast_node* value);
+unint insert_struct_field_assignment(struct Parser* p, struct token* _token, struct StructAssignField** head, struct StructAssignField** tail, struct token* field_name, struct Ast_node* value, struct token* _s, struct token* _e);
 
 // struct Ast_node* new_ast_fun_decl(struct Parser* p, struct token* _token, struct token* calling_conv, struct token* func_name, unint return_type);
 // unint insert_fun_decl_arg(struct Parser* p, struct token* _token, struct AstFuncDecl* func_decl, struct token* arg_name, unint type);

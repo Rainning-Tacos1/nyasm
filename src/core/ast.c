@@ -399,6 +399,7 @@ unint insert_struct_field(struct Parser* p, struct token* _token, struct AstStru
     field->align_per_el_expr = align_per_el_expr;
     field->align_start_expr = align_start_expr;
     field->next = NULL;
+    field->struct_name = struct_name;
 
     // Link
     if(struct_decl->head == NULL) struct_decl->head = field;
@@ -425,7 +426,7 @@ struct Ast_node* new_ast_struct_var(struct Parser* p, struct token* _token, stru
     return node;
 }
 
-unint insert_struct_field_assignment(struct Parser* p, struct token* _token, struct StructAssignField** head, struct StructAssignField** tail, struct token* field_name, struct Ast_node* value) {
+unint insert_struct_field_assignment(struct Parser* p, struct token* _token, struct StructAssignField** head, struct StructAssignField** tail, struct token* field_name, struct Ast_node* value, struct token* _s, struct token* _e) {
     struct StructAssignField* field = (struct StructAssignField*)MEM_ALLOC(sizeof(struct StructAssignField), "struct assignment field");
     if(field == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for struct assignment field"); 
@@ -436,6 +437,9 @@ unint insert_struct_field_assignment(struct Parser* p, struct token* _token, str
     field->value = value;
     field->head = NULL;
     field->tail = NULL;
+
+    field->_s = _s;
+    field->_e = _e;
 
     field->next = NULL;
 
@@ -1058,7 +1062,11 @@ void dbg_ast_recur(struct Ast_node* ast, unint level) {
                     case FLOAT_NODE : { LOG("FLOAT_NODE"); break; }
                     case DOUBLE_NODE : { LOG("DOUBLE_NODE"); break; }
                     case PTR_NODE: { LOG("PTR_NODE"); break; }
-                    case STRUCT_DECL_NODE: { LOG("STRUCT_DECL_NODE"); break; }
+                    case STRUCT_DECL_NODE: { 
+                        LOG("STRUCT_DECL_NODE "); 
+                        for(unint i=0; i<field->struct_name->len; ++i) LOG_CP(field->struct_name->cps[i]);
+                        break;
+                    }
                 }
                 LOG("\n");
                 for(unint i=0; i<level+2; ++i) LOG("\t");

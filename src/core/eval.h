@@ -27,8 +27,12 @@ struct FuncDecl {
 */
 
 struct LabelDecl {
-    struct AstLabel* label;
     nint addr;
+
+    struct token* name;
+
+    struct LabelDecl* deep_head; // Used for structs
+    struct LabelDecl* deep_tail; // Used for structs
 
     struct LabelDecl* next;
 };

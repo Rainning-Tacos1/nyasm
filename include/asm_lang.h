@@ -17,6 +17,7 @@ struct asm_lang_t {
 
     nint max_addr;
     unint size_of_ptr;
+    unint le;
 
     instruction_t exec;
 };

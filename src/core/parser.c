@@ -1672,7 +1672,7 @@ unint parse_struct_assign_block(struct Parser* p, struct StructAssignField** hea
         // Struct
         if(p2->type == NEWLINE) {
             _read_token(p);
-            if(insert_struct_field_assignment(p, field_name, head, tail, field_name, NULL) == FAIL) return FAIL;
+            if(insert_struct_field_assignment(p, field_name, head, tail, field_name, NULL, NULL, NULL) == FAIL) return FAIL;
             if(parse_struct_assign_block(p, &((*tail)->head), &((*tail)->tail)) == FAIL) return FAIL;
             continue;
         }
@@ -1685,7 +1685,7 @@ unint parse_struct_assign_block(struct Parser* p, struct StructAssignField** hea
 
         if((expect_token(p, NEWLINE)) == NULL) return FAIL;
 
-        if(insert_struct_field_assignment(p, field_name, head, tail, field_name, val) == FAIL) return FAIL;
+        if(insert_struct_field_assignment(p, field_name, head, tail, field_name, val, _s, _e) == FAIL) return FAIL;
     }
 }
 /*
@@ -2324,8 +2324,10 @@ _end_if:
         if(struct_decl == NULL) return FAIL;
 
         while(true) {
-            struct Ast_node *align_start_expr, *len_expr, *align_per_el_expr;
-            struct token *field_name, *struct_name;
+            struct Ast_node *align_start_expr = NULL;
+            struct Ast_node* len_expr = NULL;
+            struct Ast_node* align_per_el_expr = NULL;
+            struct token *field_name, *struct_name = NULL;
             unint data_type;
 
             struct token* type = _read_token(p);

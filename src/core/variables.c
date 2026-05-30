@@ -211,12 +211,7 @@ unint _strtoul(int32_t** ptr, int32_t* str, unint len, unint base) {
                     base = 2;
                 } else {
                     /* skip all zeroes */
-                    while (len && *str == '0') {
-                        ++str;
-                        --len;
-                    }
-                    if (ptr) *ptr = (int32_t*)str;
-                    return 0;
+                    base = 10;
                 }
             } else {
                 base = 10;
@@ -438,6 +433,7 @@ struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg) {
     __errno = 0;
     int32_t* endptr;
     nint num = _strtol(&endptr, _token->cps, _token->len, 0, is_neg);
+    DBG(1, "TRYING TO PARSE FLOAT | (endptr - _token->cps) = %d |  _token->len = %d\n", (endptr - _token->cps),  _token->len);
     if((endptr - _token->cps) == _token->len) {
         if(__errno == ERANGE) {
             _error_from_token(p, _token, ERROR_TYPE_OVERFLOW, "number overflow");

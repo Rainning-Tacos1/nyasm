@@ -51,6 +51,7 @@ ASM_LANG i386 = {
     .code_name = "i386",
     .max_addr = 0Xffff,
     .size_of_ptr = 2,
+    .le = 1,
 
     .exec = _86_exec,
 };
