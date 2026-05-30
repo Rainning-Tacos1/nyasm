@@ -18,12 +18,12 @@ enum AST_types {
 
     STATEMENTS_NODE,
 
-    IF_NODE,       // Done
-    WHILE_NODE,    // Done
-    REPEAT_NODE,   // Done
+    IF_NODE,          // Done
+    WHILE_NODE,       // Done
+    REPEAT_NODE,      // Done
     
-    BREAK_NODE,    // Done
-    CONTINUE_NODE, // Done
+    BREAK_NODE,       // Done
+    CONTINUE_NODE,    // Done
     // RETURN_NODE,   // Done
     // FUN_NODE,      // Done
 
@@ -31,35 +31,35 @@ enum AST_types {
     WARN_NODE,
     ASSERT_NODE,
 
-    BYTE_NODE,   // Done
-    WORD_NODE,   // Done
-    DWORD_NODE,  // Done
-    QWORD_NODE,  // Done
-    FLOAT_NODE,  // Done
-    DOUBLE_NODE, // Done
-    PTR_NODE,    // Done
+    BYTE_NODE,        // Done
+    WORD_NODE,        // Done
+    DWORD_NODE,       // Done
+    QWORD_NODE,       // Done
+    FLOAT_NODE,       // Done
+    DOUBLE_NODE,      // Done
+    PTR_NODE,         // Done
 
     // VOID_RETURN_TYPE,
 
-    SAVEB_NODE,
-    SAVEW_NODE,
-    SAVEDW_NODE,
-    SAVEQ_NODE,
-    SAVEF_NODE,
-    SAVED_NODE,
-    SAVEP_NODE,
+    SAVEB_NODE,       // Done
+    SAVEW_NODE,       // Done
+    SAVEDW_NODE,      // Done
+    SAVEQ_NODE,       // Done
+    SAVEF_NODE,       // Done
+    SAVED_NODE,       // Done
+    SAVEP_NODE,       // Done
 
     LABEL_NODE,       // Done
 
     STRUCT_DECL_NODE, // Done
-    STRUCT_VAR_NODE,
+    STRUCT_VAR_NODE,  // Done
     
     // IMPORT_NODE, // Plan on removing
-    DEL_NODE,    // Done
-    STRING_NODE,
-    CODE_NODE,   // Done
-    ALIGN_NODE,
-    ORG_NODE,
+    DEL_NODE,         // Done
+    STRING_NODE,      // Done
+    CODE_NODE,        // Done
+    ALIGN_NODE,       // Done
+    ORG_NODE,         // Done
 
     INSTRUCTION_NODE,
     // FUNC_CALL_NODE,
@@ -281,6 +281,9 @@ struct AstFuncDecl {
 */
 struct AstString {
     struct Ast_node* expr;
+
+    struct token* string;
+
     struct token* _s; // For error reporting
     struct token* _e; // For error reporting    
 
@@ -336,6 +339,8 @@ struct AstOrg {
     struct Ast_node* expr;
     struct token* _s;
     struct token* _e;
+
+    struct token* org;
 };
 
 // Macros
@@ -456,7 +461,7 @@ struct Ast_node* new_ast_continue(struct Parser* p, struct token* _token);
 
 struct Ast_node* new_ast_import(struct Parser* p, struct token* _token, struct token* import_token);
 
-struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct Ast_node* align_start_expr);
+struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct Ast_node* align_start_expr, struct token* string);
 
 struct Ast_node* new_ast_del(struct Parser* p, struct token* _token, struct token* ident);
 
@@ -485,7 +490,7 @@ struct Ast_node* new_ast_code(struct Parser* p, struct token* _token, struct asm
 
 struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
 
-struct Ast_node* new_ast_org(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e);
+struct Ast_node* new_ast_org(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct token* org);
 
 struct Ast_node* new_ast_assign_variable(struct Parser* p, struct token* ident, struct token* ass_tok, struct Ast_node* idx, struct Ast_node* expr, unint ass_type, unint type);
 

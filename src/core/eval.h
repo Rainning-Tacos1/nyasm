@@ -7,6 +7,15 @@
 #include "ast.h"
 #include "types.h"
 
+/*
+Priority:
+ - registers
+ - structs
+ - labels
+ - vars
+
+*/
+
 struct Variable {
     struct token* var_name;
     struct Value val;
@@ -34,6 +43,9 @@ struct LabelDecl {
     struct LabelDecl* deep_head; // Used for structs
     struct LabelDecl* deep_tail; // Used for structs
 
+    nint len;     // for array fields inside structs, on a label value will be 0
+    nint stride;  // for array fields inside structs
+
     struct LabelDecl* next;
 };
 
@@ -48,5 +60,6 @@ enum EvalTypes {
 // Ast Evaluation
 
 unint eval_ast(struct Parser* p, struct Ast_node* ast);
+void print_labels(struct LabelDecl* head, struct LabelDecl* tail, unint level);
 
 #endif

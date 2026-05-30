@@ -68,6 +68,7 @@ nbool assemble(char* path) {
         LOG(" = ");
         print_value(&var->val);
     }
-
+    DBG(1, "PRINTING LABELS\n");
+    print_labels(p->global_label_decl, p->global_label_decl_tail, 0);
     return SUCCESS;
 }

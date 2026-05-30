@@ -515,7 +515,7 @@ unint insert_func_call_arg(struct Parser* p, struct token* _token, struct AstFun
 }
 */
 
-struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct Ast_node* align_start_expr) {
+struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct Ast_node* align_start_expr, struct token* string) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST string node");
@@ -528,6 +528,7 @@ struct Ast_node* new_ast_at_string(struct Parser* p, struct token* _token, struc
     node->node.string._s = _s;
     node->node.string._e = _e;
     node->node.string.align_start_expr = align_start_expr;
+    node->node.string.string = string;
 
     return node;
 }
@@ -630,7 +631,7 @@ struct Ast_node* new_ast_align(struct Parser* p, struct token* _token, struct As
     return node;
 }
 
-struct Ast_node* new_ast_org(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e) {
+struct Ast_node* new_ast_org(struct Parser* p, struct token* _token, struct Ast_node* expr, struct token* _s, struct token* _e, struct token* org) {
     struct Ast_node* node = new_ast_node(p);
     if(node == NULL) {
         _error_from_token(p, _token, ERROR_TYPE_MEMORY, "no available memory for AST org node");
@@ -641,6 +642,7 @@ struct Ast_node* new_ast_org(struct Parser* p, struct token* _token, struct Ast_
     node->node.org.expr = expr;
     node->node.org._s = _s;
     node->node.org._e = _e;
+    node->node.org.org = org;
 
     return node;
 }

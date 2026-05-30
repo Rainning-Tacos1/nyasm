@@ -73,19 +73,14 @@ struct Parser {
     struct asm_lang_t* active_lang;
 
     nint addr;
+    unint last_pass;
 };
-
-/*
-Priority:
- - registers
- - structs
- - labels
- - vars
-
-*/
 
 struct Parser* _Parser_New(struct tok_state* tok);
 struct Ast_node* _run_parser(struct Parser* p);
+
+struct token* expected_token(struct Parser *p, struct token* _token,  unint token);
+unint _compare_identifiers(int32_t* cps1, unint len1, int32_t* cps2, unint len2);
 
 void _error_from_token(struct Parser* p, struct token* _token, const char *stype, const char *format, ...);
 void memory_error(struct Parser* p, const char* format, ...);

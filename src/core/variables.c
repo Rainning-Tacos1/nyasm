@@ -433,7 +433,7 @@ struct Value* new_number(struct Parser* p, struct token* _token, unint is_neg) {
     __errno = 0;
     int32_t* endptr;
     nint num = _strtol(&endptr, _token->cps, _token->len, 0, is_neg);
-    DBG(1, "TRYING TO PARSE FLOAT | (endptr - _token->cps) = %d |  _token->len = %d\n", (endptr - _token->cps),  _token->len);
+
     if((endptr - _token->cps) == _token->len) {
         if(__errno == ERANGE) {
             _error_from_token(p, _token, ERROR_TYPE_OVERFLOW, "number overflow");

@@ -4,6 +4,8 @@
 #include "../../src/core/helper.h"
 #include "types.h"
 
+#include "api/debug.h"
+
 #define ERROR_TYPE_I386 "i386Error"
 
 #define MOV_INSTRUCTION ((int32_t[]){'m', 'o', 'v', -1})
@@ -58,11 +60,33 @@ ASM_LANG i386 = {
 
 nint _86_exec(struct Parser* p, struct AstInstruction* inst) {
 
-    if(compare_identifiers(inst->name, MOV_INSTRUCTION) == SUCCESS) {
+    if(compare_identifiers_cp_array(inst->name, MOV_INSTRUCTION) == SUCCESS) {
         if(inst->arg_count != 2) {
             _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
             return INSTRUCTION_FAILED;
         }
+
+        struct TokenStream tks;
+        tks_init(&tks, inst->args_head->_s, inst->args_head->_e);
+
+        unint idx;
+        if(parse_potential_register(&tks, registers, &idx) == SUCCESS) {
+            DBG(1, "ITS A REGISTER\n");
+            return 3;
+        }
+        tks_reset_peek(&tks);
+
+        nint addr;
+        unint status = parse_potential_variable(p, &tks, &addr);
+        if(status == VP_FAIL) return INSTRUCTION_FAILED;
+        else if(status == VP_SUCCESS) {
+            DBG(1, "ITS A VARIABLE: 0x%x\n", addr);
+            return 2;
+        }
+        tks_reset_peek(&tks);
+
+        // language's custom syntax
+
         return 5; // 5 bytes for now
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "not implemented yet");
 
@@ -73,4 +97,5 @@ nint _86_exec(struct Parser* p, struct AstInstruction* inst) {
     }
 
     return INSTRUCTION_FAILED;
+    
 }

@@ -947,6 +947,7 @@ struct Parser* _Parser_New(struct tok_state* tok) {
     for(unint i=0; i<MAX_MACRO_EXPANSION_LIMIT; ++i) p->macro_ends[i] = NULL;
 
     p->addr = 0;
+    p->last_pass = 0;
 
     return p;
 }
@@ -2269,7 +2270,7 @@ _end_if:
         struct Ast_node* expr = parse_expr_with_start_and_end(p, &_s, &_e, 0, 0);
         if(expr == NULL) return FAIL;
 
-        struct Ast_node* org = new_ast_org(p, _token, expr, _s, _e);
+        struct Ast_node* org = new_ast_org(p, _token, expr, _s, _e, _token);
         if(org == NULL) return FAIL;
 
         *stmt_ast = org;
@@ -2407,7 +2408,7 @@ _end_if:
         }
         */
 
-        struct Ast_node* string = new_ast_at_string(p, _token, expr, _s, _e, align_start_expr);
+        struct Ast_node* string = new_ast_at_string(p, _token, expr, _s, _e, align_start_expr, _token);
         if(string == NULL) return FAIL;
 
         *stmt_ast = string;
@@ -2654,8 +2655,8 @@ _invalid_assignment:
                 if(!_s) _s = p1;
                 _e = p1;
             
-                if (p1->type == LPAR) ++level;
-                else if (p1->type == RPAR) --level;
+                if (p1->type == LPAR || p1->type == LSQB) ++level;
+                else if (p1->type == RPAR || p1->type == RSQB) --level;
             }
 
             if(insert_instruction_arg(p, _token, &instruction->node.instruction, _s, _e) == FAIL) return FAIL;
