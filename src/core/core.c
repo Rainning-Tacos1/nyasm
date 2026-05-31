@@ -16,7 +16,7 @@
 #include "err.h"
 #include "eval.h"
 
-nbool assemble(char* path) {
+nbool assemble(char* path, char* out_path) {
 
     // File
     unint len = 0;
@@ -28,6 +28,11 @@ nbool assemble(char* path) {
     if(!file) {
         ERROR("Error loading input file (%s) into memory\n", path);
         return FAIL;
+    }
+
+    if(OUT_FILE_OPEN(out_path) == FAIL) {
+        ERROR("Error accessing output file (%s)\n", out_path);
+        return FAIL; 
     }
 
     // Tokenizer
@@ -70,5 +75,30 @@ nbool assemble(char* path) {
     }
     DBG(1, "PRINTING LABELS\n");
     print_labels(p->global_label_decl, p->global_label_decl_tail, 0);
+
+    DBG(1, "#######################################################################\n");
+
+    p->addr = 0;
+    p->last_pass = 1;
+
+    // Clear vars, structs decl
+    p->variables = p->variables_tail = NULL;
+    p->struct_decl = p->struct_decl_tail = NULL;
+
+    result = eval_ast(p, ast);
+    if(result != EVAL_OK) {
+        LOG("EVALUATION FAILED. %d\n", result);
+        return FAIL;
+    }
+    DBG(1, "PRINTING VARIABLES\n");
+    for(struct Variable* var = p->variables; var; var = var->next) {
+        for(unint i=0; i<var->var_name->len; ++i) LOG_CP(var->var_name->cps[i]);
+        LOG(" = ");
+        print_value(&var->val);
+    }
+    DBG(1, "PRINTING LABELS\n");
+    print_labels(p->global_label_decl, p->global_label_decl_tail, 0);
+
+    OUT_FILE_CLOSE();
     return SUCCESS;
 }

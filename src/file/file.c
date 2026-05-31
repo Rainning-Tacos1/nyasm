@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+FILE* out_file = NULL;
+
 // Errno to message
 const char* stat_error_message(nint errnum) {
     switch (errnum) {
@@ -43,4 +45,17 @@ char* load_file(char* path, unint* _size) {
     fclose(fp);
     *_size = size;
     return buf;
+}
+
+unint out_file_open(char* path) {
+    return ((out_file = fopen(path, "wb")) == NULL) ? FAIL : SUCCESS;
+}
+
+void out_file_close() {
+    fclose(out_file);
+    out_file = NULL;
+}
+
+void out_file_write_byte(unsigned char byte) {
+    fputc((int)byte, out_file);
 }

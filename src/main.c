@@ -115,16 +115,16 @@ int main(int argc, const char** argv) {
      // File checks //
     /////////////////
 
-    _stat sinput, soutput;
+    _stat sinput; // soutput;
 
     if(STAT(input, &sinput) != 0) FATAL("Could not open input file: [errno %"_N"] %s\n", (nint)errno, STAT_ERR_MSG(errno));
     if(!__S_ISREG(sinput.st_mode)) FATAL("Input is not a file\n");
 
-    if(STAT(output, &soutput) != 0) FATAL("Could not open output file: [errno %"_N"] %s\n", (nint)errno, STAT_ERR_MSG(errno));
-    if(!__S_ISREG(soutput.st_mode)) FATAL("Output is not a file\n");
+    // if(STAT(output, &soutput) != 0) FATAL("Could not open output file: [errno %"_N"] %s\n", (nint)errno, STAT_ERR_MSG(errno));
+    // if(!__S_ISREG(soutput.st_mode)) FATAL("Output is not a file\n");
 
-    if((sinput.st_dev == soutput.st_dev) && (sinput.st_ino == soutput.st_ino)) 
-        FATAL("The input and output paths point to the same file\n");
+    // if((sinput.st_dev == soutput.st_dev) && (sinput.st_ino == soutput.st_ino)) 
+    //     FATAL("The input and output paths point to the same file\n");
 
       ///////////////////////////
      // Memory initialization //
@@ -136,7 +136,7 @@ int main(int argc, const char** argv) {
      // Testing //
     /////////////
 
-    ASSEMBLE(input);
+    ASSEMBLE(input, output);
 
     MEM_DBG();
     DBG(1, "-------------------------\n");

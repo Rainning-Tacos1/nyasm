@@ -4,6 +4,7 @@
 #include "api/memory.h"
 #include "api/debug.h"
 #include "api/unicode.h"
+#include "api/file.h"
 
 #include "asm_lang.h"
 #include "eval.h"
@@ -1073,7 +1074,7 @@ void encode_floats_doubles(void* buf, nint size, unint le) {
     }
 }
 
-unint encode_space_ident(struct Parser* p, unint type, struct AstSpace* space, nint* total, nint* data_addr, nint* len, nint* stride, unint emit) {
+unint encode_space_ident(struct Parser* p, unint type, struct AstSpace* space, nint* total, nint* data_addr, nint* len, nint* stride, unint inhibit) {
     if(ensure_lang(p, space->space_ident) == FAIL) return FAIL;
 
     nint el_size = (nint)get_size_of_type(p, type);
@@ -1139,9 +1140,12 @@ unint encode_space_ident(struct Parser* p, unint type, struct AstSpace* space, n
     }
     // Last pass
 
-    if(!emit) return SUCCESS;
+    if(inhibit || !p->last_pass) return SUCCESS;
 
-    for(nint i=_addr; i<aligned_start; ++i) DBG(1, "00\n");
+    for(nint i=_addr; i<aligned_start; ++i) {
+        OUT_FILE_WRITE_BYTE((unsigned char)0);
+        DBG(1, "al - 00\n");
+    }
     DBG(1, "\n");
 
     void* dst = MEM_ALLOC(el_size, "space ident buf");
@@ -1173,8 +1177,14 @@ unint encode_space_ident(struct Parser* p, unint type, struct AstSpace* space, n
             if(encode_integer(p, el_val->val.number, type, p->active_lang->le, dst) == FAIL) return FAIL;
         }
 
-        for(nint i=0; i<el_size; ++i) DBG(1, "%02X\n", ((unsigned char*)dst)[i]);
-        for(nint j=0; j<((n != (el_num-1)) && (*stride - el_size)); ++j) DBG(1, "00\n");
+        for(nint i=0; i<el_size; ++i) {
+            OUT_FILE_WRITE_BYTE(((unsigned char*)dst)[i]);
+            DBG(1, "%02X\n", ((unsigned char*)dst)[i]);
+        }
+        for(nint j=0; j<((n != (el_num-1)) && (*stride - el_size)); ++j){
+            OUT_FILE_WRITE_BYTE((unsigned char)0);
+            DBG(1, "st - 00\n");
+        }
     
         if(array_vals) { curr = curr->next; if(curr) el_val = curr->this_expr->node.literal.value; }
     }
@@ -1186,7 +1196,7 @@ _invalid_type:
 }
 
 // Struct vars
-unint encode_struct(struct Parser* p, struct token* var_name, struct AstStructDecl* struct_decl, struct StructAssignField* var_head, struct StructAssignField* var_tail, nint* total, unint emit, struct LabelDecl** labels_head, struct LabelDecl** labels_tail) {    
+unint encode_struct(struct Parser* p, struct token* var_name, struct AstStructDecl* struct_decl, struct StructAssignField* var_head, struct StructAssignField* var_tail, nint* total, unint create_labels, struct LabelDecl** labels_head, struct LabelDecl** labels_tail) {    
     // Check for unknown fields
     struct StructAssignField* _f = var_head;
     while(_f != NULL) {
@@ -1220,7 +1230,7 @@ unint encode_struct(struct Parser* p, struct token* var_name, struct AstStructDe
     while(decl_field != NULL) {
         // Add a label for each declared field
         struct LabelDecl* label;
-        if(!emit) {
+        if(create_labels && !p->last_pass) {
             label = new_label_decl(p, var_name, labels_head, labels_tail, 0);
             if(label == NULL) return FAIL;
             label->name = decl_field->name;
@@ -1271,9 +1281,9 @@ unint encode_struct(struct Parser* p, struct token* var_name, struct AstStructDe
             }
 
             nint _total, _len, _data_addr, _stirde;
-            if(encode_space_ident(p, decl_field->type, &ast_space, &_total, &_data_addr, &_len, &_stirde, emit) == FAIL) return FAIL;
+            if(encode_space_ident(p, decl_field->type, &ast_space, &_total, &_data_addr, &_len, &_stirde, create_labels) == FAIL) return FAIL;
             
-            if(!emit) {
+            if(create_labels && !p->last_pass) {
                 label->addr = _data_addr;
                 label->len = _len;
                 label->stride = _stirde;
@@ -1292,6 +1302,11 @@ unint encode_struct(struct Parser* p, struct token* var_name, struct AstStructDe
             while(ass_field != NULL) {
 
                 if(_compare_identifiers(decl_field->name->cps, decl_field->name->len, ass_field->field_name->cps, ass_field->field_name->len) == SUCCESS) {
+                    
+                    if(ass_field->head == NULL || ass_field->tail == NULL) {
+                        _error_from_multiple_tokens(p, ass_field->_s, ass_field->_e, ERROR_TYPE_TYPE, "invalid type");
+                        return FAIL;
+                    }
                     error_token = ass_field->field_name;
                     _head = ass_field->head;
                     _tail = ass_field->tail;
@@ -1319,9 +1334,10 @@ unint encode_struct(struct Parser* p, struct token* var_name, struct AstStructDe
 
                 nint front_padding = struct_aligned_start - p->addr;
 
-                // Compute element size
-                if(encode_struct(p, var_name, _struct_decl->ast_struct_decl, _head, _tail, &size, 0, &label->deep_head, &label->deep_tail) == FAIL) return FAIL;
-                p->addr = _addr;
+                // Compute element size, inhibit label creation
+                if(encode_struct(p, var_name, _struct_decl->ast_struct_decl, _head, _tail, &size, 1, &label->deep_head, &label->deep_tail) == FAIL) return FAIL;
+                // At least one element fits
+                p->addr = _addr; // go back
 
                 if (align_address_safe(size, el_align, &stride) == FAIL) break;
 
@@ -1337,31 +1353,45 @@ unint encode_struct(struct Parser* p, struct token* var_name, struct AstStructDe
                 break;
             }
 
+            // Integer overflow
             if(!success) {
                 overflow(p, error_token);
                 return FAIL;
             }
 
+            // Check if it fits
+            if (increment_addr(p, out_size) == FAIL) return FAIL;
             *total += out_size;
-            if(!emit) {
+
+            if(create_labels && !p->last_pass) {
                 label->addr = struct_aligned_start;
                 label->len = el_num;
                 label->stride = stride;
-                return increment_addr(p, out_size);
             }
 
-            // Last pass
-            for(nint i=_addr; i<struct_aligned_start; ++i) DBG(1, "00\n");
-            DBG(1, "\n");
+            if(p->last_pass) {
+                // Last pass
+                for(nint i=_addr; i<struct_aligned_start; ++i) {
+                    OUT_FILE_WRITE_BYTE((unsigned char)0);
+                    DBG(1, "al - 00\n");
+                }
+                DBG(1, "\n");
 
-            for(nint n=0; n<el_num; ++n) {
-                // DBG(1, "_addr = %d, struct_aligned_start = %d, stride = %d, out_size = %d\n", _addr, struct_aligned_start, stride, out_size);
-                if(encode_struct(p, var_name, _struct_decl->ast_struct_decl, _head, _tail, &size, emit, NULL, NULL) == FAIL) return FAIL;
-                for(nint j=0; j<((n != (el_num-1)) && (stride - size)); ++j) DBG(1, "00\n");
+                p->addr = _addr;
+
+                for(nint n=0; n<el_num; ++n) {
+                    // DBG(1, "_addr = %d, struct_aligned_start = %d, stride = %d, out_size = %d\n", _addr, struct_aligned_start, stride, out_size);
+                    if(encode_struct(p, var_name, _struct_decl->ast_struct_decl, _head, _tail, &size, 0, NULL, NULL) == FAIL) return FAIL;
+                    for(nint j=0; j<((n != (el_num-1)) && (stride - size)); ++j) {
+                        OUT_FILE_WRITE_BYTE((unsigned char)0);
+                        DBG(1, "st - 00\n");
+                    }
+                }  
+
+                p->addr = _addr;
+                increment_addr(p, out_size);
             }
 
-            p->addr = _addr;
-            increment_addr(p, out_size);
 
         }
 
@@ -1612,6 +1642,8 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
             }
 
             case LABEL_NODE: {
+                if(p->last_pass) break;
+
                 if(is_label_declared(p, ast->node.label.name) == SUCCESS) {
                     _error_from_token(p, ast->node.label.name, ERROR_TYPE_NAME, "redeclaration of label");
                     return EVAL_ERROR;
@@ -1662,17 +1694,25 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                     return EVAL_ERROR;
                 }
 
-                if(is_struct_var(p, ast->node.struct_var.var_name) == SUCCESS) {
+                if(!p->last_pass && is_struct_var(p, ast->node.struct_var.var_name) == SUCCESS) {
                     _error_from_token(p, ast->node.struct_var.var_name, ERROR_TYPE_NAME, "redeclaration of struct variable");
                     return EVAL_ERROR;
                 }
 
-                // new label for the variable.
-                struct LabelDecl* label = new_label_decl(p, ast->node.struct_var.var_name, &p->global_label_decl, &p->global_label_decl_tail, p->addr);
-                if(label == NULL) return EVAL_ERROR;
+                struct LabelDecl** deep_head = NULL;
+                struct LabelDecl** deep_tail = NULL;
+
+                if(!p->last_pass) {
+                    // new label for the variable.
+                    struct LabelDecl* label = new_label_decl(p, ast->node.struct_var.var_name, &p->global_label_decl, &p->global_label_decl_tail, p->addr);
+                    if(label == NULL) return EVAL_ERROR;
+
+                    deep_head = &label->deep_head;
+                    deep_tail = &label->deep_tail;
+                }
 
                 nint total;
-                if(encode_struct(p, ast->node.struct_var.var_name, _struct->ast_struct_decl, ast->node.struct_var.head, ast->node.struct_var.tail, &total, p->last_pass, &label->deep_head, &label->deep_tail) == FAIL) return EVAL_ERROR;
+                if(encode_struct(p, ast->node.struct_var.var_name, _struct->ast_struct_decl, ast->node.struct_var.head, ast->node.struct_var.tail, &total, !p->last_pass, deep_head, deep_tail) == FAIL) return EVAL_ERROR;
                 
                 DBG(1, "struct total = %d | p->addr = %d\n", total, p->addr);
                 break;
@@ -1693,7 +1733,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
             case SAVED_NODE:
             case SAVEP_NODE: {
                 nint total, len, data_addr, stride;
-                if(encode_space_ident(p, ast->type, &ast->node.space, &total, &data_addr, &len, &stride, p->last_pass) == FAIL) return EVAL_ERROR;
+                if(encode_space_ident(p, ast->type, &ast->node.space, &total, &data_addr, &len, &stride, 0) == FAIL) return EVAL_ERROR;
 
                 DBG(1, "total = %d\n", total);
                 if(increment_addr(p, total) == SUCCESS) break;
@@ -1741,11 +1781,17 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 // Last pass
                 if(p->last_pass) {
                     // Alignment
-                    for(nint i=addr; i<aligned_start; ++i) DBG(1, "00\n");
+                    for(nint i=addr; i<aligned_start; ++i) {
+                        OUT_FILE_WRITE_BYTE((unsigned char)0);
+                        DBG(1, "al - 00\n");
+                    }
                     DBG(1, "\n");
                     for(unint i=0; i<val.val.string.len; ++i) {
                         nint n = CP_TO_ENCODING_BUF_GET_LEN(val.val.string.str[i], buf);
-                        for(nint j=0; j<(n-1); ++j) DBG(1, "%02x\n", buf[j]);
+                        for(nint j=0; j<(n-1); ++j) {
+                            OUT_FILE_WRITE_BYTE(buf[j]);
+                            DBG(1, "%02x\n", buf[j]);
+                        }
                     }
                 }
 
@@ -1779,7 +1825,10 @@ _overflow_str:
                 if(increment_addr(p, (size = end_addr - p->addr)) == FAIL) goto _align_overflow;
 
                 // Last pass
-                if(p->last_pass) for(nint i=0; i<size; ++i) DBG(1, "00\n");
+                if(p->last_pass) for(nint i=0; i<size; ++i) {
+                    OUT_FILE_WRITE_BYTE((unsigned char)0);
+                    DBG(1, "@align - 00\n");
+                }
 
                 break;
 _align_overflow:

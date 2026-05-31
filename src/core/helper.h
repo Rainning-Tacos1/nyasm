@@ -7,7 +7,6 @@
 struct TokenStream {
     struct token* start;
     struct token* end;
-    unint len;
 
     struct token* read;
     struct token* peek;
@@ -15,6 +14,7 @@ struct TokenStream {
 
 enum VariableParsing {
     VP_SUCCESS,
+    VP_UNRESOLVED_LABEL,
     VP_NONE,
     VP_FAIL
 };
@@ -28,5 +28,7 @@ void tks_reset_peek(struct TokenStream* tks);
 
 unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* addr);
 unint parse_potential_register(struct TokenStream* tks, int32_t** registers, unint* idx);
+
+nint unresolved_label(struct Parser* p, struct token* _token);
 
 #endif

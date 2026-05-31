@@ -70,6 +70,8 @@ nint _86_exec(struct Parser* p, struct AstInstruction* inst) {
         tks_init(&tks, inst->args_head->_s, inst->args_head->_e);
 
         unint idx;
+
+        // Registers are only one token
         if(parse_potential_register(&tks, registers, &idx) == SUCCESS) {
             DBG(1, "ITS A REGISTER\n");
             return 3;
@@ -79,6 +81,8 @@ nint _86_exec(struct Parser* p, struct AstInstruction* inst) {
         nint addr;
         unint status = parse_potential_variable(p, &tks, &addr);
         if(status == VP_FAIL) return INSTRUCTION_FAILED;
+        else if(!p->last_pass && status == VP_UNRESOLVED_LABEL) DBG(1, "UNRESOLVED LABEL\n");
+        else if(p->last_pass && status == VP_UNRESOLVED_LABEL) return unresolved_label(p, inst->args_head->_s);
         else if(status == VP_SUCCESS) {
             DBG(1, "ITS A VARIABLE: 0x%x\n", addr);
             return 2;

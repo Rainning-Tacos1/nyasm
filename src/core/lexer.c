@@ -501,11 +501,46 @@ unint _Lexer_token_setup(struct tok_state *tok, struct token *token, unint type,
         _uc.curr = _uc.buf = start;
         _uc.end = end;
 
-        while(READ_CP(&_uc) == SUCCESS && *_cp != EOF) {
-            DBG(DO_LEXER_TOKEN_FILL_DBG, "Filling token with: '%s' (U+%04X)\n", CP_TO_ENCODING(*_cp), *_cp);
-            token_buf = token_push_cp(tok, *_cp);
-            if(token_buf == NULL) RETURN_NOMEM();
-            ++token->len;
+        if(type != STRING) {
+            while(READ_CP(&_uc) == SUCCESS && *_cp != EOF) {
+                DBG(DO_LEXER_TOKEN_FILL_DBG, "Filling token with: '%s' (U+%04X)\n", CP_TO_ENCODING(*_cp), *_cp);
+                token_buf = token_push_cp(tok, *_cp);
+                if(token_buf == NULL) RETURN_NOMEM();
+                ++token->len;
+            }
+        } else {
+            unint _col = token->col_offset;
+            while (READ_CP(&_uc) == SUCCESS && *_cp != EOF) {
+                uint32_t cp = *_cp;
+
+                if (cp == '\\') {
+                    if (READ_CP(&_uc) != SUCCESS || *_cp == EOF) return _Tokenizer_syntaxerror(tok, "unterminated escape sequence");
+                    ++_col;
+                    switch (*_cp) {
+                        case 'a':  { cp = '\a'; break; }
+                        case 'b':  { cp = '\b'; break; }
+                        case 'f':  { cp = '\f'; break; }
+                        case 'n':  { cp = '\n'; break; }
+                        case 'r':  { cp = '\r'; break; }
+                        case 't':  { cp = '\t'; break; }
+                        case 'v':  { cp = '\v'; break; }
+                        case '\\': { cp = '\\'; break; }
+                        case '\'': { cp = '\''; break; }
+                        case '"':  { cp = '"'; break;  }
+                        case '?':  { cp = '\?'; break; }
+                        case '0':  { cp = '\0'; break; }
+                        default: return _Tokenizer_syntaxerror_known_range(tok, _col, _col+2, "unknown escape sequence");   
+                    }
+                }
+
+                DBG(DO_LEXER_TOKEN_FILL_DBG, "Filling token with: '%s' (U+%04X)\n", CP_TO_ENCODING(cp), cp);
+
+                token_buf = token_push_cp(tok, cp);
+                if (token_buf == NULL) RETURN_NOMEM();
+
+                ++token->len;
+                ++_col;
+            }
         }
 
         token_buf = token_trim_cp_buffer(tok);

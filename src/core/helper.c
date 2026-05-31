@@ -77,6 +77,8 @@ unint compare_identifiers_cp_array(struct token* ident1, int32_t* cmp) {
 }
 
 unint parse_potential_register(struct TokenStream* tks, int32_t** registers, unint* idx) {
+    if(tks->start != tks->end) return FAIL; // Registers are only one token
+    
     struct token* name = tks_peek(tks);
     if ((name == NULL) || (name->type != NAME)) return FAIL;
 
@@ -111,7 +113,11 @@ unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* 
         if (it == p->global_label_decl_tail) break;
     }
 
-    if (!sym) return VP_NONE;
+    // Not a label nor a struct var
+    if (!sym && (tks_peek(tks) == NULL)) {
+        tks_read(tks);
+        return VP_UNRESOLVED_LABEL;
+    }
 
     tks_read(tks);
 
@@ -221,4 +227,9 @@ unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* 
 
     *addr = current_addr;
     return VP_SUCCESS;
+}
+
+nint unresolved_label(struct Parser* p, struct token* _token) {
+    _error_from_token(p, _token, ERROR_TYPE_NAME, "unresolved label");
+    return INSTRUCTION_FAILED;
 }
