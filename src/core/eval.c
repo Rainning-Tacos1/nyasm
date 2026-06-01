@@ -823,7 +823,7 @@ mul_overflow:
                             case GREATER:      { val->val.number = da >  db; break; }
                             case GREATEREQUAL: { val->val.number = da >= db; break; }
                             case LESS:         { val->val.number = da <  db; break; }
-                            case LESSEQUAL:    { val->val.number = da >= db; break; }
+                            case LESSEQUAL:    { val->val.number = da <= db; break; }
                         }
                         return SUCCESS;
                     }
@@ -835,7 +835,7 @@ mul_overflow:
                         case GREATER:      { val->val.number = a >  b; break; }
                         case GREATEREQUAL: { val->val.number = a >= b; break; }
                         case LESS:         { val->val.number = a <  b; break; }
-                        case LESSEQUAL:    { val->val.number = a >= b; break; }
+                        case LESSEQUAL:    { val->val.number = a <= b; break; }
                     }
                     return SUCCESS;
 
