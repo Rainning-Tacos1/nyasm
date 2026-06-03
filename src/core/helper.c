@@ -97,7 +97,7 @@ unint parse_potential_register(struct TokenStream* tks, int32_t** registers, uni
     return FAIL;
 }
 
-unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* addr) {
+unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* addr, unint permissive) {
     struct token* name = tks_peek(tks);
     if (!name || name->type != NAME) return VP_NONE;
 
@@ -118,6 +118,9 @@ unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* 
         tks_read(tks);
         return VP_UNRESOLVED_LABEL;
     }
+
+    // Not a variable / struct field
+    if(!sym) return VP_UNRESOLVED_LABEL;
 
     tks_read(tks);
 
@@ -214,15 +217,17 @@ unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* 
     }
     tks_reset_peek(tks);
 
-    // Trailling tokens
-    struct token* trailling = tks_peek(tks);
-    if (trailling != NULL) {
-        _error_from_token(
-            p,
-            trailling,
-            ERROR_TYPE_NAME,
-            "unexpected token");
-        return VP_FAIL;
+    if(!permissive) {
+        // Trailling tokens
+        struct token* trailling = tks_peek(tks);
+        if (trailling != NULL) {
+            _error_from_token(
+                p,
+                trailling,
+                ERROR_TYPE_NAME,
+                "unexpected token");
+            return VP_FAIL;
+        }
     }
 
     *addr = current_addr;
