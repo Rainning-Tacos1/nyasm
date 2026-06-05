@@ -56,7 +56,7 @@
 // #define IMPORT_IDENTIFIER ((int32_t[]){'i', 'm', 'p', 'o', 'r', 't', -1})
 #define STRUCT_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'u', 'c', 't', -1})
 #define STRING_IDENTIFIER ((int32_t[]){'s', 't', 'r', 'i', 'n', 'g', -1})
-#define RETURN_IDENTIFIER ((int32_t[]){'r', 'e', 't', 'u', 'r', 'n', -1})
+// #define RETURN_IDENTIFIER ((int32_t[]){'r', 'e', 't', 'u', 'r', 'n', -1})
 #define DEL_IDENTIFIER ((int32_t[]){'d', 'e', 'l', -1})
 // #define FUN_IDENTIFIER ((int32_t[]){'f', 'u', 'n', -1})
 #define ORG_IDENTIFIER ((int32_t[]){'o', 'r', 'g', -1})
@@ -1986,7 +1986,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         // new Tokenizer
         struct tok_state* _tok = _Tokenizer_tok_new();
         if(_tok == NULL) {
-            memory_error(p, "no available memory for the tokenizer\n");            
+            memory_error(p, "no available memory for the tokenizer");            
             return FAIL;
         }
 
@@ -1998,7 +1998,7 @@ unint _parse_statement(struct Parser* p, struct Ast_node** stmt_ast, unint* flag
         // new Parser
         struct Parser* _p = _Parser_New(_tok);
         if(_p == NULL) {
-            memory_error(p, "no available memory for the parser\n");
+            memory_error(p, "no available memory for the parser");
             return FAIL;
         }
 

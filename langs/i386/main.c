@@ -13,6 +13,9 @@
 #define ERROR_TYPE_I386 "i386Error"
 
 #define MOV_INSTRUCTION ((int32_t[]){'m', 'o', 'v', -1})
+#define LEA_INSTRUCTION ((int32_t[]){'l', 'e', 'a', -1})
+#define PUSH_INSTRUCTION ((int32_t[]){'p', 'u', 's', 'h', -1})
+#define POP_INSTRUCTION ((int32_t[]){'p', 'o', 'p', -1})
 
 nint _86_exec(struct Parser* p, struct AstInstruction* inst);
 
@@ -487,6 +490,19 @@ static unint fits_i8(nint value) {
     return value >= -128 && value <= 127;
 }
 
+static unint fits_push_imm8(nint value) {
+    nint low;
+    nint word;
+
+    if(fits_i8(value)) return 1;
+    if(value < 0 || value > 0xffff) return 0;
+
+    low = value & 0xff;
+    word = value & 0xffff;
+    if(low & 0x80) return word == (0xff00 | low);
+    return word == low;
+}
+
 static nint memory_tail_len(struct MemoryOperand *mem) {
     if(mem->direct) return 2;
     if(mem->rm == 6 && !mem->has_disp) return 1;
@@ -682,20 +698,132 @@ static nint encode_mov(struct Parser *p, struct AstInstruction *inst,
     return INSTRUCTION_FAILED;
 }
 
+static nint encode_lea(struct Parser *p, struct AstInstruction *inst,
+                       struct Operand *dst, struct Operand *src) {
+    struct Operand direct_src;
+
+    if(src->kind == OPERAND_IMM) {
+        direct_src = *src;
+        set_direct_memory(&direct_src, src->imm, -1);
+        src = &direct_src;
+    }
+
+    if(dst->kind != OPERAND_REG16 || src->kind != OPERAND_MEM) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported lea form");
+        return INSTRUCTION_FAILED;
+    }
+
+    emit_segment_prefix(p, &src->mem);
+    emit_byte(p, 0x8d);
+    emit_modrm_mem(p, dst->reg, &src->mem);
+    return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+}
+
+static nint encode_push(struct Parser *p, struct AstInstruction *inst,
+                        struct Operand *src) {
+    if(src->kind == OPERAND_REG16) {
+        emit_byte(p, (unsigned char)(0x50 + src->reg));
+        return 1;
+    }
+
+    if(src->kind == OPERAND_SEG) {
+        emit_byte(p, (unsigned char)(0x06 + (src->reg << 3)));
+        return 1;
+    }
+
+    if(src->kind == OPERAND_IMM) {
+        if(fits_push_imm8(src->imm)) {
+            emit_byte(p, 0x6a);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 2;
+        }
+        if(fits_u16(src->imm)) {
+            emit_byte(p, 0x68);
+            emit_word(p, src->imm);
+            return 3;
+        }
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_OVERFLOW,
+                          "immediate does not fit 16 bits");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(src->kind == OPERAND_MEM) {
+        if(src->size == 1) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid push operand size");
+            return INSTRUCTION_FAILED;
+        }
+        if(src->size != 2) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "ambiguous push operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0xff);
+        emit_modrm_mem(p, 6, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported push form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_pop(struct Parser *p, struct AstInstruction *inst,
+                       struct Operand *dst) {
+    if(dst->kind == OPERAND_REG16) {
+        emit_byte(p, (unsigned char)(0x58 + dst->reg));
+        return 1;
+    }
+
+    if(dst->kind == OPERAND_SEG) {
+        emit_byte(p, (unsigned char)(0x07 + (dst->reg << 3)));
+        return 1;
+    }
+
+    if(dst->kind == OPERAND_MEM) {
+        if(dst->size == 1) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid pop operand size");
+            return INSTRUCTION_FAILED;
+        }
+        if(dst->size != 2) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "ambiguous pop operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x8f);
+        emit_modrm_mem(p, 0, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported pop form");
+    return INSTRUCTION_FAILED;
+}
+
 nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     struct Operand dst;
     struct Operand src;
     struct token *error_token = NULL;
     nint status;
+    unint is_mov = compare_identifiers_cp_array(inst->name, MOV_INSTRUCTION) == SUCCESS;
+    unint is_lea = compare_identifiers_cp_array(inst->name, LEA_INSTRUCTION) == SUCCESS;
+    unint is_push = compare_identifiers_cp_array(inst->name, PUSH_INSTRUCTION) == SUCCESS;
+    unint is_pop = compare_identifiers_cp_array(inst->name, POP_INSTRUCTION) == SUCCESS;
 
     (void)registers;
 
-    if(compare_identifiers_cp_array(inst->name, MOV_INSTRUCTION) != SUCCESS) {
+    if(!is_mov && !is_lea && !is_push && !is_pop) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid i386 instruction");
         return INSTRUCTION_FAILED;
     }
 
-    if(inst->arg_count != 2) {
+    if((is_push || is_pop) && inst->arg_count != 1) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(!is_push && !is_pop && inst->arg_count != 2) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
     }
@@ -708,6 +836,9 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
         return INSTRUCTION_FAILED;
     }
 
+    if(is_push) return encode_push(p, inst, &dst);
+    if(is_pop) return encode_pop(p, inst, &dst);
+
     error_token = NULL;
     status = parse_operand(p, inst->args_tail, &src, &error_token);
     if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
@@ -717,5 +848,8 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
         return INSTRUCTION_FAILED;
     }
 
-    return encode_mov(p, inst, &dst, &src);
+    if(is_mov) {
+        return encode_mov(p, inst, &dst, &src);
+    }
+    return encode_lea(p, inst, &dst, &src);
 }
