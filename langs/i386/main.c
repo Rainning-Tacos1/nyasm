@@ -27,6 +27,16 @@
 #define XLATB_INSTRUCTION ((int32_t[]){'x', 'l', 'a', 't', 'b', -1})
 #define IN_INSTRUCTION ((int32_t[]){'i', 'n', -1})
 #define OUT_INSTRUCTION ((int32_t[]){'o', 'u', 't', -1})
+#define AND_INSTRUCTION ((int32_t[]){'a', 'n', 'd', -1})
+#define OR_INSTRUCTION ((int32_t[]){'o', 'r', -1})
+#define XOR_INSTRUCTION ((int32_t[]){'x', 'o', 'r', -1})
+#define TEST_INSTRUCTION ((int32_t[]){'t', 'e', 's', 't', -1})
+#define NOT_INSTRUCTION ((int32_t[]){'n', 'o', 't', -1})
+#define CLC_INSTRUCTION ((int32_t[]){'c', 'l', 'c', -1})
+#define STC_INSTRUCTION ((int32_t[]){'s', 't', 'c', -1})
+#define CMC_INSTRUCTION ((int32_t[]){'c', 'm', 'c', -1})
+#define CLD_INSTRUCTION ((int32_t[]){'c', 'l', 'd', -1})
+#define STD_INSTRUCTION ((int32_t[]){'s', 't', 'd', -1})
 
 nint _86_exec(struct Parser* p, struct AstInstruction* inst);
 
@@ -515,6 +525,10 @@ static unint fits_push_imm8(nint value) {
     return word == low;
 }
 
+static unint fits_word_sign_extended_i8(nint value) {
+    return fits_push_imm8(value);
+}
+
 static nint memory_tail_len(struct MemoryOperand *mem) {
     if(mem->direct) return 2;
     if(mem->rm == 6 && !mem->has_disp) return 1;
@@ -829,6 +843,626 @@ static nint encode_xchg(struct Parser *p, struct AstInstruction *inst,
     return INSTRUCTION_FAILED;
 }
 
+static nint emit_and_reg_imm(struct Parser *p, struct AstInstruction *inst,
+                             struct Operand *dst, struct Operand *src) {
+    if(dst->kind == OPERAND_REG8) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(is_al(dst)) {
+            emit_byte(p, 0x24);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 2;
+        }
+        emit_byte(p, 0x80);
+        emit_modrm_reg(p, 4, dst->reg);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return 3;
+    }
+
+    if(dst->kind == OPERAND_REG16) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(fits_word_sign_extended_i8(src->imm)) {
+            emit_byte(p, 0x83);
+            emit_modrm_reg(p, 4, dst->reg);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 3;
+        }
+        if(is_ax(dst)) {
+            emit_byte(p, 0x25);
+            emit_word(p, src->imm);
+            return 3;
+        }
+        emit_byte(p, 0x81);
+        emit_modrm_reg(p, 4, dst->reg);
+        emit_word(p, src->imm);
+        return 4;
+    }
+
+    return 0;
+}
+
+static nint emit_and_mem_imm(struct Parser *p, struct AstInstruction *inst,
+                             struct Operand *dst, struct Operand *src) {
+    if(dst->size == 1) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x80);
+        emit_modrm_mem(p, 4, &dst->mem);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 1;
+    }
+
+    if(dst->size == 2) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        if(fits_word_sign_extended_i8(src->imm)) {
+            emit_byte(p, 0x83);
+            emit_modrm_mem(p, 4, &dst->mem);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 1;
+        }
+        emit_byte(p, 0x81);
+        emit_modrm_mem(p, 4, &dst->mem);
+        emit_word(p, src->imm);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 2;
+    }
+
+    _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                      "ambiguous memory immediate size");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_and(struct Parser *p, struct AstInstruction *inst,
+                       struct Operand *dst, struct Operand *src) {
+    nint status;
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_REG8) {
+        emit_byte(p, 0x20);
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_REG16) {
+        emit_byte(p, 0x21);
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG8) {
+        if(dst->size == 2) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid and operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x20);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG16) {
+        if(dst->size == 1) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid and operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x21);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_MEM) {
+        if(src->size == 2) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid and operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x22);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_MEM) {
+        if(src->size == 1) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid and operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x23);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(src->kind == OPERAND_IMM) {
+        status = emit_and_reg_imm(p, inst, dst, src);
+        if(status) return status;
+        if(dst->kind == OPERAND_MEM) return emit_and_mem_imm(p, inst, dst, src);
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported and form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint emit_or_reg_imm(struct Parser *p, struct AstInstruction *inst,
+                            struct Operand *dst, struct Operand *src) {
+    if(dst->kind == OPERAND_REG8) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(is_al(dst)) {
+            emit_byte(p, 0x0c);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 2;
+        }
+        emit_byte(p, 0x80);
+        emit_modrm_reg(p, 1, dst->reg);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return 3;
+    }
+
+    if(dst->kind == OPERAND_REG16) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(fits_word_sign_extended_i8(src->imm)) {
+            emit_byte(p, 0x83);
+            emit_modrm_reg(p, 1, dst->reg);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 3;
+        }
+        if(is_ax(dst)) {
+            emit_byte(p, 0x0d);
+            emit_word(p, src->imm);
+            return 3;
+        }
+        emit_byte(p, 0x81);
+        emit_modrm_reg(p, 1, dst->reg);
+        emit_word(p, src->imm);
+        return 4;
+    }
+
+    return 0;
+}
+
+static nint emit_or_mem_imm(struct Parser *p, struct AstInstruction *inst,
+                            struct Operand *dst, struct Operand *src) {
+    if(dst->size == 1) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x80);
+        emit_modrm_mem(p, 1, &dst->mem);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 1;
+    }
+
+    if(dst->size == 2) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        if(fits_word_sign_extended_i8(src->imm)) {
+            emit_byte(p, 0x83);
+            emit_modrm_mem(p, 1, &dst->mem);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 1;
+        }
+        emit_byte(p, 0x81);
+        emit_modrm_mem(p, 1, &dst->mem);
+        emit_word(p, src->imm);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 2;
+    }
+
+    _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                      "ambiguous memory immediate size");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_or(struct Parser *p, struct AstInstruction *inst,
+                      struct Operand *dst, struct Operand *src) {
+    nint status;
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_REG8) {
+        emit_byte(p, 0x08);
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_REG16) {
+        emit_byte(p, 0x09);
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG8) {
+        if(dst->size == 2) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid or operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x08);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG16) {
+        if(dst->size == 1) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid or operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x09);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_MEM) {
+        if(src->size == 2) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid or operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x0a);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_MEM) {
+        if(src->size == 1) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid or operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x0b);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(src->kind == OPERAND_IMM) {
+        status = emit_or_reg_imm(p, inst, dst, src);
+        if(status) return status;
+        if(dst->kind == OPERAND_MEM) return emit_or_mem_imm(p, inst, dst, src);
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported or form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint emit_xor_reg_imm(struct Parser *p, struct AstInstruction *inst,
+                             struct Operand *dst, struct Operand *src) {
+    if(dst->kind == OPERAND_REG8) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(is_al(dst)) {
+            emit_byte(p, 0x34);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 2;
+        }
+        emit_byte(p, 0x80);
+        emit_modrm_reg(p, 6, dst->reg);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return 3;
+    }
+
+    if(dst->kind == OPERAND_REG16) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(fits_word_sign_extended_i8(src->imm)) {
+            emit_byte(p, 0x83);
+            emit_modrm_reg(p, 6, dst->reg);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 3;
+        }
+        if(is_ax(dst)) {
+            emit_byte(p, 0x35);
+            emit_word(p, src->imm);
+            return 3;
+        }
+        emit_byte(p, 0x81);
+        emit_modrm_reg(p, 6, dst->reg);
+        emit_word(p, src->imm);
+        return 4;
+    }
+
+    return 0;
+}
+
+static nint emit_xor_mem_imm(struct Parser *p, struct AstInstruction *inst,
+                             struct Operand *dst, struct Operand *src) {
+    if(dst->size == 1) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x80);
+        emit_modrm_mem(p, 6, &dst->mem);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 1;
+    }
+
+    if(dst->size == 2) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        if(fits_word_sign_extended_i8(src->imm)) {
+            emit_byte(p, 0x83);
+            emit_modrm_mem(p, 6, &dst->mem);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 1;
+        }
+        emit_byte(p, 0x81);
+        emit_modrm_mem(p, 6, &dst->mem);
+        emit_word(p, src->imm);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 2;
+    }
+
+    _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                      "ambiguous memory immediate size");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_xor(struct Parser *p, struct AstInstruction *inst,
+                       struct Operand *dst, struct Operand *src) {
+    nint status;
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_REG8) {
+        emit_byte(p, 0x30);
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_REG16) {
+        emit_byte(p, 0x31);
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG8) {
+        if(dst->size == 2) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid xor operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x30);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG16) {
+        if(dst->size == 1) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid xor operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x31);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_MEM) {
+        if(src->size == 2) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid xor operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x32);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_MEM) {
+        if(src->size == 1) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid xor operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x33);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(src->kind == OPERAND_IMM) {
+        status = emit_xor_reg_imm(p, inst, dst, src);
+        if(status) return status;
+        if(dst->kind == OPERAND_MEM) return emit_xor_mem_imm(p, inst, dst, src);
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported xor form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint emit_test_reg_imm(struct Parser *p, struct AstInstruction *inst,
+                              struct Operand *dst, struct Operand *src) {
+    if(dst->kind == OPERAND_REG8) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(is_al(dst)) {
+            emit_byte(p, 0xa8);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 2;
+        }
+        emit_byte(p, 0xf6);
+        emit_modrm_reg(p, 0, dst->reg);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return 3;
+    }
+
+    if(dst->kind == OPERAND_REG16) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(is_ax(dst)) {
+            emit_byte(p, 0xa9);
+            emit_word(p, src->imm);
+            return 3;
+        }
+        emit_byte(p, 0xf7);
+        emit_modrm_reg(p, 0, dst->reg);
+        emit_word(p, src->imm);
+        return 4;
+    }
+
+    return 0;
+}
+
+static nint emit_test_mem_imm(struct Parser *p, struct AstInstruction *inst,
+                              struct Operand *dst, struct Operand *src) {
+    if(dst->size == 1) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0xf6);
+        emit_modrm_mem(p, 0, &dst->mem);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 1;
+    }
+
+    if(dst->size == 2) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0xf7);
+        emit_modrm_mem(p, 0, &dst->mem);
+        emit_word(p, src->imm);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 2;
+    }
+
+    _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                      "ambiguous memory immediate size");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_test(struct Parser *p, struct AstInstruction *inst,
+                        struct Operand *dst, struct Operand *src) {
+    nint status;
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_REG8) {
+        emit_byte(p, 0x84);
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_REG16) {
+        emit_byte(p, 0x85);
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG8) {
+        if(dst->size == 2) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid test operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x84);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG16) {
+        if(dst->size == 1) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid test operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x85);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_MEM) {
+        if(src->size == 2) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid test operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x84);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_MEM) {
+        if(src->size == 1) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid test operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x85);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(src->kind == OPERAND_IMM) {
+        status = emit_test_reg_imm(p, inst, dst, src);
+        if(status) return status;
+        if(dst->kind == OPERAND_MEM) return emit_test_mem_imm(p, inst, dst, src);
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported test form");
+    return INSTRUCTION_FAILED;
+}
+
 static nint encode_in(struct Parser *p, struct AstInstruction *inst,
                       struct Operand *dst, struct Operand *src) {
     if(is_al(dst) && src->kind == OPERAND_IMM) {
@@ -902,6 +1536,42 @@ static nint encode_out(struct Parser *p, struct AstInstruction *inst,
     }
 
     _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported out form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_not(struct Parser *p, struct AstInstruction *inst,
+                       struct Operand *dst) {
+    if(dst->kind == OPERAND_REG8) {
+        emit_byte(p, 0xf6);
+        emit_modrm_reg(p, 2, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_REG16) {
+        emit_byte(p, 0xf7);
+        emit_modrm_reg(p, 2, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_MEM) {
+        if(dst->size == 1) {
+            emit_segment_prefix(p, &dst->mem);
+            emit_byte(p, 0xf6);
+            emit_modrm_mem(p, 2, &dst->mem);
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+        }
+        if(dst->size == 2) {
+            emit_segment_prefix(p, &dst->mem);
+            emit_byte(p, 0xf7);
+            emit_modrm_mem(p, 2, &dst->mem);
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+        }
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                          "ambiguous not operand size");
+        return INSTRUCTION_FAILED;
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported not form");
     return INSTRUCTION_FAILED;
 }
 
@@ -1007,29 +1677,44 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     unint is_xlatb = compare_identifiers_cp_array(inst->name, XLATB_INSTRUCTION) == SUCCESS;
     unint is_in = compare_identifiers_cp_array(inst->name, IN_INSTRUCTION) == SUCCESS;
     unint is_out = compare_identifiers_cp_array(inst->name, OUT_INSTRUCTION) == SUCCESS;
+    unint is_and = compare_identifiers_cp_array(inst->name, AND_INSTRUCTION) == SUCCESS;
+    unint is_or = compare_identifiers_cp_array(inst->name, OR_INSTRUCTION) == SUCCESS;
+    unint is_xor = compare_identifiers_cp_array(inst->name, XOR_INSTRUCTION) == SUCCESS;
+    unint is_test = compare_identifiers_cp_array(inst->name, TEST_INSTRUCTION) == SUCCESS;
+    unint is_not = compare_identifiers_cp_array(inst->name, NOT_INSTRUCTION) == SUCCESS;
+    unint is_clc = compare_identifiers_cp_array(inst->name, CLC_INSTRUCTION) == SUCCESS;
+    unint is_stc = compare_identifiers_cp_array(inst->name, STC_INSTRUCTION) == SUCCESS;
+    unint is_cmc = compare_identifiers_cp_array(inst->name, CMC_INSTRUCTION) == SUCCESS;
+    unint is_cld = compare_identifiers_cp_array(inst->name, CLD_INSTRUCTION) == SUCCESS;
+    unint is_std = compare_identifiers_cp_array(inst->name, STD_INSTRUCTION) == SUCCESS;
 
     (void)registers;
 
     if(!is_mov && !is_lea && !is_lds && !is_les && !is_xchg &&
        !is_push && !is_pop && !is_pushf && !is_popf && !is_lahf && !is_sahf &&
-       !is_xlat && !is_xlatb && !is_in && !is_out) {
+       !is_xlat && !is_xlatb && !is_in && !is_out && !is_and && !is_or &&
+       !is_xor && !is_test && !is_not && !is_clc && !is_stc && !is_cmc &&
+       !is_cld && !is_std) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid i386 instruction");
         return INSTRUCTION_FAILED;
     }
 
-    if((is_pushf || is_popf || is_lahf || is_sahf || is_xlat || is_xlatb) &&
+    if((is_pushf || is_popf || is_lahf || is_sahf || is_xlat || is_xlatb ||
+        is_clc || is_stc || is_cmc || is_cld || is_std) &&
        inst->arg_count != 0) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
     }
 
-    if((is_push || is_pop) && inst->arg_count != 1) {
+    if((is_push || is_pop || is_not) && inst->arg_count != 1) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
     }
 
-    if(!is_push && !is_pop && !is_pushf && !is_popf &&
-       !is_lahf && !is_sahf && !is_xlat && !is_xlatb && inst->arg_count != 2) {
+    if(!is_push && !is_pop && !is_not && !is_pushf && !is_popf &&
+       !is_lahf && !is_sahf && !is_xlat && !is_xlatb && !is_clc && !is_stc &&
+       !is_cmc && !is_cld && !is_std &&
+       inst->arg_count != 2) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
     }
@@ -1054,6 +1739,26 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
         emit_byte(p, 0xd7);
         return 1;
     }
+    if(is_clc) {
+        emit_byte(p, 0xf8);
+        return 1;
+    }
+    if(is_stc) {
+        emit_byte(p, 0xf9);
+        return 1;
+    }
+    if(is_cmc) {
+        emit_byte(p, 0xf5);
+        return 1;
+    }
+    if(is_cld) {
+        emit_byte(p, 0xfc);
+        return 1;
+    }
+    if(is_std) {
+        emit_byte(p, 0xfd);
+        return 1;
+    }
 
     status = parse_operand(p, inst->args_head, &dst, &error_token);
     if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
@@ -1065,6 +1770,7 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
 
     if(is_push) return encode_push(p, inst, &dst);
     if(is_pop) return encode_pop(p, inst, &dst);
+    if(is_not) return encode_not(p, inst, &dst);
 
     error_token = NULL;
     status = parse_operand(p, inst->args_tail, &src, &error_token);
@@ -1092,6 +1798,18 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     }
     if(is_out) {
         return encode_out(p, inst, &dst, &src);
+    }
+    if(is_and) {
+        return encode_and(p, inst, &dst, &src);
+    }
+    if(is_or) {
+        return encode_or(p, inst, &dst, &src);
+    }
+    if(is_xor) {
+        return encode_xor(p, inst, &dst, &src);
+    }
+    if(is_test) {
+        return encode_test(p, inst, &dst, &src);
     }
     return encode_lea(p, inst, &dst, &src);
 }

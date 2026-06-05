@@ -1142,6 +1142,7 @@ unint encode_space_ident(struct Parser* p, unint type, struct AstSpace* space, n
 
     if(inhibit || !p->last_pass) return SUCCESS;
 
+    DBG(1, "_addr = %d | aligned_start = %d\n", _addr, aligned_start);
     for(nint i=_addr; i<aligned_start; ++i) {
         OUT_FILE_WRITE_BYTE((unsigned char)0);
         DBG(1, "al - 00\n");
@@ -1181,7 +1182,7 @@ unint encode_space_ident(struct Parser* p, unint type, struct AstSpace* space, n
             OUT_FILE_WRITE_BYTE(((unsigned char*)dst)[i]);
             DBG(1, "%02X\n", ((unsigned char*)dst)[i]);
         }
-        for(nint j=0; j<((n != (el_num-1)) && (*stride - el_size)); ++j){
+        for(nint j=0; j<(n != (el_num - 1) ? (*stride - el_size) : 0); ++j){
             OUT_FILE_WRITE_BYTE((unsigned char)0);
             DBG(1, "st - 00\n");
         }
@@ -1736,10 +1737,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 if(encode_space_ident(p, ast->type, &ast->node.space, &total, &data_addr, &len, &stride, 0) == FAIL) return EVAL_ERROR;
 
                 DBG(1, "total = %d\n", total);
-                if(increment_addr(p, total) == SUCCESS) break;
-
-                overflow(p, ast->node.space.space_ident);
-                return EVAL_ERROR;
+                break;
             }
 
             case STRING_NODE: {

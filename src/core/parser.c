@@ -967,7 +967,7 @@ unint is_at_identifier(struct token* _token, int32_t* identifier) {
     while (identifier[identifier_len] != -1) ++identifier_len;
 
     // First size check
-    if(_token->len < identifier_len + 1) return FAIL;
+    if(_token->len != identifier_len + 1) return FAIL;
 
     // Check for @
     if(_token->cps[0] != '@') return FAIL;
