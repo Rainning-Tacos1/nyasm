@@ -14,8 +14,19 @@
 
 #define MOV_INSTRUCTION ((int32_t[]){'m', 'o', 'v', -1})
 #define LEA_INSTRUCTION ((int32_t[]){'l', 'e', 'a', -1})
+#define LDS_INSTRUCTION ((int32_t[]){'l', 'd', 's', -1})
+#define LES_INSTRUCTION ((int32_t[]){'l', 'e', 's', -1})
+#define XCHG_INSTRUCTION ((int32_t[]){'x', 'c', 'h', 'g', -1})
 #define PUSH_INSTRUCTION ((int32_t[]){'p', 'u', 's', 'h', -1})
 #define POP_INSTRUCTION ((int32_t[]){'p', 'o', 'p', -1})
+#define PUSHF_INSTRUCTION ((int32_t[]){'p', 'u', 's', 'h', 'f', -1})
+#define POPF_INSTRUCTION ((int32_t[]){'p', 'o', 'p', 'f', -1})
+#define LAHF_INSTRUCTION ((int32_t[]){'l', 'a', 'h', 'f', -1})
+#define SAHF_INSTRUCTION ((int32_t[]){'s', 'a', 'h', 'f', -1})
+#define XLAT_INSTRUCTION ((int32_t[]){'x', 'l', 'a', 't', -1})
+#define XLATB_INSTRUCTION ((int32_t[]){'x', 'l', 'a', 't', 'b', -1})
+#define IN_INSTRUCTION ((int32_t[]){'i', 'n', -1})
+#define OUT_INSTRUCTION ((int32_t[]){'o', 'u', 't', -1})
 
 nint _86_exec(struct Parser* p, struct AstInstruction* inst);
 
@@ -28,6 +39,7 @@ ASM_LANG i386 = {
 
     .exec = _86_exec,
 };
+
 
 static int32_t *registers[] = {
     (int32_t[]){'a', 'x', -1}, (int32_t[]){'b', 'x', -1},
@@ -556,6 +568,10 @@ static unint is_ax(struct Operand *op) {
     return op->kind == OPERAND_REG16 && op->reg == 0;
 }
 
+static unint is_dx(struct Operand *op) {
+    return op->kind == OPERAND_REG16 && op->reg == 2;
+}
+
 static nint encode_mov(struct Parser *p, struct AstInstruction *inst,
                        struct Operand *dst, struct Operand *src) {
     if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_IMM) {
@@ -719,6 +735,176 @@ static nint encode_lea(struct Parser *p, struct AstInstruction *inst,
     return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
 }
 
+static nint encode_far_load(struct Parser *p, struct AstInstruction *inst,
+                            struct Operand *dst, struct Operand *src,
+                            unsigned char opcode) {
+    if(dst->kind != OPERAND_REG16 || src->kind != OPERAND_MEM) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported far load form");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(src->size != 0) {
+        _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                          "invalid far load operand size");
+        return INSTRUCTION_FAILED;
+    }
+
+    emit_segment_prefix(p, &src->mem);
+    emit_byte(p, opcode);
+    emit_modrm_mem(p, dst->reg, &src->mem);
+    return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+}
+
+static nint encode_xchg(struct Parser *p, struct AstInstruction *inst,
+                        struct Operand *dst, struct Operand *src) {
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_REG16) {
+        if(dst->reg == 0) {
+            emit_byte(p, (unsigned char)(0x90 + src->reg));
+            return 1;
+        }
+        if(src->reg == 0) {
+            emit_byte(p, (unsigned char)(0x90 + dst->reg));
+            return 1;
+        }
+        emit_byte(p, 0x87);
+        emit_modrm_reg(p, dst->reg, src->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_REG8) {
+        emit_byte(p, 0x86);
+        emit_modrm_reg(p, dst->reg, src->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG8) {
+        if(dst->size == 2) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid xchg operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x86);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG16) {
+        if(dst->size == 1) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid xchg operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x87);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_MEM) {
+        if(src->size == 2) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid xchg operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x86);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_MEM) {
+        if(src->size == 1) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid xchg operand size");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, 0x87);
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported xchg form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_in(struct Parser *p, struct AstInstruction *inst,
+                      struct Operand *dst, struct Operand *src) {
+    if(is_al(dst) && src->kind == OPERAND_IMM) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "port does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_byte(p, 0xe4);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return 2;
+    }
+
+    if(is_ax(dst) && src->kind == OPERAND_IMM) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "port does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_byte(p, 0xe5);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return 2;
+    }
+
+    if(is_al(dst) && is_dx(src)) {
+        emit_byte(p, 0xec);
+        return 1;
+    }
+
+    if(is_ax(dst) && is_dx(src)) {
+        emit_byte(p, 0xed);
+        return 1;
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported in form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_out(struct Parser *p, struct AstInstruction *inst,
+                       struct Operand *dst, struct Operand *src) {
+    if(dst->kind == OPERAND_IMM && is_al(src)) {
+        if(!fits_u16(dst->imm)) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_OVERFLOW,
+                              "port does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_byte(p, 0xe6);
+        emit_byte(p, (unsigned char)(dst->imm & 0xff));
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_IMM && is_ax(src)) {
+        if(!fits_u16(dst->imm)) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_OVERFLOW,
+                              "port does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_byte(p, 0xe7);
+        emit_byte(p, (unsigned char)(dst->imm & 0xff));
+        return 2;
+    }
+
+    if(is_dx(dst) && is_al(src)) {
+        emit_byte(p, 0xee);
+        return 1;
+    }
+
+    if(is_dx(dst) && is_ax(src)) {
+        emit_byte(p, 0xef);
+        return 1;
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported out form");
+    return INSTRUCTION_FAILED;
+}
+
 static nint encode_push(struct Parser *p, struct AstInstruction *inst,
                         struct Operand *src) {
     if(src->kind == OPERAND_REG16) {
@@ -808,13 +994,32 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     nint status;
     unint is_mov = compare_identifiers_cp_array(inst->name, MOV_INSTRUCTION) == SUCCESS;
     unint is_lea = compare_identifiers_cp_array(inst->name, LEA_INSTRUCTION) == SUCCESS;
+    unint is_lds = compare_identifiers_cp_array(inst->name, LDS_INSTRUCTION) == SUCCESS;
+    unint is_les = compare_identifiers_cp_array(inst->name, LES_INSTRUCTION) == SUCCESS;
+    unint is_xchg = compare_identifiers_cp_array(inst->name, XCHG_INSTRUCTION) == SUCCESS;
     unint is_push = compare_identifiers_cp_array(inst->name, PUSH_INSTRUCTION) == SUCCESS;
     unint is_pop = compare_identifiers_cp_array(inst->name, POP_INSTRUCTION) == SUCCESS;
+    unint is_pushf = compare_identifiers_cp_array(inst->name, PUSHF_INSTRUCTION) == SUCCESS;
+    unint is_popf = compare_identifiers_cp_array(inst->name, POPF_INSTRUCTION) == SUCCESS;
+    unint is_lahf = compare_identifiers_cp_array(inst->name, LAHF_INSTRUCTION) == SUCCESS;
+    unint is_sahf = compare_identifiers_cp_array(inst->name, SAHF_INSTRUCTION) == SUCCESS;
+    unint is_xlat = compare_identifiers_cp_array(inst->name, XLAT_INSTRUCTION) == SUCCESS;
+    unint is_xlatb = compare_identifiers_cp_array(inst->name, XLATB_INSTRUCTION) == SUCCESS;
+    unint is_in = compare_identifiers_cp_array(inst->name, IN_INSTRUCTION) == SUCCESS;
+    unint is_out = compare_identifiers_cp_array(inst->name, OUT_INSTRUCTION) == SUCCESS;
 
     (void)registers;
 
-    if(!is_mov && !is_lea && !is_push && !is_pop) {
+    if(!is_mov && !is_lea && !is_lds && !is_les && !is_xchg &&
+       !is_push && !is_pop && !is_pushf && !is_popf && !is_lahf && !is_sahf &&
+       !is_xlat && !is_xlatb && !is_in && !is_out) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid i386 instruction");
+        return INSTRUCTION_FAILED;
+    }
+
+    if((is_pushf || is_popf || is_lahf || is_sahf || is_xlat || is_xlatb) &&
+       inst->arg_count != 0) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
     }
 
@@ -823,9 +1028,31 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
         return INSTRUCTION_FAILED;
     }
 
-    if(!is_push && !is_pop && inst->arg_count != 2) {
+    if(!is_push && !is_pop && !is_pushf && !is_popf &&
+       !is_lahf && !is_sahf && !is_xlat && !is_xlatb && inst->arg_count != 2) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
+    }
+
+    if(is_pushf) {
+        emit_byte(p, 0x9c);
+        return 1;
+    }
+    if(is_popf) {
+        emit_byte(p, 0x9d);
+        return 1;
+    }
+    if(is_lahf) {
+        emit_byte(p, 0x9f);
+        return 1;
+    }
+    if(is_sahf) {
+        emit_byte(p, 0x9e);
+        return 1;
+    }
+    if(is_xlat || is_xlatb) {
+        emit_byte(p, 0xd7);
+        return 1;
     }
 
     status = parse_operand(p, inst->args_head, &dst, &error_token);
@@ -850,6 +1077,21 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
 
     if(is_mov) {
         return encode_mov(p, inst, &dst, &src);
+    }
+    if(is_lds) {
+        return encode_far_load(p, inst, &dst, &src, 0xc5);
+    }
+    if(is_les) {
+        return encode_far_load(p, inst, &dst, &src, 0xc4);
+    }
+    if(is_xchg) {
+        return encode_xchg(p, inst, &dst, &src);
+    }
+    if(is_in) {
+        return encode_in(p, inst, &dst, &src);
+    }
+    if(is_out) {
+        return encode_out(p, inst, &dst, &src);
     }
     return encode_lea(p, inst, &dst, &src);
 }
