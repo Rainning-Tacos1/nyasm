@@ -17,6 +17,10 @@
 #define LDS_INSTRUCTION ((int32_t[]){'l', 'd', 's', -1})
 #define LES_INSTRUCTION ((int32_t[]){'l', 'e', 's', -1})
 #define JMP_INSTRUCTION ((int32_t[]){'j', 'm', 'p', -1})
+#define CALL_INSTRUCTION ((int32_t[]){'c', 'a', 'l', 'l', -1})
+#define RET_INSTRUCTION ((int32_t[]){'r', 'e', 't', -1})
+#define RETN_INSTRUCTION ((int32_t[]){'r', 'e', 't', 'n', -1})
+#define RETF_INSTRUCTION ((int32_t[]){'r', 'e', 't', 'f', -1})
 #define XCHG_INSTRUCTION ((int32_t[]){'x', 'c', 'h', 'g', -1})
 #define PUSH_INSTRUCTION ((int32_t[]){'p', 'u', 's', 'h', -1})
 #define POP_INSTRUCTION ((int32_t[]){'p', 'o', 'p', -1})
@@ -43,6 +47,12 @@
 #define STOSW_INSTRUCTION ((int32_t[]){'s', 't', 'o', 's', 'w', -1})
 #define IN_INSTRUCTION ((int32_t[]){'i', 'n', -1})
 #define OUT_INSTRUCTION ((int32_t[]){'o', 'u', 't', -1})
+#define INT_INSTRUCTION ((int32_t[]){'i', 'n', 't', -1})
+#define INTO_INSTRUCTION ((int32_t[]){'i', 'n', 't', 'o', -1})
+#define IRET_INSTRUCTION ((int32_t[]){'i', 'r', 'e', 't', -1})
+#define LOOP_INSTRUCTION ((int32_t[]){'l', 'o', 'o', 'p', -1})
+#define LOOPE_INSTRUCTION ((int32_t[]){'l', 'o', 'o', 'p', 'e', -1})
+#define LOOPZ_INSTRUCTION ((int32_t[]){'l', 'o', 'o', 'p', 'z', -1})
 #define ADD_INSTRUCTION ((int32_t[]){'a', 'd', 'd', -1})
 #define ADC_INSTRUCTION ((int32_t[]){'a', 'd', 'c', -1})
 #define SUB_INSTRUCTION ((int32_t[]){'s', 'u', 'b', -1})
@@ -85,6 +95,10 @@
 #define RCR_INSTRUCTION ((int32_t[]){'r', 'c', 'r', -1})
 
 nint _86_exec(struct Parser* p, struct AstInstruction* inst);
+
+#ifdef i386
+#undef i386
+#endif
 
 ASM_LANG i386 = {
     .lang_name = "i386 assembly v0.0.1",
@@ -1147,6 +1161,303 @@ static nint encode_jmp(struct Parser *p, struct AstInstruction *inst) {
     return INSTRUCTION_FAILED;
 }
 
+static nint encode_loop(struct Parser *p, struct AstInstruction *inst,
+                        unsigned char opcode) {
+    struct TokenStream tks;
+    struct token *error_token = NULL;
+    nint target = 0;
+    nint disp;
+    unint unresolved = 0;
+    unint is_variable = 0;
+    nint status;
+
+    if(inst->arg_count != 1) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386,
+                          "invalid number of arguments");
+        return INSTRUCTION_FAILED;
+    }
+
+    tks_init(&tks, inst->args_head->_s, inst->args_head->_e);
+    status = read_jump_scalar(p, &tks, &target, &unresolved,
+                              &is_variable, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
+        _error_from_token(p, error_token ? error_token : inst->args_head->_s,
+                          ERROR_TYPE_I386, "invalid loop target");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(unresolved && !p->last_pass) return 2;
+    disp = target - (p->addr + 2);
+    if(!fits_i8(disp)) {
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_OVERFLOW,
+                          "loop target out of range");
+        return INSTRUCTION_FAILED;
+    }
+
+    emit_byte(p, opcode);
+    emit_byte(p, (unsigned char)(disp & 0xff));
+    return 2;
+}
+
+static nint emit_call_relative(struct Parser *p, nint target,
+                               struct token *tok) {
+    nint disp = target - (p->addr + 3);
+    if(!fits_i16(disp)) {
+        _error_from_token(p, tok, ERROR_TYPE_OVERFLOW,
+                          "near call target out of range");
+        return INSTRUCTION_FAILED;
+    }
+    emit_byte(p, 0xe8);
+    emit_word(p, disp);
+    return 3;
+}
+
+static nint parse_call_memory_from(struct Parser *p, struct token *start,
+                                   struct token *end, struct Operand *mem,
+                                   struct token **error_token) {
+    struct InstructionArg arg;
+    nint status;
+
+    arg._s = start;
+    arg._e = end;
+    arg.next = NULL;
+    status = parse_memory(p, &arg, mem, error_token);
+    if(status <= 0) return status;
+    if(mem->size != 0) {
+        _error_from_token(p, start, ERROR_TYPE_I386,
+                          "invalid call pointer size");
+        return INSTRUCTION_FAILED;
+    }
+    return 1;
+}
+
+static nint encode_call_ptr_mem(struct Parser *p, struct token *start,
+                                struct token *end, nint far_ptr) {
+    struct Operand mem;
+    struct token *error_token = NULL;
+    nint status = parse_call_memory_from(p, start, end, &mem, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0) {
+        _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
+                          "invalid call pointer");
+        return INSTRUCTION_FAILED;
+    }
+
+    emit_segment_prefix(p, &mem.mem);
+    emit_byte(p, 0xff);
+    emit_modrm_mem(p, far_ptr ? 3 : 2, &mem.mem);
+    return segment_prefix_len(&mem.mem) + 2 + memory_tail_len(&mem.mem);
+}
+
+static nint encode_call_far_immediate(struct Parser *p, struct token *start,
+                                      struct token *end) {
+    struct TokenStream tks;
+    struct token *colon;
+    struct token *error_token = NULL;
+    nint seg = 0;
+    nint off = 0;
+    unint unresolved = 0;
+    unint is_variable = 0;
+    nint status;
+
+    tks_init(&tks, start, end);
+    status = read_jump_scalar(p, &tks, &seg, &unresolved, &is_variable, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0) {
+        _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
+                          "invalid far call segment");
+        return INSTRUCTION_FAILED;
+    }
+
+    colon = tks_read(&tks);
+    if(!colon || colon->type != COLON) {
+        _error_from_token(p, colon ? colon : start, ERROR_TYPE_I386,
+                          "expected far call separator");
+        return INSTRUCTION_FAILED;
+    }
+    record_error_token(&error_token, colon);
+
+    status = read_jump_scalar(p, &tks, &off, &unresolved, &is_variable, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
+        _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
+                          "invalid far call offset");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(unresolved && !p->last_pass) return 5;
+    if(!fits_u16(seg) || !fits_u16(off)) {
+        _error_from_token(p, start, ERROR_TYPE_OVERFLOW,
+                          "far call pointer does not fit 16 bits");
+        return INSTRUCTION_FAILED;
+    }
+
+    emit_byte(p, 0x9a);
+    emit_word(p, off);
+    emit_word(p, seg);
+    return 5;
+}
+
+static nint encode_call_direct(struct Parser *p, struct token *start,
+                               struct token *end) {
+    struct TokenStream tks;
+    struct token *error_token = NULL;
+    nint target = 0;
+    unint unresolved = 0;
+    unint is_variable = 0;
+    nint status;
+
+    tks_init(&tks, start, end);
+    status = read_jump_scalar(p, &tks, &target, &unresolved, &is_variable, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
+        _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
+                          "invalid call target");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(unresolved && !p->last_pass) return 3;
+    return emit_call_relative(p, target, start);
+}
+
+static nint encode_call(struct Parser *p, struct AstInstruction *inst) {
+    struct TokenStream tks;
+    struct token *tok;
+    struct token *ptr_tok;
+    struct token *target_start;
+    struct Operand dst;
+    struct Operand mem;
+    struct token *error_token = NULL;
+    nint is_far;
+    nint mem_status;
+    nint status;
+
+    if(inst->arg_count != 1) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386,
+                          "invalid number of arguments");
+        return INSTRUCTION_FAILED;
+    }
+
+    tks_init(&tks, inst->args_head->_s, inst->args_head->_e);
+    tok = tks_read(&tks);
+    if(!tok) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid call target");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(token_is(tok, SHORT_TYPE)) {
+        _error_from_token(p, tok, ERROR_TYPE_I386, "invalid call target size");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(token_is(tok, NEAR_TYPE) || token_is(tok, FAR_TYPE)) {
+        is_far = token_is(tok, FAR_TYPE);
+        ptr_tok = tks_read(&tks);
+        if(ptr_tok && token_is(ptr_tok, PTR_NAME)) {
+            target_start = tks_read(&tks);
+            if(!target_start) {
+                _error_from_token(p, ptr_tok, ERROR_TYPE_I386,
+                                  "invalid call pointer");
+                return INSTRUCTION_FAILED;
+            }
+            if(!is_far) {
+                return encode_call_ptr_mem(p, target_start, inst->args_head->_e, 0);
+            }
+
+            mem_status = parse_call_memory_from(p, target_start,
+                                                inst->args_head->_e, &mem,
+                                                &error_token);
+            if(mem_status > 0) {
+                emit_segment_prefix(p, &mem.mem);
+                emit_byte(p, 0xff);
+                emit_modrm_mem(p, 3, &mem.mem);
+                return segment_prefix_len(&mem.mem) + 2 +
+                       memory_tail_len(&mem.mem);
+            }
+            if(mem_status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+            return encode_call_far_immediate(p, target_start, inst->args_head->_e);
+        }
+        if(is_far) {
+            _error_from_token(p, tok, ERROR_TYPE_I386, "expected ptr");
+            return INSTRUCTION_FAILED;
+        }
+        if(ptr_tok) return encode_call_direct(p, ptr_tok, inst->args_head->_e);
+        _error_from_token(p, tok, ERROR_TYPE_I386, "invalid call target");
+        return INSTRUCTION_FAILED;
+    }
+
+    status = parse_operand(p, inst->args_head, &dst, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0) {
+        _error_from_token(p, error_token, ERROR_TYPE_I386,
+                          "invalid call target");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(dst.kind == OPERAND_REG16) {
+        emit_byte(p, 0xff);
+        emit_modrm_reg(p, 2, dst.reg);
+        return 2;
+    }
+
+    if(dst.kind == OPERAND_MEM) {
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                          "ambiguous call pointer");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(dst.kind == OPERAND_IMM) {
+        return encode_call_direct(p, inst->args_head->_s, inst->args_head->_e);
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported call form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_ret(struct Parser *p, struct AstInstruction *inst,
+                       unsigned char plain_opcode,
+                       unsigned char imm_opcode) {
+    struct Operand imm;
+    struct token *error_token = NULL;
+    nint status;
+
+    if(inst->arg_count == 0) {
+        emit_byte(p, plain_opcode);
+        return 1;
+    }
+
+    if(inst->arg_count != 1) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386,
+                          "invalid number of arguments");
+        return INSTRUCTION_FAILED;
+    }
+
+    status = parse_operand(p, inst->args_head, &imm, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0) {
+        _error_from_token(p, error_token, ERROR_TYPE_I386,
+                          "invalid return pop count");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(imm.kind != OPERAND_IMM) {
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                          "invalid return pop count");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(!fits_u16(imm.imm)) {
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_OVERFLOW,
+                          "return pop count does not fit 16 bits");
+        return INSTRUCTION_FAILED;
+    }
+
+    emit_byte(p, imm_opcode);
+    emit_word(p, imm.imm);
+    return 3;
+}
+
 static nint encode_xchg(struct Parser *p, struct AstInstruction *inst,
                         struct Operand *dst, struct Operand *src) {
     if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_REG16) {
@@ -1997,6 +2308,25 @@ static nint encode_out(struct Parser *p, struct AstInstruction *inst,
     return INSTRUCTION_FAILED;
 }
 
+static nint encode_intr(struct Parser *p, struct AstInstruction *inst,
+                        struct Operand *dst) {
+    if(dst->kind != OPERAND_IMM) {
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                          "invalid interrupt number");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(!fits_u8(dst->imm)) {
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_OVERFLOW,
+                          "interrupt number does not fit 8 bits");
+        return INSTRUCTION_FAILED;
+    }
+
+    emit_byte(p, 0xcd);
+    emit_byte(p, (unsigned char)(dst->imm & 0xff));
+    return 2;
+}
+
 static nint emit_arith_reg_imm(struct Parser *p, struct AstInstruction *inst,
                                struct Operand *dst, struct Operand *src,
                                nint group, unsigned char acc8,
@@ -2398,6 +2728,10 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     unint is_lds = compare_identifiers_cp_array(inst->name, LDS_INSTRUCTION) == SUCCESS;
     unint is_les = compare_identifiers_cp_array(inst->name, LES_INSTRUCTION) == SUCCESS;
     unint is_jmp = compare_identifiers_cp_array(inst->name, JMP_INSTRUCTION) == SUCCESS;
+    unint is_call = compare_identifiers_cp_array(inst->name, CALL_INSTRUCTION) == SUCCESS;
+    unint is_ret = compare_identifiers_cp_array(inst->name, RET_INSTRUCTION) == SUCCESS;
+    unint is_retn = compare_identifiers_cp_array(inst->name, RETN_INSTRUCTION) == SUCCESS;
+    unint is_retf = compare_identifiers_cp_array(inst->name, RETF_INSTRUCTION) == SUCCESS;
     unint is_xchg = compare_identifiers_cp_array(inst->name, XCHG_INSTRUCTION) == SUCCESS;
     unint is_push = compare_identifiers_cp_array(inst->name, PUSH_INSTRUCTION) == SUCCESS;
     unint is_pop = compare_identifiers_cp_array(inst->name, POP_INSTRUCTION) == SUCCESS;
@@ -2424,6 +2758,12 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     unint is_stosw = compare_identifiers_cp_array(inst->name, STOSW_INSTRUCTION) == SUCCESS;
     unint is_in = compare_identifiers_cp_array(inst->name, IN_INSTRUCTION) == SUCCESS;
     unint is_out = compare_identifiers_cp_array(inst->name, OUT_INSTRUCTION) == SUCCESS;
+    unint is_intr = compare_identifiers_cp_array(inst->name, INT_INSTRUCTION) == SUCCESS;
+    unint is_into = compare_identifiers_cp_array(inst->name, INTO_INSTRUCTION) == SUCCESS;
+    unint is_iret = compare_identifiers_cp_array(inst->name, IRET_INSTRUCTION) == SUCCESS;
+    unint is_loop = compare_identifiers_cp_array(inst->name, LOOP_INSTRUCTION) == SUCCESS;
+    unint is_loope = compare_identifiers_cp_array(inst->name, LOOPE_INSTRUCTION) == SUCCESS;
+    unint is_loopz = compare_identifiers_cp_array(inst->name, LOOPZ_INSTRUCTION) == SUCCESS;
     unint is_add = compare_identifiers_cp_array(inst->name, ADD_INSTRUCTION) == SUCCESS;
     unint is_adc = compare_identifiers_cp_array(inst->name, ADC_INSTRUCTION) == SUCCESS;
     unint is_sub = compare_identifiers_cp_array(inst->name, SUB_INSTRUCTION) == SUCCESS;
@@ -2467,12 +2807,15 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
 
     (void)registers;
 
-    if(!is_mov && !is_lea && !is_lds && !is_les && !is_jmp && !is_xchg &&
+    if(!is_mov && !is_lea && !is_lds && !is_les && !is_jmp && !is_call &&
+       !is_ret && !is_retn && !is_retf && !is_xchg &&
        !is_push && !is_pop && !is_pushf && !is_popf && !is_lahf && !is_sahf &&
        !is_xlat && !is_xlatb && !is_movs && !is_movsb && !is_movsw &&
        !is_cmps && !is_cmpsb && !is_cmpsw && !is_scas && !is_scasb && !is_scasw &&
        !is_lods && !is_lodsb && !is_lodsw && !is_stos && !is_stosb && !is_stosw &&
-       !is_in && !is_out && !is_add && !is_adc && !is_sub && !is_sbb && !is_cmp &&
+       !is_in && !is_out && !is_intr && !is_into && !is_iret &&
+       !is_loop && !is_loope && !is_loopz &&
+       !is_add && !is_adc && !is_sub && !is_sbb && !is_cmp &&
        !is_inc && !is_dec && !is_neg && !is_mul && !is_imul && !is_div && !is_idiv &&
        !is_cbw && !is_cwd && !is_aaa && !is_aad && !is_aam && !is_aas &&
        !is_daa && !is_das && !is_and && !is_or &&
@@ -2488,7 +2831,7 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
         is_scas || is_scasb || is_scasw || is_lods || is_lodsb || is_lodsw ||
         is_stos || is_stosb || is_stosw || is_clc || is_stc || is_cmc ||
         is_cld || is_std || is_cli || is_sti || is_cbw || is_cwd ||
-        is_aaa || is_aas || is_daa || is_das) &&
+        is_aaa || is_aas || is_daa || is_das || is_into || is_iret) &&
        inst->arg_count != 0) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
@@ -2499,14 +2842,15 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
         return INSTRUCTION_FAILED;
     }
 
-    if((is_push || is_pop || is_not || is_inc || is_dec || is_neg ||
+    if((is_push || is_pop || is_not || is_inc || is_dec || is_neg || is_intr ||
         is_mul || is_imul || is_div || is_idiv) &&
        inst->arg_count != 1) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
     }
 
-    if(!is_jmp &&
+    if(!is_jmp && !is_call && !is_ret && !is_retn && !is_retf &&
+       !is_loop && !is_loope && !is_loopz &&
        !is_push && !is_pop && !is_not && !is_inc && !is_dec && !is_neg &&
        !is_mul && !is_imul && !is_div && !is_idiv &&
        !is_pushf && !is_popf &&
@@ -2516,6 +2860,7 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
        !is_stos && !is_stosb && !is_stosw && !is_clc && !is_stc && !is_cmc &&
        !is_cld && !is_std && !is_cli && !is_sti && !is_cbw && !is_cwd &&
        !is_aaa && !is_aad && !is_aam && !is_aas && !is_daa && !is_das &&
+       !is_intr && !is_into && !is_iret && !is_loop && !is_loope && !is_loopz &&
        inst->arg_count != 2) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
@@ -2643,8 +2988,21 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
         emit_byte(p, 0xfb);
         return 1;
     }
+    if(is_into) {
+        emit_byte(p, 0xce);
+        return 1;
+    }
+    if(is_iret) {
+        emit_byte(p, 0xcf);
+        return 1;
+    }
 
     if(is_jmp) return encode_jmp(p, inst);
+    if(is_loop) return encode_loop(p, inst, 0xe2);
+    if(is_loope || is_loopz) return encode_loop(p, inst, 0xe1);
+    if(is_call) return encode_call(p, inst);
+    if(is_ret || is_retn) return encode_ret(p, inst, 0xc3, 0xc2);
+    if(is_retf) return encode_ret(p, inst, 0xcb, 0xca);
 
     status = parse_operand(p, inst->args_head, &dst, &error_token);
     if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
@@ -2656,6 +3014,7 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
 
     if(is_push) return encode_push(p, inst, &dst);
     if(is_pop) return encode_pop(p, inst, &dst);
+    if(is_intr) return encode_intr(p, inst, &dst);
     if(is_not) return encode_not(p, inst, &dst);
     if(is_inc) return encode_inc_dec(p, inst, &dst, 0, 0x40, "inc");
     if(is_dec) return encode_inc_dec(p, inst, &dst, 1, 0x48, "dec");
