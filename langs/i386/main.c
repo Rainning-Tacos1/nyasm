@@ -16,6 +16,7 @@
 #define LEA_INSTRUCTION ((int32_t[]){'l', 'e', 'a', -1})
 #define LDS_INSTRUCTION ((int32_t[]){'l', 'd', 's', -1})
 #define LES_INSTRUCTION ((int32_t[]){'l', 'e', 's', -1})
+#define JMP_INSTRUCTION ((int32_t[]){'j', 'm', 'p', -1})
 #define XCHG_INSTRUCTION ((int32_t[]){'x', 'c', 'h', 'g', -1})
 #define PUSH_INSTRUCTION ((int32_t[]){'p', 'u', 's', 'h', -1})
 #define POP_INSTRUCTION ((int32_t[]){'p', 'o', 'p', -1})
@@ -25,8 +26,43 @@
 #define SAHF_INSTRUCTION ((int32_t[]){'s', 'a', 'h', 'f', -1})
 #define XLAT_INSTRUCTION ((int32_t[]){'x', 'l', 'a', 't', -1})
 #define XLATB_INSTRUCTION ((int32_t[]){'x', 'l', 'a', 't', 'b', -1})
+#define MOVS_INSTRUCTION ((int32_t[]){'m', 'o', 'v', 's', -1})
+#define MOVSB_INSTRUCTION ((int32_t[]){'m', 'o', 'v', 's', 'b', -1})
+#define MOVSW_INSTRUCTION ((int32_t[]){'m', 'o', 'v', 's', 'w', -1})
+#define CMPS_INSTRUCTION ((int32_t[]){'c', 'm', 'p', 's', -1})
+#define CMPSB_INSTRUCTION ((int32_t[]){'c', 'm', 'p', 's', 'b', -1})
+#define CMPSW_INSTRUCTION ((int32_t[]){'c', 'm', 'p', 's', 'w', -1})
+#define SCAS_INSTRUCTION ((int32_t[]){'s', 'c', 'a', 's', -1})
+#define SCASB_INSTRUCTION ((int32_t[]){'s', 'c', 'a', 's', 'b', -1})
+#define SCASW_INSTRUCTION ((int32_t[]){'s', 'c', 'a', 's', 'w', -1})
+#define LODS_INSTRUCTION ((int32_t[]){'l', 'o', 'd', 's', -1})
+#define LODSB_INSTRUCTION ((int32_t[]){'l', 'o', 'd', 's', 'b', -1})
+#define LODSW_INSTRUCTION ((int32_t[]){'l', 'o', 'd', 's', 'w', -1})
+#define STOS_INSTRUCTION ((int32_t[]){'s', 't', 'o', 's', -1})
+#define STOSB_INSTRUCTION ((int32_t[]){'s', 't', 'o', 's', 'b', -1})
+#define STOSW_INSTRUCTION ((int32_t[]){'s', 't', 'o', 's', 'w', -1})
 #define IN_INSTRUCTION ((int32_t[]){'i', 'n', -1})
 #define OUT_INSTRUCTION ((int32_t[]){'o', 'u', 't', -1})
+#define ADD_INSTRUCTION ((int32_t[]){'a', 'd', 'd', -1})
+#define ADC_INSTRUCTION ((int32_t[]){'a', 'd', 'c', -1})
+#define SUB_INSTRUCTION ((int32_t[]){'s', 'u', 'b', -1})
+#define SBB_INSTRUCTION ((int32_t[]){'s', 'b', 'b', -1})
+#define CMP_INSTRUCTION ((int32_t[]){'c', 'm', 'p', -1})
+#define INC_INSTRUCTION ((int32_t[]){'i', 'n', 'c', -1})
+#define DEC_INSTRUCTION ((int32_t[]){'d', 'e', 'c', -1})
+#define NEG_INSTRUCTION ((int32_t[]){'n', 'e', 'g', -1})
+#define MUL_INSTRUCTION ((int32_t[]){'m', 'u', 'l', -1})
+#define IMUL_INSTRUCTION ((int32_t[]){'i', 'm', 'u', 'l', -1})
+#define DIV_INSTRUCTION ((int32_t[]){'d', 'i', 'v', -1})
+#define IDIV_INSTRUCTION ((int32_t[]){'i', 'd', 'i', 'v', -1})
+#define CBW_INSTRUCTION ((int32_t[]){'c', 'b', 'w', -1})
+#define CWD_INSTRUCTION ((int32_t[]){'c', 'w', 'd', -1})
+#define AAA_INSTRUCTION ((int32_t[]){'a', 'a', 'a', -1})
+#define AAD_INSTRUCTION ((int32_t[]){'a', 'a', 'd', -1})
+#define AAM_INSTRUCTION ((int32_t[]){'a', 'a', 'm', -1})
+#define AAS_INSTRUCTION ((int32_t[]){'a', 'a', 's', -1})
+#define DAA_INSTRUCTION ((int32_t[]){'d', 'a', 'a', -1})
+#define DAS_INSTRUCTION ((int32_t[]){'d', 'a', 's', -1})
 #define AND_INSTRUCTION ((int32_t[]){'a', 'n', 'd', -1})
 #define OR_INSTRUCTION ((int32_t[]){'o', 'r', -1})
 #define XOR_INSTRUCTION ((int32_t[]){'x', 'o', 'r', -1})
@@ -37,6 +73,16 @@
 #define CMC_INSTRUCTION ((int32_t[]){'c', 'm', 'c', -1})
 #define CLD_INSTRUCTION ((int32_t[]){'c', 'l', 'd', -1})
 #define STD_INSTRUCTION ((int32_t[]){'s', 't', 'd', -1})
+#define CLI_INSTRUCTION ((int32_t[]){'c', 'l', 'i', -1})
+#define STI_INSTRUCTION ((int32_t[]){'s', 't', 'i', -1})
+#define SHL_INSTRUCTION ((int32_t[]){'s', 'h', 'l', -1})
+#define SAL_INSTRUCTION ((int32_t[]){'s', 'a', 'l', -1})
+#define SHR_INSTRUCTION ((int32_t[]){'s', 'h', 'r', -1})
+#define SAR_INSTRUCTION ((int32_t[]){'s', 'a', 'r', -1})
+#define ROL_INSTRUCTION ((int32_t[]){'r', 'o', 'l', -1})
+#define ROR_INSTRUCTION ((int32_t[]){'r', 'o', 'r', -1})
+#define RCL_INSTRUCTION ((int32_t[]){'r', 'c', 'l', -1})
+#define RCR_INSTRUCTION ((int32_t[]){'r', 'c', 'r', -1})
 
 nint _86_exec(struct Parser* p, struct AstInstruction* inst);
 
@@ -49,7 +95,6 @@ ASM_LANG i386 = {
 
     .exec = _86_exec,
 };
-
 
 static int32_t *registers[] = {
     (int32_t[]){'a', 'x', -1}, (int32_t[]){'b', 'x', -1},
@@ -82,6 +127,9 @@ static int32_t *seg_names[] = {
 
 #define BYTE_TYPE ((int32_t[]){'b', 'y', 't', 'e', -1})
 #define WORD_TYPE ((int32_t[]){'w', 'o', 'r', 'd', -1})
+#define SHORT_TYPE ((int32_t[]){'s', 'h', 'o', 'r', 't', -1})
+#define NEAR_TYPE ((int32_t[]){'n', 'e', 'a', 'r', -1})
+#define FAR_TYPE ((int32_t[]){'f', 'a', 'r', -1})
 #define PTR_NAME ((int32_t[]){'p', 't', 'r', -1})
 
 enum OperandKind {
@@ -512,6 +560,10 @@ static unint fits_i8(nint value) {
     return value >= -128 && value <= 127;
 }
 
+static unint fits_i16(nint value) {
+    return value >= -32768 && value <= 32767;
+}
+
 static unint fits_push_imm8(nint value) {
     nint low;
     nint word;
@@ -584,6 +636,10 @@ static unint is_ax(struct Operand *op) {
 
 static unint is_dx(struct Operand *op) {
     return op->kind == OPERAND_REG16 && op->reg == 2;
+}
+
+static unint is_cl(struct Operand *op) {
+    return op->kind == OPERAND_REG8 && op->reg == 1;
 }
 
 static nint encode_mov(struct Parser *p, struct AstInstruction *inst,
@@ -767,6 +823,328 @@ static nint encode_far_load(struct Parser *p, struct AstInstruction *inst,
     emit_byte(p, opcode);
     emit_modrm_mem(p, dst->reg, &src->mem);
     return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+}
+
+#define JMP_CACHE_MAX 512
+
+static nint jmp_cache_addr[JMP_CACHE_MAX];
+static nint jmp_cache_size[JMP_CACHE_MAX];
+static unint jmp_cache_used[JMP_CACHE_MAX];
+
+static void remember_jmp_size(nint addr, nint size) {
+    for(unint i = 0; i < JMP_CACHE_MAX; i++) {
+        if(jmp_cache_used[i] && jmp_cache_addr[i] == addr) {
+            jmp_cache_size[i] = size;
+            return;
+        }
+    }
+    for(unint i = 0; i < JMP_CACHE_MAX; i++) {
+        if(!jmp_cache_used[i]) {
+            jmp_cache_used[i] = 1;
+            jmp_cache_addr[i] = addr;
+            jmp_cache_size[i] = size;
+            return;
+        }
+    }
+}
+
+static nint remembered_jmp_size(nint addr) {
+    for(unint i = 0; i < JMP_CACHE_MAX; i++) {
+        if(jmp_cache_used[i] && jmp_cache_addr[i] == addr) return jmp_cache_size[i];
+    }
+    return 0;
+}
+
+static unint token_is(struct token *tok, int32_t *name) {
+    return tok && tok->type == NAME &&
+           compare_identifiers_cp_array(tok, name) == SUCCESS;
+}
+
+static nint read_jump_scalar(struct Parser *p, struct TokenStream *tks,
+                             nint *value, unint *unresolved,
+                             unint *is_variable,
+                             struct token **error_token) {
+    struct token *tok = tks_peek(tks);
+    unint status;
+    tks_reset_peek(tks);
+    if(!tok) return 0;
+
+    if(tok->type == NAME) {
+        status = parse_potential_variable(p, tks, value, 1);
+        if(status == VP_SUCCESS) {
+            record_error_token(error_token, tok);
+            *is_variable = 1;
+            return 1;
+        }
+        if(status == VP_UNRESOLVED_LABEL) {
+            record_error_token(error_token, tok);
+            *value = 0;
+            *unresolved = 1;
+            *is_variable = 1;
+            if(p->last_pass) return unresolved_label(p, tok);
+            return 1;
+        }
+        if(status == VP_FAIL) return INSTRUCTION_FAILED;
+        return 0;
+    }
+
+    if(tok->type == NUMBER || tok->type == MINUS) {
+        if(!read_integer(p, tks, value, error_token)) return 0;
+        *is_variable = 0;
+        return 1;
+    }
+
+    return 0;
+}
+
+static nint emit_jmp_relative(struct Parser *p, nint target, nint size,
+                              struct token *tok) {
+    nint disp = target - (p->addr + size);
+    if(size == 2) {
+        if(!fits_i8(disp)) {
+            _error_from_token(p, tok, ERROR_TYPE_OVERFLOW,
+                              "short jump target out of range");
+            return INSTRUCTION_FAILED;
+        }
+        emit_byte(p, 0xeb);
+        emit_byte(p, (unsigned char)(disp & 0xff));
+        return 2;
+    }
+    if(!fits_i16(disp)) {
+        _error_from_token(p, tok, ERROR_TYPE_OVERFLOW,
+                          "near jump target out of range");
+        return INSTRUCTION_FAILED;
+    }
+    emit_byte(p, 0xe9);
+    emit_word(p, disp);
+    return 3;
+}
+
+static nint parse_jump_memory_from(struct Parser *p, struct token *start,
+                                   struct token *end, struct Operand *mem,
+                                   struct token **error_token) {
+    struct InstructionArg arg;
+    nint status;
+
+    arg._s = start;
+    arg._e = end;
+    arg.next = NULL;
+    status = parse_memory(p, &arg, mem, error_token);
+    if(status <= 0) return status;
+    if(mem->size != 0) {
+        _error_from_token(p, start, ERROR_TYPE_I386,
+                          "invalid jump pointer size");
+        return INSTRUCTION_FAILED;
+    }
+    return 1;
+}
+
+static nint encode_jmp_ptr_mem(struct Parser *p, struct token *start,
+                               struct token *end, nint far_ptr) {
+    struct Operand mem;
+    struct token *error_token = NULL;
+    nint status = parse_jump_memory_from(p, start, end, &mem, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0) {
+        _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
+                          "invalid jump pointer");
+        return INSTRUCTION_FAILED;
+    }
+
+    emit_segment_prefix(p, &mem.mem);
+    emit_byte(p, 0xff);
+    emit_modrm_mem(p, far_ptr ? 5 : 4, &mem.mem);
+    return segment_prefix_len(&mem.mem) + 2 + memory_tail_len(&mem.mem);
+}
+
+static nint encode_jmp_far_immediate(struct Parser *p, struct token *start,
+                                     struct token *end) {
+    struct TokenStream tks;
+    struct token *colon;
+    struct token *error_token = NULL;
+    nint seg = 0;
+    nint off = 0;
+    unint unresolved = 0;
+    unint is_variable = 0;
+    nint status;
+
+    tks_init(&tks, start, end);
+    status = read_jump_scalar(p, &tks, &seg, &unresolved, &is_variable, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0) {
+        _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
+                          "invalid far jump segment");
+        return INSTRUCTION_FAILED;
+    }
+
+    colon = tks_read(&tks);
+    if(!colon || colon->type != COLON) {
+        _error_from_token(p, colon ? colon : start, ERROR_TYPE_I386,
+                          "expected far jump separator");
+        return INSTRUCTION_FAILED;
+    }
+    record_error_token(&error_token, colon);
+
+    status = read_jump_scalar(p, &tks, &off, &unresolved, &is_variable, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
+        _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
+                          "invalid far jump offset");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(unresolved && !p->last_pass) return 5;
+    if(!fits_u16(seg) || !fits_u16(off)) {
+        _error_from_token(p, start, ERROR_TYPE_OVERFLOW,
+                          "far jump pointer does not fit 16 bits");
+        return INSTRUCTION_FAILED;
+    }
+
+    emit_byte(p, 0xea);
+    emit_word(p, off);
+    emit_word(p, seg);
+    return 5;
+}
+
+static nint encode_jmp_direct(struct Parser *p, struct token *start,
+                              struct token *end, nint explicit_size) {
+    struct TokenStream tks;
+    struct token *error_token = NULL;
+    nint target = 0;
+    nint size = explicit_size;
+    nint cached;
+    unint unresolved = 0;
+    unint is_variable = 0;
+    nint status;
+
+    tks_init(&tks, start, end);
+    status = read_jump_scalar(p, &tks, &target, &unresolved, &is_variable, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
+        _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
+                          "invalid jump target");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(explicit_size) {
+        if(unresolved && !p->last_pass) return explicit_size;
+        return emit_jmp_relative(p, target, explicit_size, start);
+    }
+
+    if(!p->last_pass) {
+        if(unresolved) {
+            remember_jmp_size(p->addr, 3);
+            return 3;
+        }
+        size = fits_i8(target - (p->addr + 2)) ? 2 : 3;
+        remember_jmp_size(p->addr, size);
+        return size;
+    }
+
+    cached = remembered_jmp_size(p->addr);
+    if(cached) size = cached;
+    else if(is_variable) size = 3;
+    else size = fits_i8(target - (p->addr + 2)) ? 2 : 3;
+
+    return emit_jmp_relative(p, target, size, start);
+}
+
+static nint encode_jmp(struct Parser *p, struct AstInstruction *inst) {
+    struct TokenStream tks;
+    struct token *tok;
+    struct token *ptr_tok;
+    struct token *target_start;
+    struct Operand dst;
+    nint is_far;
+    nint mem_status;
+    nint status;
+    struct Operand mem;
+    struct token *error_token = NULL;
+
+    if(inst->arg_count != 1) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386,
+                          "invalid number of arguments");
+        return INSTRUCTION_FAILED;
+    }
+
+    tks_init(&tks, inst->args_head->_s, inst->args_head->_e);
+    tok = tks_read(&tks);
+    if(!tok) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid jump target");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(token_is(tok, SHORT_TYPE)) {
+        target_start = tks_read(&tks);
+        if(!target_start) {
+            _error_from_token(p, tok, ERROR_TYPE_I386, "invalid jump target");
+            return INSTRUCTION_FAILED;
+        }
+        return encode_jmp_direct(p, target_start, inst->args_head->_e, 2);
+    }
+
+    if(token_is(tok, NEAR_TYPE) || token_is(tok, FAR_TYPE)) {
+        is_far = token_is(tok, FAR_TYPE);
+        ptr_tok = tks_read(&tks);
+        if(ptr_tok && token_is(ptr_tok, PTR_NAME)) {
+            target_start = tks_read(&tks);
+            if(!target_start) {
+                _error_from_token(p, ptr_tok, ERROR_TYPE_I386,
+                                  "invalid jump pointer");
+                return INSTRUCTION_FAILED;
+            }
+            if(!is_far) {
+                return encode_jmp_ptr_mem(p, target_start, inst->args_head->_e, 0);
+            }
+
+            mem_status = parse_jump_memory_from(p, target_start,
+                                                inst->args_head->_e, &mem,
+                                                &error_token);
+            if(mem_status > 0) {
+                emit_segment_prefix(p, &mem.mem);
+                emit_byte(p, 0xff);
+                emit_modrm_mem(p, 5, &mem.mem);
+                return segment_prefix_len(&mem.mem) + 2 +
+                       memory_tail_len(&mem.mem);
+            }
+            if(mem_status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+            return encode_jmp_far_immediate(p, target_start, inst->args_head->_e);
+        }
+        if(is_far) {
+            _error_from_token(p, tok, ERROR_TYPE_I386, "expected ptr");
+            return INSTRUCTION_FAILED;
+        }
+        if(ptr_tok) return encode_jmp_direct(p, ptr_tok, inst->args_head->_e, 3);
+        _error_from_token(p, tok, ERROR_TYPE_I386, "invalid jump target");
+        return INSTRUCTION_FAILED;
+    }
+
+    status = parse_operand(p, inst->args_head, &dst, &error_token);
+    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
+    if(status <= 0) {
+        _error_from_token(p, error_token, ERROR_TYPE_I386,
+                          "invalid jump target");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(dst.kind == OPERAND_REG16) {
+        emit_byte(p, 0xff);
+        emit_modrm_reg(p, 4, dst.reg);
+        return 2;
+    }
+
+    if(dst.kind == OPERAND_MEM) {
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                          "ambiguous jump pointer");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(dst.kind == OPERAND_IMM) {
+        return encode_jmp_direct(p, inst->args_head->_s, inst->args_head->_e, 0);
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported jmp form");
+    return INSTRUCTION_FAILED;
 }
 
 static nint encode_xchg(struct Parser *p, struct AstInstruction *inst,
@@ -1463,6 +1841,86 @@ static nint encode_test(struct Parser *p, struct AstInstruction *inst,
     return INSTRUCTION_FAILED;
 }
 
+static nint shift_target_size(struct Parser *p, struct AstInstruction *inst,
+                              struct Operand *dst, nint *size) {
+    if(dst->kind == OPERAND_REG8) {
+        *size = 1;
+        return 1;
+    }
+    if(dst->kind == OPERAND_REG16) {
+        *size = 2;
+        return 1;
+    }
+    if(dst->kind == OPERAND_MEM) {
+        if(dst->size == 1 || dst->size == 2) {
+            *size = dst->size;
+            return 1;
+        }
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                          "ambiguous shift operand size");
+        return INSTRUCTION_FAILED;
+    }
+    return 0;
+}
+
+static nint emit_shift_modrm(struct Parser *p, struct Operand *dst, nint group) {
+    if(dst->kind == OPERAND_MEM) {
+        emit_modrm_mem(p, group, &dst->mem);
+        return memory_tail_len(&dst->mem);
+    }
+    emit_modrm_reg(p, group, dst->reg);
+    return 0;
+}
+
+static nint encode_shift_group(struct Parser *p, struct AstInstruction *inst,
+                               struct Operand *dst, struct Operand *src,
+                               nint group) {
+    nint size;
+    nint tail;
+    unsigned char opcode;
+
+    nint status = shift_target_size(p, inst, dst, &size);
+    if(status <= 0) {
+        if(status == INSTRUCTION_FAILED) return INSTRUCTION_FAILED;
+        _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported shift form");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(src->kind == OPERAND_IMM) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "shift count does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+
+        if(src->imm == 1) {
+            opcode = size == 1 ? 0xd0 : 0xd1;
+            emit_segment_prefix(p, &dst->mem);
+            emit_byte(p, opcode);
+            tail = emit_shift_modrm(p, dst, group);
+            return segment_prefix_len(&dst->mem) + 2 + tail;
+        }
+
+        opcode = size == 1 ? 0xc0 : 0xc1;
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, opcode);
+        tail = emit_shift_modrm(p, dst, group);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return segment_prefix_len(&dst->mem) + 2 + tail + 1;
+    }
+
+    if(is_cl(src)) {
+        opcode = size == 1 ? 0xd2 : 0xd3;
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, opcode);
+        tail = emit_shift_modrm(p, dst, group);
+        return segment_prefix_len(&dst->mem) + 2 + tail;
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported shift form");
+    return INSTRUCTION_FAILED;
+}
+
 static nint encode_in(struct Parser *p, struct AstInstruction *inst,
                       struct Operand *dst, struct Operand *src) {
     if(is_al(dst) && src->kind == OPERAND_IMM) {
@@ -1539,6 +1997,172 @@ static nint encode_out(struct Parser *p, struct AstInstruction *inst,
     return INSTRUCTION_FAILED;
 }
 
+static nint emit_arith_reg_imm(struct Parser *p, struct AstInstruction *inst,
+                               struct Operand *dst, struct Operand *src,
+                               nint group, unsigned char acc8,
+                               unsigned char acc16) {
+    if(dst->kind == OPERAND_REG8) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(is_al(dst)) {
+            emit_byte(p, acc8);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 2;
+        }
+        emit_byte(p, 0x80);
+        emit_modrm_reg(p, group, dst->reg);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return 3;
+    }
+
+    if(dst->kind == OPERAND_REG16) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        if(fits_word_sign_extended_i8(src->imm)) {
+            emit_byte(p, 0x83);
+            emit_modrm_reg(p, group, dst->reg);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return 3;
+        }
+        if(is_ax(dst)) {
+            emit_byte(p, acc16);
+            emit_word(p, src->imm);
+            return 3;
+        }
+        emit_byte(p, 0x81);
+        emit_modrm_reg(p, group, dst->reg);
+        emit_word(p, src->imm);
+        return 4;
+    }
+
+    return 0;
+}
+
+static nint emit_arith_mem_imm(struct Parser *p, struct AstInstruction *inst,
+                               struct Operand *dst, struct Operand *src,
+                               nint group) {
+    if(dst->size == 1) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, 0x80);
+        emit_modrm_mem(p, group, &dst->mem);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 1;
+    }
+
+    if(dst->size == 2) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        if(fits_word_sign_extended_i8(src->imm)) {
+            emit_byte(p, 0x83);
+            emit_modrm_mem(p, group, &dst->mem);
+            emit_byte(p, (unsigned char)(src->imm & 0xff));
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 1;
+        }
+        emit_byte(p, 0x81);
+        emit_modrm_mem(p, group, &dst->mem);
+        emit_word(p, src->imm);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem) + 2;
+    }
+
+    _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                      "ambiguous memory immediate size");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_arith(struct Parser *p, struct AstInstruction *inst,
+                         struct Operand *dst, struct Operand *src,
+                         unsigned char base, unsigned char acc8,
+                         unsigned char acc16, nint group,
+                         const char *name) {
+    nint status;
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_REG8) {
+        emit_byte(p, base);
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_REG16) {
+        emit_byte(p, (unsigned char)(base + 1));
+        emit_modrm_reg(p, src->reg, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG8) {
+        if(dst->size == 2) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid %s operand size", name);
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, base);
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_MEM && src->kind == OPERAND_REG16) {
+        if(dst->size == 1) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                              "invalid %s operand size", name);
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &dst->mem);
+        emit_byte(p, (unsigned char)(base + 1));
+        emit_modrm_mem(p, src->reg, &dst->mem);
+        return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+    }
+
+    if(dst->kind == OPERAND_REG8 && src->kind == OPERAND_MEM) {
+        if(src->size == 2) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid %s operand size", name);
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, (unsigned char)(base + 2));
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(dst->kind == OPERAND_REG16 && src->kind == OPERAND_MEM) {
+        if(src->size == 1) {
+            _error_from_token(p, inst->args_tail->_s, ERROR_TYPE_I386,
+                              "invalid %s operand size", name);
+            return INSTRUCTION_FAILED;
+        }
+        emit_segment_prefix(p, &src->mem);
+        emit_byte(p, (unsigned char)(base + 3));
+        emit_modrm_mem(p, dst->reg, &src->mem);
+        return segment_prefix_len(&src->mem) + 2 + memory_tail_len(&src->mem);
+    }
+
+    if(src->kind == OPERAND_IMM) {
+        status = emit_arith_reg_imm(p, inst, dst, src, group, acc8, acc16);
+        if(status) return status;
+        if(dst->kind == OPERAND_MEM) {
+            return emit_arith_mem_imm(p, inst, dst, src, group);
+        }
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported %s form", name);
+    return INSTRUCTION_FAILED;
+}
+
 static nint encode_not(struct Parser *p, struct AstInstruction *inst,
                        struct Operand *dst) {
     if(dst->kind == OPERAND_REG8) {
@@ -1572,6 +2196,113 @@ static nint encode_not(struct Parser *p, struct AstInstruction *inst,
     }
 
     _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported not form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_unary_group(struct Parser *p, struct AstInstruction *inst,
+                               struct Operand *dst, nint group,
+                               const char *name) {
+    if(dst->kind == OPERAND_REG8) {
+        emit_byte(p, 0xf6);
+        emit_modrm_reg(p, group, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_REG16) {
+        emit_byte(p, 0xf7);
+        emit_modrm_reg(p, group, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_MEM) {
+        if(dst->size == 1) {
+            emit_segment_prefix(p, &dst->mem);
+            emit_byte(p, 0xf6);
+            emit_modrm_mem(p, group, &dst->mem);
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+        }
+        if(dst->size == 2) {
+            emit_segment_prefix(p, &dst->mem);
+            emit_byte(p, 0xf7);
+            emit_modrm_mem(p, group, &dst->mem);
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+        }
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                          "ambiguous %s operand size", name);
+        return INSTRUCTION_FAILED;
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported %s form", name);
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_aad(struct Parser *p, struct AstInstruction *inst,
+                       struct Operand *src) {
+    if(src->kind == OPERAND_IMM) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_byte(p, 0xd5);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return 2;
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported aad form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_aam(struct Parser *p, struct AstInstruction *inst,
+                       struct Operand *src) {
+    if(src->kind == OPERAND_IMM) {
+        if(!fits_u16(src->imm)) {
+            _error_from_token(p, inst->args_head->_s, ERROR_TYPE_OVERFLOW,
+                              "immediate does not fit 16 bits");
+            return INSTRUCTION_FAILED;
+        }
+        emit_byte(p, 0xd4);
+        emit_byte(p, (unsigned char)(src->imm & 0xff));
+        return 2;
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported aam form");
+    return INSTRUCTION_FAILED;
+}
+
+static nint encode_inc_dec(struct Parser *p, struct AstInstruction *inst,
+                           struct Operand *dst, nint group,
+                           unsigned char reg16_base, const char *name) {
+    if(dst->kind == OPERAND_REG8) {
+        emit_byte(p, 0xfe);
+        emit_modrm_reg(p, group, dst->reg);
+        return 2;
+    }
+
+    if(dst->kind == OPERAND_REG16) {
+        emit_byte(p, (unsigned char)(reg16_base + dst->reg));
+        return 1;
+    }
+
+    if(dst->kind == OPERAND_MEM) {
+        if(dst->size == 1) {
+            emit_segment_prefix(p, &dst->mem);
+            emit_byte(p, 0xfe);
+            emit_modrm_mem(p, group, &dst->mem);
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+        }
+        if(dst->size == 2) {
+            emit_segment_prefix(p, &dst->mem);
+            emit_byte(p, 0xff);
+            emit_modrm_mem(p, group, &dst->mem);
+            return segment_prefix_len(&dst->mem) + 2 + memory_tail_len(&dst->mem);
+        }
+        _error_from_token(p, inst->args_head->_s, ERROR_TYPE_I386,
+                          "ambiguous %s operand size", name);
+        return INSTRUCTION_FAILED;
+    }
+
+    _error_from_token(p, inst->name, ERROR_TYPE_I386, "unsupported %s form", name);
     return INSTRUCTION_FAILED;
 }
 
@@ -1666,6 +2397,7 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     unint is_lea = compare_identifiers_cp_array(inst->name, LEA_INSTRUCTION) == SUCCESS;
     unint is_lds = compare_identifiers_cp_array(inst->name, LDS_INSTRUCTION) == SUCCESS;
     unint is_les = compare_identifiers_cp_array(inst->name, LES_INSTRUCTION) == SUCCESS;
+    unint is_jmp = compare_identifiers_cp_array(inst->name, JMP_INSTRUCTION) == SUCCESS;
     unint is_xchg = compare_identifiers_cp_array(inst->name, XCHG_INSTRUCTION) == SUCCESS;
     unint is_push = compare_identifiers_cp_array(inst->name, PUSH_INSTRUCTION) == SUCCESS;
     unint is_pop = compare_identifiers_cp_array(inst->name, POP_INSTRUCTION) == SUCCESS;
@@ -1675,8 +2407,43 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     unint is_sahf = compare_identifiers_cp_array(inst->name, SAHF_INSTRUCTION) == SUCCESS;
     unint is_xlat = compare_identifiers_cp_array(inst->name, XLAT_INSTRUCTION) == SUCCESS;
     unint is_xlatb = compare_identifiers_cp_array(inst->name, XLATB_INSTRUCTION) == SUCCESS;
+    unint is_movs = compare_identifiers_cp_array(inst->name, MOVS_INSTRUCTION) == SUCCESS;
+    unint is_movsb = compare_identifiers_cp_array(inst->name, MOVSB_INSTRUCTION) == SUCCESS;
+    unint is_movsw = compare_identifiers_cp_array(inst->name, MOVSW_INSTRUCTION) == SUCCESS;
+    unint is_cmps = compare_identifiers_cp_array(inst->name, CMPS_INSTRUCTION) == SUCCESS;
+    unint is_cmpsb = compare_identifiers_cp_array(inst->name, CMPSB_INSTRUCTION) == SUCCESS;
+    unint is_cmpsw = compare_identifiers_cp_array(inst->name, CMPSW_INSTRUCTION) == SUCCESS;
+    unint is_scas = compare_identifiers_cp_array(inst->name, SCAS_INSTRUCTION) == SUCCESS;
+    unint is_scasb = compare_identifiers_cp_array(inst->name, SCASB_INSTRUCTION) == SUCCESS;
+    unint is_scasw = compare_identifiers_cp_array(inst->name, SCASW_INSTRUCTION) == SUCCESS;
+    unint is_lods = compare_identifiers_cp_array(inst->name, LODS_INSTRUCTION) == SUCCESS;
+    unint is_lodsb = compare_identifiers_cp_array(inst->name, LODSB_INSTRUCTION) == SUCCESS;
+    unint is_lodsw = compare_identifiers_cp_array(inst->name, LODSW_INSTRUCTION) == SUCCESS;
+    unint is_stos = compare_identifiers_cp_array(inst->name, STOS_INSTRUCTION) == SUCCESS;
+    unint is_stosb = compare_identifiers_cp_array(inst->name, STOSB_INSTRUCTION) == SUCCESS;
+    unint is_stosw = compare_identifiers_cp_array(inst->name, STOSW_INSTRUCTION) == SUCCESS;
     unint is_in = compare_identifiers_cp_array(inst->name, IN_INSTRUCTION) == SUCCESS;
     unint is_out = compare_identifiers_cp_array(inst->name, OUT_INSTRUCTION) == SUCCESS;
+    unint is_add = compare_identifiers_cp_array(inst->name, ADD_INSTRUCTION) == SUCCESS;
+    unint is_adc = compare_identifiers_cp_array(inst->name, ADC_INSTRUCTION) == SUCCESS;
+    unint is_sub = compare_identifiers_cp_array(inst->name, SUB_INSTRUCTION) == SUCCESS;
+    unint is_sbb = compare_identifiers_cp_array(inst->name, SBB_INSTRUCTION) == SUCCESS;
+    unint is_cmp = compare_identifiers_cp_array(inst->name, CMP_INSTRUCTION) == SUCCESS;
+    unint is_inc = compare_identifiers_cp_array(inst->name, INC_INSTRUCTION) == SUCCESS;
+    unint is_dec = compare_identifiers_cp_array(inst->name, DEC_INSTRUCTION) == SUCCESS;
+    unint is_neg = compare_identifiers_cp_array(inst->name, NEG_INSTRUCTION) == SUCCESS;
+    unint is_mul = compare_identifiers_cp_array(inst->name, MUL_INSTRUCTION) == SUCCESS;
+    unint is_imul = compare_identifiers_cp_array(inst->name, IMUL_INSTRUCTION) == SUCCESS;
+    unint is_div = compare_identifiers_cp_array(inst->name, DIV_INSTRUCTION) == SUCCESS;
+    unint is_idiv = compare_identifiers_cp_array(inst->name, IDIV_INSTRUCTION) == SUCCESS;
+    unint is_cbw = compare_identifiers_cp_array(inst->name, CBW_INSTRUCTION) == SUCCESS;
+    unint is_cwd = compare_identifiers_cp_array(inst->name, CWD_INSTRUCTION) == SUCCESS;
+    unint is_aaa = compare_identifiers_cp_array(inst->name, AAA_INSTRUCTION) == SUCCESS;
+    unint is_aad = compare_identifiers_cp_array(inst->name, AAD_INSTRUCTION) == SUCCESS;
+    unint is_aam = compare_identifiers_cp_array(inst->name, AAM_INSTRUCTION) == SUCCESS;
+    unint is_aas = compare_identifiers_cp_array(inst->name, AAS_INSTRUCTION) == SUCCESS;
+    unint is_daa = compare_identifiers_cp_array(inst->name, DAA_INSTRUCTION) == SUCCESS;
+    unint is_das = compare_identifiers_cp_array(inst->name, DAS_INSTRUCTION) == SUCCESS;
     unint is_and = compare_identifiers_cp_array(inst->name, AND_INSTRUCTION) == SUCCESS;
     unint is_or = compare_identifiers_cp_array(inst->name, OR_INSTRUCTION) == SUCCESS;
     unint is_xor = compare_identifiers_cp_array(inst->name, XOR_INSTRUCTION) == SUCCESS;
@@ -1687,33 +2454,68 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     unint is_cmc = compare_identifiers_cp_array(inst->name, CMC_INSTRUCTION) == SUCCESS;
     unint is_cld = compare_identifiers_cp_array(inst->name, CLD_INSTRUCTION) == SUCCESS;
     unint is_std = compare_identifiers_cp_array(inst->name, STD_INSTRUCTION) == SUCCESS;
+    unint is_cli = compare_identifiers_cp_array(inst->name, CLI_INSTRUCTION) == SUCCESS;
+    unint is_sti = compare_identifiers_cp_array(inst->name, STI_INSTRUCTION) == SUCCESS;
+    unint is_shl = compare_identifiers_cp_array(inst->name, SHL_INSTRUCTION) == SUCCESS;
+    unint is_sal = compare_identifiers_cp_array(inst->name, SAL_INSTRUCTION) == SUCCESS;
+    unint is_shr = compare_identifiers_cp_array(inst->name, SHR_INSTRUCTION) == SUCCESS;
+    unint is_sar = compare_identifiers_cp_array(inst->name, SAR_INSTRUCTION) == SUCCESS;
+    unint is_rol = compare_identifiers_cp_array(inst->name, ROL_INSTRUCTION) == SUCCESS;
+    unint is_ror = compare_identifiers_cp_array(inst->name, ROR_INSTRUCTION) == SUCCESS;
+    unint is_rcl = compare_identifiers_cp_array(inst->name, RCL_INSTRUCTION) == SUCCESS;
+    unint is_rcr = compare_identifiers_cp_array(inst->name, RCR_INSTRUCTION) == SUCCESS;
 
     (void)registers;
 
-    if(!is_mov && !is_lea && !is_lds && !is_les && !is_xchg &&
+    if(!is_mov && !is_lea && !is_lds && !is_les && !is_jmp && !is_xchg &&
        !is_push && !is_pop && !is_pushf && !is_popf && !is_lahf && !is_sahf &&
-       !is_xlat && !is_xlatb && !is_in && !is_out && !is_and && !is_or &&
+       !is_xlat && !is_xlatb && !is_movs && !is_movsb && !is_movsw &&
+       !is_cmps && !is_cmpsb && !is_cmpsw && !is_scas && !is_scasb && !is_scasw &&
+       !is_lods && !is_lodsb && !is_lodsw && !is_stos && !is_stosb && !is_stosw &&
+       !is_in && !is_out && !is_add && !is_adc && !is_sub && !is_sbb && !is_cmp &&
+       !is_inc && !is_dec && !is_neg && !is_mul && !is_imul && !is_div && !is_idiv &&
+       !is_cbw && !is_cwd && !is_aaa && !is_aad && !is_aam && !is_aas &&
+       !is_daa && !is_das && !is_and && !is_or &&
        !is_xor && !is_test && !is_not && !is_clc && !is_stc && !is_cmc &&
-       !is_cld && !is_std) {
+       !is_cld && !is_std && !is_cli && !is_sti && !is_shl && !is_sal &&
+       !is_shr && !is_sar && !is_rol && !is_ror && !is_rcl && !is_rcr) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid i386 instruction");
         return INSTRUCTION_FAILED;
     }
 
     if((is_pushf || is_popf || is_lahf || is_sahf || is_xlat || is_xlatb ||
-        is_clc || is_stc || is_cmc || is_cld || is_std) &&
+        is_movs || is_movsb || is_movsw || is_cmps || is_cmpsb || is_cmpsw ||
+        is_scas || is_scasb || is_scasw || is_lods || is_lodsb || is_lodsw ||
+        is_stos || is_stosb || is_stosw || is_clc || is_stc || is_cmc ||
+        is_cld || is_std || is_cli || is_sti || is_cbw || is_cwd ||
+        is_aaa || is_aas || is_daa || is_das) &&
        inst->arg_count != 0) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
     }
 
-    if((is_push || is_pop || is_not) && inst->arg_count != 1) {
+    if((is_aad || is_aam) && inst->arg_count > 1) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
     }
 
-    if(!is_push && !is_pop && !is_not && !is_pushf && !is_popf &&
-       !is_lahf && !is_sahf && !is_xlat && !is_xlatb && !is_clc && !is_stc &&
-       !is_cmc && !is_cld && !is_std &&
+    if((is_push || is_pop || is_not || is_inc || is_dec || is_neg ||
+        is_mul || is_imul || is_div || is_idiv) &&
+       inst->arg_count != 1) {
+        _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
+        return INSTRUCTION_FAILED;
+    }
+
+    if(!is_jmp &&
+       !is_push && !is_pop && !is_not && !is_inc && !is_dec && !is_neg &&
+       !is_mul && !is_imul && !is_div && !is_idiv &&
+       !is_pushf && !is_popf &&
+       !is_lahf && !is_sahf && !is_xlat && !is_xlatb && !is_movs &&
+       !is_movsb && !is_movsw && !is_cmps && !is_cmpsb && !is_cmpsw &&
+       !is_scas && !is_scasb && !is_scasw && !is_lods && !is_lodsb && !is_lodsw &&
+       !is_stos && !is_stosb && !is_stosw && !is_clc && !is_stc && !is_cmc &&
+       !is_cld && !is_std && !is_cli && !is_sti && !is_cbw && !is_cwd &&
+       !is_aaa && !is_aad && !is_aam && !is_aas && !is_daa && !is_das &&
        inst->arg_count != 2) {
         _error_from_token(p, inst->name, ERROR_TYPE_I386, "invalid number of arguments");
         return INSTRUCTION_FAILED;
@@ -1739,6 +2541,80 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
         emit_byte(p, 0xd7);
         return 1;
     }
+    if(is_movsb) {
+        emit_byte(p, 0xa4);
+        return 1;
+    }
+    if(is_movs || is_movsw) {
+        emit_byte(p, 0xa5);
+        return 1;
+    }
+    if(is_cmpsb) {
+        emit_byte(p, 0xa6);
+        return 1;
+    }
+    if(is_cmps || is_cmpsw) {
+        emit_byte(p, 0xa7);
+        return 1;
+    }
+    if(is_scasb) {
+        emit_byte(p, 0xae);
+        return 1;
+    }
+    if(is_scas || is_scasw) {
+        emit_byte(p, 0xaf);
+        return 1;
+    }
+    if(is_lodsb) {
+        emit_byte(p, 0xac);
+        return 1;
+    }
+    if(is_lods || is_lodsw) {
+        emit_byte(p, 0xad);
+        return 1;
+    }
+    if(is_stosb) {
+        emit_byte(p, 0xaa);
+        return 1;
+    }
+    if(is_stos || is_stosw) {
+        emit_byte(p, 0xab);
+        return 1;
+    }
+    if(is_cbw) {
+        emit_byte(p, 0x98);
+        return 1;
+    }
+    if(is_cwd) {
+        emit_byte(p, 0x99);
+        return 1;
+    }
+    if(is_aaa) {
+        emit_byte(p, 0x37);
+        return 1;
+    }
+    if(is_aad && inst->arg_count == 0) {
+        emit_byte(p, 0xd5);
+        emit_byte(p, 0x0a);
+        return 2;
+    }
+    if(is_aam && inst->arg_count == 0) {
+        emit_byte(p, 0xd4);
+        emit_byte(p, 0x0a);
+        return 2;
+    }
+    if(is_aas) {
+        emit_byte(p, 0x3f);
+        return 1;
+    }
+    if(is_daa) {
+        emit_byte(p, 0x27);
+        return 1;
+    }
+    if(is_das) {
+        emit_byte(p, 0x2f);
+        return 1;
+    }
     if(is_clc) {
         emit_byte(p, 0xf8);
         return 1;
@@ -1759,6 +2635,16 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
         emit_byte(p, 0xfd);
         return 1;
     }
+    if(is_cli) {
+        emit_byte(p, 0xfa);
+        return 1;
+    }
+    if(is_sti) {
+        emit_byte(p, 0xfb);
+        return 1;
+    }
+
+    if(is_jmp) return encode_jmp(p, inst);
 
     status = parse_operand(p, inst->args_head, &dst, &error_token);
     if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
@@ -1771,6 +2657,15 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     if(is_push) return encode_push(p, inst, &dst);
     if(is_pop) return encode_pop(p, inst, &dst);
     if(is_not) return encode_not(p, inst, &dst);
+    if(is_inc) return encode_inc_dec(p, inst, &dst, 0, 0x40, "inc");
+    if(is_dec) return encode_inc_dec(p, inst, &dst, 1, 0x48, "dec");
+    if(is_neg) return encode_unary_group(p, inst, &dst, 3, "neg");
+    if(is_mul) return encode_unary_group(p, inst, &dst, 4, "mul");
+    if(is_imul) return encode_unary_group(p, inst, &dst, 5, "imul");
+    if(is_div) return encode_unary_group(p, inst, &dst, 6, "div");
+    if(is_idiv) return encode_unary_group(p, inst, &dst, 7, "idiv");
+    if(is_aad) return encode_aad(p, inst, &dst);
+    if(is_aam) return encode_aam(p, inst, &dst);
 
     error_token = NULL;
     status = parse_operand(p, inst->args_tail, &src, &error_token);
@@ -1799,6 +2694,21 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     if(is_out) {
         return encode_out(p, inst, &dst, &src);
     }
+    if(is_add) {
+        return encode_arith(p, inst, &dst, &src, 0x00, 0x04, 0x05, 0, "add");
+    }
+    if(is_adc) {
+        return encode_arith(p, inst, &dst, &src, 0x10, 0x14, 0x15, 2, "adc");
+    }
+    if(is_sub) {
+        return encode_arith(p, inst, &dst, &src, 0x28, 0x2c, 0x2d, 5, "sub");
+    }
+    if(is_sbb) {
+        return encode_arith(p, inst, &dst, &src, 0x18, 0x1c, 0x1d, 3, "sbb");
+    }
+    if(is_cmp) {
+        return encode_arith(p, inst, &dst, &src, 0x38, 0x3c, 0x3d, 7, "cmp");
+    }
     if(is_and) {
         return encode_and(p, inst, &dst, &src);
     }
@@ -1810,6 +2720,27 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     }
     if(is_test) {
         return encode_test(p, inst, &dst, &src);
+    }
+    if(is_shl || is_sal) {
+        return encode_shift_group(p, inst, &dst, &src, 4);
+    }
+    if(is_shr) {
+        return encode_shift_group(p, inst, &dst, &src, 5);
+    }
+    if(is_sar) {
+        return encode_shift_group(p, inst, &dst, &src, 7);
+    }
+    if(is_rol) {
+        return encode_shift_group(p, inst, &dst, &src, 0);
+    }
+    if(is_ror) {
+        return encode_shift_group(p, inst, &dst, &src, 1);
+    }
+    if(is_rcl) {
+        return encode_shift_group(p, inst, &dst, &src, 2);
+    }
+    if(is_rcr) {
+        return encode_shift_group(p, inst, &dst, &src, 3);
     }
     return encode_lea(p, inst, &dst, &src);
 }
