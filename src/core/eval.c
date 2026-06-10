@@ -449,7 +449,7 @@ _el_iter:
                     len_val.val.string.len;
 
                 if (u_len > NINT_MAX) {
-                    _error_from_multiple_tokens(p, expr->node.len_expr._s, expr->node.len_expr._e, ERROR_TYPE_OVERFLOW, "indice is too big to store in signed nint");
+                    _error_from_multiple_tokens(p, expr->node.len_expr._s, expr->node.len_expr._e, ERROR_TYPE_OVERFLOW, "index is too big to store in signed nint");
                     return FAIL;
                 }
                 val->type = VALUE_INT;

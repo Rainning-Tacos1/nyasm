@@ -1102,7 +1102,7 @@ struct Ast_node* _parse_expr_prefix(struct Parser* p, unint stop_on_comma) {
                 return new_ast_len(p, _token, _s, _e, len);
 
             } else if(is_at_identifier(_token, NULL) == SUCCESS) {
-                _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "@ identifiers are not allowed on expressions");
+                _error_from_token(p, _token, ERROR_TYPE_EXPRESSION, "at-identifiers are not allowed on expressions");
                 return NULL;
             }
 
@@ -1335,13 +1335,13 @@ unint is_macro_arg(struct Macro* macro, int32_t* cps, unint len) {
 
 void print_macro(struct Macro* macro) {
     DBG(DO_PARSER_RADOM_STUFF_DBG, "@macro ");
-    for(unint i=0; i<macro->name.len; ++i) DBG_CP(1, macro->name.cps[i]);
+    for(unint i=0; i<macro->name.len; ++i) DBG_CP(DO_PARSER_RADOM_STUFF_DBG, macro->name.cps[i]);
     DBG(DO_PARSER_RADOM_STUFF_DBG, " (");
     struct MacroArg* arg = macro->args;
     while(arg != NULL) {
         DBG(DO_PARSER_RADOM_STUFF_DBG, "\n\t");
         if(arg->is_variadic) DBG(DO_PARSER_RADOM_STUFF_DBG, "*");
-        for(unint i=0; i<arg->arg_name.len; ++i) DBG_CP(1, arg->arg_name.cps[i]);
+        for(unint i=0; i<arg->arg_name.len; ++i) DBG_CP(DO_PARSER_RADOM_STUFF_DBG, arg->arg_name.cps[i]);
         arg = arg->next;
     }
     DBG(DO_PARSER_RADOM_STUFF_DBG, "\n) [ ");
