@@ -1017,8 +1017,13 @@ unint get_size_of_type(struct Parser* p, unint type) {
 }
 
 unint increment_addr(struct Parser* p, nint val) {
-    if (p->addr > NINT_MAX - p->addr) return FAIL;
-    else if(p->addr + val > p->active_lang->max_addr) return FAIL;
+    if (val < 0) return FAIL;
+
+    if (val > NINT_MAX - p->addr) return FAIL;
+
+    if(val == 0) return SUCCESS;
+    if ((val-1) > (p->active_lang->max_addr - p->addr)) return FAIL;
+
     p->addr += val;
     return SUCCESS;
 }

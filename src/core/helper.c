@@ -101,9 +101,19 @@ unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* 
     struct token* name = tks_peek(tks);
     if (!name || name->type != NAME) return VP_NONE;
 
+    // Variable
+    struct Variable* var = get_variable(p, name);
+    if(var) {
+        if(var->val.type != VALUE_INT) {
+            _error_from_token(p, name, ERROR_TYPE_TYPE, "invalid type");
+            return VP_FAIL;
+        }
+        *addr = var->val.val.number;
+        return VP_SUCCESS;  
+    }
+
     /* ---------------- resolve root ---------------- */
     struct LabelDecl* sym = NULL;
-
     for (struct LabelDecl* it = p->global_label_decl; it != NULL; it = it->next){
         if (_compare_identifiers(it->name->cps, it->name->len, name->cps, name->len) == SUCCESS) {
             sym = it;
@@ -120,7 +130,12 @@ unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* 
     }
 
     // Not a variable / struct field
-    if(!sym) return VP_UNRESOLVED_LABEL;
+    if(!sym) {
+        tks_read(tks);
+        struct token* _err = tks_read(tks);
+        if(_err) _error_from_token(p, _err, ERROR_TYPE_NAME, "unexpected token");
+        return VP_FAIL;
+    }
 
     tks_read(tks);
 
@@ -146,7 +161,7 @@ unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* 
             tks_read(tks); // field name
 
             if (!current_struct->deep_head) {
-                _error_from_token(p, field, ERROR_TYPE_NAME, "not a struct type");
+                _error_from_token(p, field, ERROR_TYPE_TYPE, "not a struct type");
                 return VP_FAIL;
             }
 

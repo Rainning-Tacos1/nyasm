@@ -61,5 +61,6 @@ enum EvalTypes {
 
 unint eval_ast(struct Parser* p, struct Ast_node* ast);
 void print_labels(struct LabelDecl* head, struct LabelDecl* tail, unint level);
+struct Variable* get_variable(struct Parser* p, struct token* _token);
 
 #endif

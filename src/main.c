@@ -14,7 +14,7 @@
 #include "api/file.h"
 #include "api/core.h"
 
-#define VERSION "v0.0.0"
+#define VERSION "v1.0.0"
 #define _1KB 1000
 
 #define STRINGIFY(x) #x

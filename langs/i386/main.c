@@ -145,7 +145,7 @@ nint _86_exec(struct Parser* p, struct AstInstruction* inst);
 #endif
 
 ASM_LANG i386 = {
-    .lang_name = "i386 assembly v0.0.1",
+    .lang_name = "i386 (16 bit) assembly v1.0.0",
     .code_name = "i386",
     .max_addr = 0Xffff,
     .size_of_ptr = 2,
