@@ -99,148 +99,147 @@ unint parse_potential_register(struct TokenStream* tks, int32_t** registers, uni
 
 unint parse_potential_variable(struct Parser* p, struct TokenStream* tks, nint* addr, unint permissive) {
     struct token* name = tks_peek(tks);
-    if (!name || name->type != NAME) return VP_NONE;
+    if(!name || name->type != NAME) {
+        tks_reset_peek(tks);
+        return VP_NONE;
+    }
 
-    // Variable
     struct Variable* var = get_variable(p, name);
     if(var) {
         if(var->val.type != VALUE_INT) {
             _error_from_token(p, name, ERROR_TYPE_TYPE, "invalid type");
             return VP_FAIL;
         }
+
+        tks_read(tks); /* consume variable name */
+
+        if(!permissive) {
+            tks_reset_peek(tks);
+            struct token* trailing = tks_peek(tks);
+            if(trailing) {
+                _error_from_token(p, trailing, ERROR_TYPE_NAME, "unexpected token");
+                return VP_FAIL;
+            }
+        }
+
         *addr = var->val.val.number;
-        return VP_SUCCESS;  
+        return VP_SUCCESS;
     }
 
-    /* ---------------- resolve root ---------------- */
     struct LabelDecl* sym = NULL;
-    for (struct LabelDecl* it = p->global_label_decl; it != NULL; it = it->next){
-        if (_compare_identifiers(it->name->cps, it->name->len, name->cps, name->len) == SUCCESS) {
+    for(struct LabelDecl* it = p->global_label_decl; it != NULL; it = it->next) {
+        if(_compare_identifiers(it->name->cps, it->name->len,
+                                name->cps, name->len) == SUCCESS) {
             sym = it;
             break;
         }
 
-        if (it == p->global_label_decl_tail) break;
+        if(it == p->global_label_decl_tail) break;
     }
 
-    // Not a label nor a struct var
-    if (!sym && (tks_peek(tks) == NULL)) {
-        tks_read(tks);
+    if(!sym) {
+        tks_read(tks); /* consume unresolved label name */
+
+        if(!permissive) {
+            tks_reset_peek(tks);
+            struct token* trailing = tks_peek(tks);
+            if(trailing) {
+                _error_from_token(p, trailing, ERROR_TYPE_NAME, "unexpected token");
+                return VP_FAIL;
+            }
+        }
+
         return VP_UNRESOLVED_LABEL;
     }
 
-    // Not a variable / struct field
-    if(!sym) {
-        tks_read(tks);
-        struct token* _err = tks_read(tks);
-        if(_err) _error_from_token(p, _err, ERROR_TYPE_NAME, "unexpected token");
-        return VP_FAIL;
-    }
+    tks_read(tks); /* consume label name */
 
-    tks_read(tks);
-
-    nint base_addr = sym->addr;
-    nint current_addr = base_addr;
-
+    nint current_addr = sym->addr;
     struct LabelDecl* current_struct = sym;
 
     while(true) {
-
         struct token* tok = tks_peek(tks);
-        if (tok == NULL) break;
+        if(tok == NULL) break;
 
-        if (tok->type == DOT) {
-            tks_read(tks); // '.'
+        if(tok->type != DOT) break;
 
-            struct token* field = tks_peek(tks);
-            if (!field || field->type != NAME) {
-                _error_from_token(p, tok, ERROR_TYPE_NAME, "expected struct field after '.'");
-                return VP_FAIL;
-            }
+        tks_read(tks); /* '.' */
 
-            tks_read(tks); // field name
-
-            if (!current_struct->deep_head) {
-                _error_from_token(p, field, ERROR_TYPE_TYPE, "not a struct type");
-                return VP_FAIL;
-            }
-
-            struct LabelDecl* member = current_struct->deep_head;
-            struct LabelDecl* found = NULL;
-
-            while (member) {
-
-                if (_compare_identifiers(member->name->cps, member->name->len, field->cps, field->len) == SUCCESS) {
-                    found = member;
-                    break;
-                }
-
-                if (member == current_struct->deep_tail) break;
-                member = member->next;
-            }
-
-            if (!found) {
-                _error_from_token(p, field, ERROR_TYPE_NAME, "unknown struct field");
-                return VP_FAIL;
-            }
-
-            // Address calculation
-            nint field_offset = found->addr - current_struct->addr;
-            current_addr += field_offset;
-            current_struct = found;
-
-            // Optional indexing
-            struct token* next = tks_peek(tks);
-            if (next && next->type == LSQB) {
-                tks_read(tks); // [
-
-                struct token* num = tks_peek(tks);
-                if (expected_token(p, num, NUMBER) == NULL)
-                    return VP_FAIL;
-
-                struct Value* val = new_number(p, num, 0);
-                if (!val)
-                    return VP_FAIL;
-
-                if (val->type != VALUE_INT) {
-                    _error_from_token(p, num, ERROR_TYPE_TYPE, "invalid index type");
-                    return VP_FAIL;
-                }
-
-                if (val->val.number >= found->len) {
-                    _error_from_token(p, num, ERROR_TYPE_INDEX_ERROR, "index out of range");
-                    return VP_FAIL;
-                }
-
-                tks_read(tks); // number
-
-                struct token* rsqb = tks_read(tks);
-                if(!rsqb) {
-                    _error_from_token(p, num, ERROR_TYPE_MESSAGE, "argument ended witout closing ']'");
-                    return VP_FAIL;
-                } 
-                else if (expected_token(p, rsqb, RSQB) == NULL) return VP_FAIL;
-
-                current_addr += val->val.number * found->stride;
-            } else tks_reset_peek(tks);
-
-
-            continue;
+        struct token* field = tks_peek(tks);
+        if(!field || field->type != NAME) {
+            _error_from_token(p, tok, ERROR_TYPE_NAME, "expected struct field after '.'");
+            return VP_FAIL;
         }
 
-        break;
+        tks_read(tks); /* field name */
+
+        if(!current_struct->deep_head) {
+            _error_from_token(p, field, ERROR_TYPE_TYPE, "not a struct type");
+            return VP_FAIL;
+        }
+
+        struct LabelDecl* found = NULL;
+        for(struct LabelDecl* member = current_struct->deep_head;
+            member != NULL;
+            member = member->next) {
+            if(_compare_identifiers(member->name->cps, member->name->len,
+                                    field->cps, field->len) == SUCCESS) {
+                found = member;
+                break;
+            }
+
+            if(member == current_struct->deep_tail) break;
+        }
+
+        if(!found) {
+            _error_from_token(p, field, ERROR_TYPE_NAME, "unknown struct field");
+            return VP_FAIL;
+        }
+
+        current_addr += found->addr - current_struct->addr;
+        current_struct = found;
+
+        struct token* next = tks_peek(tks);
+        if(next && next->type == LSQB) {
+            tks_read(tks); /* '[' */
+
+            struct token* num = tks_peek(tks);
+            if(expected_token(p, num, NUMBER) == NULL) return VP_FAIL;
+
+            struct Value* val = new_number(p, num, 0);
+            if(!val) return VP_FAIL;
+
+            if(val->type != VALUE_INT) {
+                _error_from_token(p, num, ERROR_TYPE_TYPE, "invalid index type");
+                return VP_FAIL;
+            }
+
+            if(val->val.number >= found->len) {
+                _error_from_token(p, num, ERROR_TYPE_INDEX_ERROR, "index out of range");
+                return VP_FAIL;
+            }
+
+            tks_read(tks); /* number */
+
+            struct token* rsqb = tks_read(tks);
+            if(!rsqb) {
+                _error_from_token(p, num, ERROR_TYPE_MESSAGE, "argument ended without closing ']'");
+                return VP_FAIL;
+            }
+            if(expected_token(p, rsqb, RSQB) == NULL) return VP_FAIL;
+
+            current_addr += val->val.number * found->stride;
+        } else {
+            tks_reset_peek(tks);
+        }
     }
+
     tks_reset_peek(tks);
 
     if(!permissive) {
-        // Trailling tokens
-        struct token* trailling = tks_peek(tks);
-        if (trailling != NULL) {
-            _error_from_token(
-                p,
-                trailling,
-                ERROR_TYPE_NAME,
-                "unexpected token");
+        struct token* trailing = tks_peek(tks);
+        if(trailing) {
+            _error_from_token(p, trailing, ERROR_TYPE_NAME, "unexpected token");
             return VP_FAIL;
         }
     }

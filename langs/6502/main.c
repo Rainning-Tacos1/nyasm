@@ -97,8 +97,13 @@ struct Scalar {
     enum SelectorKind selector;
     struct token *token;
 };
+
+static nint fail_unresolved_label(struct Parser *p, struct token *_token) {
+    (void)unresolved_label(p, _token);
+    return INSTRUCTION_FAILED;
+}
+
 static void emit_byte(struct Parser *p, unsigned char byte) {
-    (void)p;
     if(p->last_pass) OUT_FILE_WRITE_BYTE(byte);
 }
 
@@ -212,7 +217,7 @@ static nint read_scalar(struct Parser *p, struct TokenStream *tks,
             record_error_token(error_token, tok);
             scalar->unresolved = 1;
             scalar->value = 0;
-            if(p->last_pass) return unresolved_label(p, tok);
+            if(p->last_pass) return fail_unresolved_label(p, tok);
             return 1;
         }
         if(status == VP_FAIL) return INSTRUCTION_FAILED;
@@ -323,22 +328,25 @@ static nint read_open_parenthesized_scalar(struct Parser *p, struct InstructionA
 
 static nint read_index_arg(struct InstructionArg *arg, int32_t *name,
                            unint allow_rpar, struct token **error_token) {
+    struct TokenStream tks;
     struct token *tok;
 
     if(!arg || !arg->_s || !arg->_e) return 0;
-    tok = arg->_s;
+    tks_init(&tks, arg->_s, arg->_e);
+    tok = tks_read(&tks);
     if(!token_is(tok, name)) {
         record_error_token(error_token, tok);
         return 0;
     }
     record_error_token(error_token, tok);
 
-    if(tok == arg->_e) return 1;
-    if(allow_rpar && tok + 1 == arg->_e && (tok + 1)->type == RPAR) {
-        record_error_token(error_token, tok + 1);
+    tok = tks_read(&tks);
+    if(!tok) return 1;
+    if(allow_rpar && tok->type == RPAR && tks_at_end(&tks)) {
+        record_error_token(error_token, tok);
         return 1;
     }
-    record_error_token(error_token, tok + 1);
+    record_error_token(error_token, tok);
     return 0;
 }
 
@@ -363,7 +371,6 @@ static nint emit_imm8(struct Parser *p, struct AstInstruction *inst,
     struct token *error_token = inst->args_head->_s;
     nint status = read_immediate_arg(p, inst->args_head, &scalar, &error_token);
     nint value;
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_6502, "invalid %s immediate",
                           mnemonic);
@@ -389,7 +396,6 @@ static nint emit_memory_operand(struct Parser *p, struct AstInstruction *inst,
     struct token *error_token = inst->args_head->_s;
     nint status = read_scalar_arg(p, inst->args_head, &scalar, &error_token);
     nint value;
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_6502, "invalid %s operand",
                           mnemonic);
@@ -444,7 +450,6 @@ static nint emit_zp_operand(struct Parser *p, struct AstInstruction *inst,
     struct token *error_token = inst->args_head->_s;
     nint status = read_scalar_arg(p, inst->args_head, &scalar, &error_token);
     nint value;
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_6502, "invalid %s operand",
                           mnemonic);
@@ -485,7 +490,6 @@ static nint emit_absolute_arg(struct Parser *p, struct InstructionArg *arg,
                   read_parenthesized_scalar(p, arg, &scalar, &error_token) :
                   read_scalar_arg(p, arg, &scalar, &error_token);
     nint value;
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_6502, "invalid %s operand",
                           mnemonic);
@@ -525,7 +529,6 @@ static nint emit_relative_arg(struct Parser *p, struct AstInstruction *inst,
 
     error_token = inst->args_head->_s;
     status = read_scalar_arg(p, inst->args_head, &scalar, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_6502, "invalid %s operand",
                           mnemonic);
@@ -562,7 +565,6 @@ static nint emit_zp_indirect(struct Parser *p, struct AstInstruction *inst,
                   read_parenthesized_scalar(p, inst->args_head, &scalar,
                                             &error_token);
     nint value;
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_6502, "invalid %s operand",
                           mnemonic);

@@ -154,6 +154,11 @@ ASM_LANG i386 = {
     .exec = _86_exec,
 };
 
+static nint fail_unresolved_label(struct Parser *p, struct token *_token) {
+    (void)unresolved_label(p, _token);
+    return INSTRUCTION_FAILED;
+}
+
 static int32_t *registers[] = {
     (int32_t[]){'a', 'x', -1}, (int32_t[]){'b', 'x', -1},
     (int32_t[]){'c', 'x', -1}, (int32_t[]){'d', 'x', -1},
@@ -363,17 +368,18 @@ static nint parse_bracketed_variable(struct Parser *p, struct TokenStream *tks,
                                      struct token *start, struct Operand *op,
                                      nint seg_override,
                                      struct token **error_token) {
+    struct TokenStream var_tks;
     nint addr = 0;
     unint status;
 
-    tks->read = start;
-    tks_reset_peek(tks);
-    status = parse_potential_variable(p, tks, &addr, 1);
+    tks_init(&var_tks, start, start);
+    DBG(1, "parse_bracketed_variable\n");
+    status = parse_potential_variable(p, &var_tks, &addr, 0);
 
     if(status == VP_FAIL) return INSTRUCTION_FAILED;
     if(status == VP_UNRESOLVED_LABEL) {
         record_error_token(error_token, start);
-        if(p->last_pass) return unresolved_label(p, start);
+        if(p->last_pass) return fail_unresolved_label(p, start);
         if(!read_token_type(p, tks, RSQB, error_token) ||
            !expect_tks_end(tks, error_token)) return INSTRUCTION_FAILED;
         set_direct_memory(op, 0, seg_override);
@@ -543,7 +549,7 @@ static nint parse_variable_as_immediate(struct Parser *p, struct InstructionArg 
     if(status == VP_FAIL) return -1;
     if(status == VP_UNRESOLVED_LABEL) {
         record_error_token(error_token, arg->_s);
-        if(p->last_pass) return unresolved_label(p, arg->_s);
+        if(p->last_pass) return fail_unresolved_label(p, arg->_s);
         op->kind = OPERAND_IMM;
         op->imm = 0;
         return 1;
@@ -939,7 +945,7 @@ static nint read_jump_scalar(struct Parser *p, struct TokenStream *tks,
             *value = 0;
             *unresolved = 1;
             *is_variable = 1;
-            if(p->last_pass) return unresolved_label(p, tok);
+            if(p->last_pass) return fail_unresolved_label(p, tok);
             return 1;
         }
         if(status == VP_FAIL) return INSTRUCTION_FAILED;
@@ -1002,7 +1008,6 @@ static nint encode_jmp_ptr_mem(struct Parser *p, struct token *start,
     struct Operand mem;
     struct token *error_token = NULL;
     nint status = parse_jump_memory_from(p, start, end, &mem, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
                           "invalid jump pointer");
@@ -1028,7 +1033,6 @@ static nint encode_jmp_far_immediate(struct Parser *p, struct token *start,
 
     tks_init(&tks, start, end);
     status = read_jump_scalar(p, &tks, &seg, &unresolved, &is_variable, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
                           "invalid far jump segment");
@@ -1044,7 +1048,6 @@ static nint encode_jmp_far_immediate(struct Parser *p, struct token *start,
     record_error_token(&error_token, colon);
 
     status = read_jump_scalar(p, &tks, &off, &unresolved, &is_variable, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
         _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
                           "invalid far jump offset");
@@ -1077,7 +1080,6 @@ static nint encode_jmp_direct(struct Parser *p, struct token *start,
 
     tks_init(&tks, start, end);
     status = read_jump_scalar(p, &tks, &target, &unresolved, &is_variable, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
         _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
                           "invalid jump target");
@@ -1165,7 +1167,6 @@ static nint encode_jmp(struct Parser *p, struct AstInstruction *inst) {
                 return segment_prefix_len(&mem.mem) + 2 +
                        memory_tail_len(&mem.mem);
             }
-            if(mem_status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
             return encode_jmp_far_immediate(p, target_start, inst->args_head->_e);
         }
         if(is_far) {
@@ -1178,7 +1179,6 @@ static nint encode_jmp(struct Parser *p, struct AstInstruction *inst) {
     }
 
     status = parse_operand(p, inst->args_head, &dst, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_I386,
                           "invalid jump target");
@@ -1224,7 +1224,6 @@ static nint encode_rel8_control(struct Parser *p, struct AstInstruction *inst,
     tks_init(&tks, inst->args_head->_s, inst->args_head->_e);
     status = read_jump_scalar(p, &tks, &target, &unresolved,
                               &is_variable, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
         _error_from_token(p, error_token ? error_token : inst->args_head->_s,
                           ERROR_TYPE_I386, "invalid branch target");
@@ -1281,7 +1280,6 @@ static nint encode_call_ptr_mem(struct Parser *p, struct token *start,
     struct Operand mem;
     struct token *error_token = NULL;
     nint status = parse_call_memory_from(p, start, end, &mem, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
                           "invalid call pointer");
@@ -1307,7 +1305,6 @@ static nint encode_call_far_immediate(struct Parser *p, struct token *start,
 
     tks_init(&tks, start, end);
     status = read_jump_scalar(p, &tks, &seg, &unresolved, &is_variable, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
                           "invalid far call segment");
@@ -1323,7 +1320,6 @@ static nint encode_call_far_immediate(struct Parser *p, struct token *start,
     record_error_token(&error_token, colon);
 
     status = read_jump_scalar(p, &tks, &off, &unresolved, &is_variable, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
         _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
                           "invalid far call offset");
@@ -1354,7 +1350,6 @@ static nint encode_call_direct(struct Parser *p, struct token *start,
 
     tks_init(&tks, start, end);
     status = read_jump_scalar(p, &tks, &target, &unresolved, &is_variable, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0 || !expect_tks_end(&tks, &error_token)) {
         _error_from_token(p, error_token ? error_token : start, ERROR_TYPE_I386,
                           "invalid call target");
@@ -1419,7 +1414,6 @@ static nint encode_call(struct Parser *p, struct AstInstruction *inst) {
                 return segment_prefix_len(&mem.mem) + 2 +
                        memory_tail_len(&mem.mem);
             }
-            if(mem_status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
             return encode_call_far_immediate(p, target_start, inst->args_head->_e);
         }
         if(is_far) {
@@ -1432,7 +1426,6 @@ static nint encode_call(struct Parser *p, struct AstInstruction *inst) {
     }
 
     status = parse_operand(p, inst->args_head, &dst, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_I386,
                           "invalid call target");
@@ -1478,7 +1471,6 @@ static nint encode_ret(struct Parser *p, struct AstInstruction *inst,
     }
 
     status = parse_operand(p, inst->args_head, &imm, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_I386,
                           "invalid return pop count");
@@ -2944,7 +2936,6 @@ static nint parse_lock_operand(struct Parser *p, struct InstructionArg *arg,
                                struct Operand *op, const char *message) {
     struct token *error_token = NULL;
     nint status = parse_operand(p, arg, op, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_I386, message);
         return INSTRUCTION_FAILED;
@@ -3503,7 +3494,6 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
     if(is_retf) return encode_ret(p, inst, 0xcb, 0xca);
 
     status = parse_operand(p, inst->args_head, &dst, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_I386,
                           "invalid first operand");
@@ -3526,7 +3516,6 @@ nint _86_exec(struct Parser *p, struct AstInstruction *inst) {
 
     error_token = NULL;
     status = parse_operand(p, inst->args_tail, &src, &error_token);
-    if(status == INSTRUCTION_UNRESOLVED) return INSTRUCTION_UNRESOLVED;
     if(status <= 0) {
         _error_from_token(p, error_token, ERROR_TYPE_I386,
                           "invalid second operand");
