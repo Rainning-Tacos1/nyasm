@@ -323,31 +323,33 @@ unint _type_check(struct Parser* p, struct AstBinOp* binop, struct Value* vleft,
         return FAIL;
     }
 
+    unint left_num = tcleft && (vleft->type == VALUE_INT || vleft->type == VALUE_DOUBLE);
+    unint right_num = tcright && (vright->type == VALUE_INT || vright->type == VALUE_DOUBLE);
 
-    // Arithmetic only on ints/floats 
-    if ( op == PLUS || op == MINUS || op == SLASH || op == STAR || op == PERCENT ) {
+    unint left_str = tcleft && vleft->type == VALUE_STR;
+    unint right_str = tcright && vright->type == VALUE_STR;
 
-        unint left_numeric =
-            !tcleft ||
-            vleft->type == VALUE_INT ||
-            vleft->type == VALUE_DOUBLE;
-
-        unint right_numeric =
-            !tcright ||
-            vright->type == VALUE_INT ||
-            vright->type == VALUE_DOUBLE;
-
-        unint string_concat =
-            op == PLUS &&
-            tcleft && tcright &&
-            vleft->type == VALUE_STR &&
-            vright->type == VALUE_STR;
-
-        if (!(left_numeric && right_numeric) && !string_concat) {
-            _error_from_token( p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types" );
-            return FAIL;
+    if (op == PLUS) {
+        if (tcleft && tcright) {
+            if (left_str || right_str) {
+                if (!(left_str && right_str)) {
+                    _error_from_token( p, op_token, ERROR_TYPE_EXPRESSION, "can only concatenate strings");
+                    return FAIL;
+                }
+            }
+            else if (!(left_num && right_num)) {
+                _error_from_token( p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types");
+                return FAIL;
+            }
         }
     }
+    else if (op == MINUS || op == SLASH || op == STAR || op == PERCENT) {
+        if ((tcleft && !left_num) || (tcright && !right_num)) {
+            _error_from_token( p, op_token, ERROR_TYPE_EXPRESSION, "can only perform arithmetic operations on integer/decimal types");
+            return FAIL;
+        }
+    } 
+        
     // Bitwise operators only on ints
     if((op == LEFTSHIFT || op == RIGHTSHIFT || op == AMPER || op == VBAR || op == CIRCUMFLEX || op == TILDE) && (
         (tcleft && vleft->type != VALUE_INT) ||
@@ -416,7 +418,6 @@ unint _eval_expr(struct Parser* p, struct Ast_node* expr, struct Value* val, str
             while (el != NULL) {
                 if (el->this_expr->type == LITERAL_NODE) goto _el_iter;
 
-                DBG(1, "NEW ALLOC\n");
                 // Freeze each element
                 struct Value* el_val = (struct Value*)MEM_ALLOC(sizeof(struct Value), "array el value");
                 if(el_val == NULL) {
@@ -1147,12 +1148,12 @@ unint encode_space_ident(struct Parser* p, unint type, struct AstSpace* space, n
 
     if(inhibit || !p->last_pass) return SUCCESS;
 
-    DBG(1, "_addr = %d | aligned_start = %d\n", _addr, aligned_start);
+    DBG(DO_RUNTIME_DEBUG, "_addr = %d | aligned_start = %d\n", _addr, aligned_start);
     for(nint i=_addr; i<aligned_start; ++i) {
         OUT_FILE_WRITE_BYTE((unsigned char)0);
-        DBG(1, "al - 00\n");
+        DBG(DO_RUNTIME_DEBUG, "al - 00\n");
     }
-    DBG(1, "\n");
+    DBG(DO_RUNTIME_DEBUG, "\n");
 
     void* dst = MEM_ALLOC(el_size, "space ident buf");
     if(dst == NULL) {
@@ -1185,11 +1186,11 @@ unint encode_space_ident(struct Parser* p, unint type, struct AstSpace* space, n
 
         for(nint i=0; i<el_size; ++i) {
             OUT_FILE_WRITE_BYTE(((unsigned char*)dst)[i]);
-            DBG(1, "%02X\n", ((unsigned char*)dst)[i]);
+            DBG(DO_RUNTIME_DEBUG, "%02X\n", ((unsigned char*)dst)[i]);
         }
         for(nint j=0; j<(n != (el_num - 1) ? (*stride - el_size) : 0); ++j){
             OUT_FILE_WRITE_BYTE((unsigned char)0);
-            DBG(1, "st - 00\n");
+            DBG(DO_RUNTIME_DEBUG, "st - 00\n");
         }
     
         if(array_vals) { curr = curr->next; if(curr) el_val = curr->this_expr->node.literal.value; }
@@ -1379,18 +1380,17 @@ unint encode_struct(struct Parser* p, struct token* var_name, struct AstStructDe
                 // Last pass
                 for(nint i=_addr; i<struct_aligned_start; ++i) {
                     OUT_FILE_WRITE_BYTE((unsigned char)0);
-                    DBG(1, "al - 00\n");
+                    DBG(DO_RUNTIME_DEBUG, "al - 00\n");
                 }
-                DBG(1, "\n");
+                DBG(DO_RUNTIME_DEBUG, "\n");
 
                 p->addr = _addr;
 
                 for(nint n=0; n<el_num; ++n) {
-                    // DBG(1, "_addr = %d, struct_aligned_start = %d, stride = %d, out_size = %d\n", _addr, struct_aligned_start, stride, out_size);
                     if(encode_struct(p, var_name, _struct_decl->ast_struct_decl, _head, _tail, &size, 0, NULL, NULL) == FAIL) return FAIL;
                     for(nint j=0; j<((n != (el_num-1)) && (stride - size)); ++j) {
                         OUT_FILE_WRITE_BYTE((unsigned char)0);
-                        DBG(1, "st - 00\n");
+                        DBG(DO_RUNTIME_DEBUG, "st - 00\n");
                     }
                 }  
 
@@ -1540,6 +1540,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
 
                         unint state = eval_ast(p, &body);
                         if(state != EVAL_OK) return state;
+                        goto _if_skip;
                     }
                 }
 
@@ -1548,6 +1549,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                     unint state = eval_ast(p, &body);
                     if(state != EVAL_OK) return state;
                 }
+_if_skip:
                 break;
             }
 
@@ -1720,7 +1722,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 nint total;
                 if(encode_struct(p, ast->node.struct_var.var_name, _struct->ast_struct_decl, ast->node.struct_var.head, ast->node.struct_var.tail, &total, !p->last_pass, deep_head, deep_tail) == FAIL) return EVAL_ERROR;
                 
-                DBG(1, "struct total = %d | p->addr = %d\n", total, p->addr);
+                DBG(DO_RUNTIME_DEBUG, "struct total = %d | p->addr = %d\n", total, p->addr);
                 break;
             }
 
@@ -1741,7 +1743,7 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                 nint total, len, data_addr, stride;
                 if(encode_space_ident(p, ast->type, &ast->node.space, &total, &data_addr, &len, &stride, 0) == FAIL) return EVAL_ERROR;
 
-                DBG(1, "total = %d\n", total);
+                DBG(DO_RUNTIME_DEBUG, "total = %d\n", total);
                 break;
             }
 
@@ -1786,14 +1788,14 @@ unint eval_ast(struct Parser* p, struct Ast_node* ast) {
                     // Alignment
                     for(nint i=addr; i<aligned_start; ++i) {
                         OUT_FILE_WRITE_BYTE((unsigned char)0);
-                        DBG(1, "al - 00\n");
+                        DBG(DO_RUNTIME_DEBUG, "al - 00\n");
                     }
-                    DBG(1, "\n");
+                    DBG(DO_RUNTIME_DEBUG, "\n");
                     for(unint i=0; i<val.val.string.len; ++i) {
                         nint n = CP_TO_ENCODING_BUF_GET_LEN(val.val.string.str[i], buf);
                         for(nint j=0; j<(n-1); ++j) {
                             OUT_FILE_WRITE_BYTE(buf[j]);
-                            DBG(1, "%02x\n", buf[j]);
+                            DBG(DO_RUNTIME_DEBUG, "%02x\n", buf[j]);
                         }
                     }
                 }
@@ -1830,7 +1832,7 @@ _overflow_str:
                 // Last pass
                 if(p->last_pass) for(nint i=0; i<size; ++i) {
                     OUT_FILE_WRITE_BYTE((unsigned char)0);
-                    DBG(1, "@align - 00\n");
+                    DBG(DO_RUNTIME_DEBUG, "@align - 00\n");
                 }
 
                 break;

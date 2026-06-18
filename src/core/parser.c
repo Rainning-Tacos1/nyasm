@@ -249,7 +249,11 @@ unint _fill_token_error_check(struct Parser* p, unint type) {
                 if(p->tok->level) {
                     nint error_lineno = p->tok->parenlinenostack[p->tok->level-1];
                     nint error_col = p->tok->parencolstack[p->tok->level-1];
-                    _error_known_location(p, error_lineno, error_col, error_lineno, -1, "'%c' was never closed", p->tok->parenstack[p->tok->level-1]);
+                    const char* line_start = p->tok->line_start; 
+
+                    p->tok->line_start = p->tok->parenlinestart[p->tok->level-1];
+                    _error_known_location(p, error_lineno, error_col, error_lineno, -1, "'%c' was never closed", (char)p->tok->parenstack[p->tok->level-1]);
+                    p->tok->line_start = line_start;
                 } else _Tokenizer_syntaxerror_known_range(p->tok, -1, -1, "unexpected EOF while parsing");
                 return FAIL;
             case E_DEDENT:
@@ -1016,6 +1020,7 @@ unint _expr_get_binding_power(unint type, unint* lbp, unint* rbp) {
         case LESSEQUAL: { *lbp = 30; *rbp = 31; break; }
 
         case VBAR: { *lbp = 40; *rbp = 41; break; } // Done
+        case CIRCUMFLEX: { *lbp = 50; *rbp = 51; break; } // Done
         case AMPER: { *lbp = 60; *rbp = 61; break; } // Done
 
         case LEFTSHIFT:
@@ -2595,14 +2600,16 @@ _end_if:
 
                 // Expect a valid assignment
                 if(IS_ASSIGNMENT(p1->type)) {
-                    DBG(1, "STARTING EXPRE PARSING\n");
+                    DBG(DO_RUNTIME_DEBUG, "STARTING EXPRE PARSING\n");
                     expr = _parse_expr(p, (unint)(0), 0);
                     if(expr == NULL) {
                         DBG(DO_PARSER_RADOM_STUFF_DBG, "Error building expression\n");
                         return FAIL;
                     }
-                    dbg_ast(expr);
-                    DBG(1, "DONE EXPRE PARSING\n");
+                    #ifdef DEBUG
+                        dbg_ast(expr);
+                    #endif
+                    DBG(DO_RUNTIME_DEBUG, "DONE EXPRE PARSING\n");
                     // expect new line
                     if(expect_token(p, NEWLINE) == NULL) return FAIL;
 
@@ -2622,7 +2629,7 @@ _invalid_assignment:
 
         _reset_peek(p); // Go back
         // Instruction
-        DBG(1, "PARSING INSTRUCTION\n");
+        DBG(DO_RUNTIME_DEBUG, "PARSING INSTRUCTION\n");
         struct Ast_node* instruction = new_ast_instruction(p, _token, _token/*, is_inside_block(p, CTX_FUNC) == SUCCESS*/);
         if(instruction == NULL) return FAIL;
 

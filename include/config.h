@@ -2,9 +2,9 @@
 #define CORE_CONFIG_H
 
 // Undefine to compile without memory traces and dbg stuff
-#define DEBUG
+// #define DEBUG
 
-#define DO_MEM_DBG 1
+#define DO_MEM_DBG 0
 
 #define DO_UC_DBG 0
 
@@ -17,9 +17,10 @@
 #define DO_LEXER_USED_CHARACTER_DBG 0
 #define DO_LEXER_TOKEN_FILL_DBG 0
 #define DO_LEXER_EOF_DBG 0
+#define DO_LEXER_IMPLICIT_NL_DBG 0
 
-#define DO_PARSER_READ_TOKEN_DBG 1
-#define DO_PARSER_PEEK_TOKEN_DBG 1
+#define DO_PARSER_READ_TOKEN_DBG 0
+#define DO_PARSER_PEEK_TOKEN_DBG 0
 
 #define DO_MACRO_EXPANSION_DBG 0
 #define DO_MACRO_NOT_EXPANDING_DBG 0
@@ -35,6 +36,8 @@
 #define DO_PARSER_RADOM_STUFF_DBG 0
 
 #define DO_EXPRESSION_EVAL_TYPE_CHECK_DBG 0
+
+#define DO_RUNTIME_DEBUG 0
 
 #define ERROR_TYPE_MESSAGE "SyntaxError"
 #define ERROR_TYPE_MEMORY "MemoryError"

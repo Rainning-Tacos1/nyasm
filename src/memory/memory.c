@@ -175,6 +175,20 @@ void mem_stats() {
     float ovh_full = (float)ovh * 100.0f / (float)total;
     float ovh_alloc = (float)ovh * 100.0f / used;
 
+    (void)ovh;
+    (void)dbg_full;
+    (void)dbg_alloc;
+    (void)ovh_alloc;
+    (void)ovh_full;
+    (void)aln_alloc;
+    (void)aln_full;
+    (void)dat_alloc;
+    (void)dat_full;
+    (void)all_full;
+    (void)all_alloc;
+    (void)p_free;
+    (void)p_used;
+
     // Stats
     DBG(DO_MEM_DBG, "[MEM_STAT]: Total(mem): %10"_UN" (bytes) |  Used: %10"_UN" (bytes) | Free: %10"_UN" (bytes) |\n", total, used, free);
     DBG(DO_MEM_DBG, "[MEM_STAT]: Total(mem): %10.6f (%%)     |  Used: %10.6f (%%)     | Free: %10.6f (%%)     |\n", 100.f, p_used, p_free);

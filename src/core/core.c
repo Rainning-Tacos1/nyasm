@@ -53,30 +53,35 @@ nbool assemble(char* path, char* out_path) {
         LOG("Error allocating space for the parser\n");
         return FAIL;
     }
-    DBG(1, "Start!\n");
+    DBG(DO_RUNTIME_DEBUG, "Start!\n");
 
     struct Ast_node* ast = _run_parser(p);
     if(ast == NULL) return FAIL;
 
-    DBG(1, "End!\n");
-    dbg_ast(ast);
-    DBG(1, "Done DBG!\n");
+    DBG(DO_RUNTIME_DEBUG, "End!\n");
+    #ifdef DEBUG
+        dbg_ast(ast);
+    #endif
+    DBG(DO_RUNTIME_DEBUG, "Done DBG!\n");
     
     unint result = eval_ast(p, ast);
     if(result != EVAL_OK) {
-        LOG("EVALUATION FAILED. %d\n", result);
+        DBG(DO_RUNTIME_DEBUG, "EVALUATION FAILED. %d\n", result);
         return FAIL;
     }
-    DBG(1, "PRINTING VARIABLES\n");
+    DBG(DO_RUNTIME_DEBUG, "PRINTING VARIABLES\n");
     for(struct Variable* var = p->variables; var; var = var->next) {
-        for(unint i=0; i<var->var_name->len; ++i) LOG_CP(var->var_name->cps[i]);
-        LOG(" = ");
-        print_value(&var->val);
+        for(unint i=0; i<var->var_name->len; ++i) DBG_CP(DO_RUNTIME_DEBUG, var->var_name->cps[i]);
+        DBG(DO_RUNTIME_DEBUG, " = ");
+        #ifdef DEBUG
+            print_value(&var->val);
+        #endif
     }
-    DBG(1, "PRINTING LABELS\n");
-    print_labels(p->global_label_decl, p->global_label_decl_tail, 0);
-
-    DBG(1, "#######################################################################\n");
+    DBG(DO_RUNTIME_DEBUG, "PRINTING LABELS\n");
+    #ifdef DEBUG
+        print_labels(p->global_label_decl, p->global_label_decl_tail, 0);
+    #endif
+    DBG(DO_RUNTIME_DEBUG, "#######################################################################\n");
 
     p->addr = 0;
     p->last_pass = 1;
@@ -87,17 +92,21 @@ nbool assemble(char* path, char* out_path) {
 
     result = eval_ast(p, ast);
     if(result != EVAL_OK) {
-        LOG("EVALUATION FAILED. %d\n", result);
+        DBG(DO_RUNTIME_DEBUG, "EVALUATION FAILED. %d\n", result);
         return FAIL;
     }
-    DBG(1, "PRINTING VARIABLES\n");
+    DBG(DO_RUNTIME_DEBUG, "PRINTING VARIABLES\n");
     for(struct Variable* var = p->variables; var; var = var->next) {
-        for(unint i=0; i<var->var_name->len; ++i) LOG_CP(var->var_name->cps[i]);
-        LOG(" = ");
-        print_value(&var->val);
+        for(unint i=0; i<var->var_name->len; ++i) DBG_CP(DO_RUNTIME_DEBUG, var->var_name->cps[i]);
+        DBG(DO_RUNTIME_DEBUG, " = ");
+        #ifdef DEBUG
+            print_value(&var->val);
+        #endif
     }
-    DBG(1, "PRINTING LABELS\n");
-    print_labels(p->global_label_decl, p->global_label_decl_tail, 0);
+    DBG(DO_RUNTIME_DEBUG, "PRINTING LABELS\n");
+    #ifdef DEBUG
+        print_labels(p->global_label_decl, p->global_label_decl_tail, 0);
+    #endif
 
     OUT_FILE_CLOSE();
     return SUCCESS;

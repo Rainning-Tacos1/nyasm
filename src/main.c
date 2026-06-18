@@ -136,15 +136,17 @@ int main(int argc, const char** argv) {
      // Testing //
     /////////////
 
-    ASSEMBLE(input, output);
+    nbool suc = ASSEMBLE(input, output);
 
     MEM_DBG();
-    DBG(1, "-------------------------\n");
+    DBG(DO_RUNTIME_DEBUG, "-------------------------\n");
     MEM_STATS();
 
-    printf("Mem size: %"_UN"\n", MEM_SIZE());
-    printf("Mem free: %"_UN"\n", MEM_FREE());
-    printf("Mem used: %"_UN"\n", MEM_SIZE() - MEM_FREE());
+    if(suc == SUCCESS) {
+        printf("Mem size: %"_UN"\n", MEM_SIZE());
+        printf("Mem free: %"_UN"\n", MEM_FREE());
+        printf("Mem used: %"_UN"\n", MEM_SIZE() - MEM_FREE());
+    }
 
     MEM_DEINIT();
     return 0;

@@ -167,7 +167,10 @@ struct tok_state* _Tokenizer_tok_new() {
     if(tok == NULL) return NULL;
 
     for(unint i=0; i<MAX_INDENT; ++i) tok->altindstack[i] = tok->indstack[i] = 0;
-    for(unint i=0; i<MAX_PARENTHESES_LEVEL; ++i) tok->parencolstack[i] = tok->parenlinenostack[i] = tok->parenstack[0] = 0;
+    for(unint i=0; i<MAX_PARENTHESES_LEVEL; ++i) {
+        tok->parencolstack[i] = tok->parenlinenostack[i] = tok->parenstack[0] = 0;
+        tok->parenlinestart[i] = NULL;
+    }
 
     tok->lineno = tok->first_lineno = tok->implicit_newline = tok->level = tok->starting_col_offset = tok->col_offset = tok->pendin = tok->indent = 0;
     tok->atbol = 1;
@@ -412,7 +415,7 @@ unint _syntaxerror_range_with_type(struct tok_state *tok, const char* stype, con
 
         if(_uc.curr <= _curr) ++len;
 
-    } while(*_cp != '\n');
+    } while(*_cp != '\n' && *_cp != EOF);
 
     // Cursor
     if (col_offset == -1) col_offset = len;
@@ -619,6 +622,7 @@ void next_cp(struct tok_state* tok) {
                     _Tokenizer_syntaxerror_known_range(tok, col_offset+1, col_offset+1, "unknown Unicode error");
 
                 tok->done = E_DECODE;
+                tok->uc.err = _uc.err;
                 *cp = EOF;
                 return;
             }
@@ -641,7 +645,7 @@ void next_cp(struct tok_state* tok) {
 
         tok->implicit_newline = 0;
         if(*_cp != '\n') { // Line did not end on an newline
-            DBG(1, "Signaling implicit newline\n");
+            DBG(DO_LEXER_IMPLICIT_NL_DBG, "Signaling implicit newline\n");
             // Python signals the implicit new line as it reloads the buffer, so we also do that here
             tok->implicit_newline = 1;
             unint size = WRITE_IMPLICIT_NL((char*)_uc.curr);
@@ -1075,7 +1079,7 @@ nextline:
     tok->start = NULL;
     tok->starting_col_offset = -1;
     blankline = 0;
-    // DBG(1, "SETTING BLANK LINE ================= 0\n"); 
+
 
     // If: At Begining Of Line
     if(tok->atbol) {
@@ -1326,7 +1330,6 @@ nextline:
 
                     // If it'ts not an octal digit
                     if(!ISODIGIT(*cp)) {
-                        DBG(1, "CONVETING NOW\n");
                         if(ISDIGIT(*cp)) return MAKE_TOKEN(_Tokenizer_syntaxerror(tok, "invalid digit '%s' in octal literal", CP_TO_ENCODING_BUF(*cp, __print_cp_buf)));
                         else {
                             backup_cp(tok);
@@ -1507,6 +1510,7 @@ fraction:
             tok->parenstack[tok->level] = *cp;
             tok->parenlinenostack[tok->level] = tok->lineno;
             tok->parencolstack[tok->level] = tok->col_offset; // in python: (int)(tok->start - tok->line_start);
+            tok->parenlinestart[tok->level] = tok->line_start;
             tok->level++;
             break;
         case ')':

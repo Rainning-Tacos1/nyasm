@@ -76,6 +76,7 @@ struct tok_state {
     int32_t parenstack[MAX_PARENTHESES_LEVEL];
     nint parenlinenostack[MAX_PARENTHESES_LEVEL];
     nint parencolstack[MAX_PARENTHESES_LEVEL];
+    const char* parenlinestart[MAX_PARENTHESES_LEVEL];
 
     // Token related
     const char* start;
