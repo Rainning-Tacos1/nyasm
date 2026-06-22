@@ -469,6 +469,24 @@ static unint read_memory_displacement(struct Parser *p, struct TokenStream *tks,
                                       nint sign, nint *disp,
                                       struct token **error_token) {
     nint value;
+    struct token *tok = tks_peek(tks);
+    unint status;
+
+    tks_reset_peek(tks);
+    if(tok && tok->type == NAME) {
+        status = parse_potential_variable(p, tks, &value, 1);
+        if(status == VP_FAIL) return 0;
+        if(status == VP_UNRESOLVED_LABEL) {
+            record_error_token(error_token, tok);
+            if(p->last_pass) return fail_unresolved_label(p, tok);
+            value = 0;
+        } else if(status != VP_SUCCESS) {
+            return 0;
+        }
+        record_error_token(error_token, tok);
+        *disp = sign < 0 ? -value : value;
+        return 1;
+    }
 
     if(!read_integer(p, tks, &value, error_token)) return 0;
     *disp = sign < 0 ? -value : value;
@@ -615,12 +633,22 @@ static nint finish_memory32_operand(struct Parser *p, struct TokenStream *tks,
         if(tok->type == NAME) {
             unint reg;
             if(sign < 0) {
-                record_error_token(error_token, tok);
-                return 0;
+                tks->read = tok;
+                tks_reset_peek(tks);
+                if(!read_memory_displacement(p, tks, sign, &disp,
+                                             error_token)) return 0;
+                has_disp = 1;
+                tok = tks_read(tks);
+                continue;
             }
             if(!token_matches(tok, reg32_names, &reg)) {
-                record_error_token(error_token, tok);
-                return 0;
+                tks->read = tok;
+                tks_reset_peek(tks);
+                if(!read_memory_displacement(p, tks, sign, &disp,
+                                             error_token)) return 0;
+                has_disp = 1;
+                tok = tks_read(tks);
+                continue;
             }
             record_error_token(error_token, tok);
             if(!parse_memory32_register_term(p, tks, reg, &base, &index, &scale,
@@ -701,11 +729,16 @@ static nint finish_memory_operand(struct Parser *p, struct TokenStream *tks,
 
         if(tok->type == NAME) {
             unint reg;
-            if(sign < 0) {
-                record_error_token(error_token, tok);
-                return 0;
-            }
             if(!token_matches(tok, reg16_names, &reg) || !mem_reg_class(reg)) {
+                tks->read = tok;
+                tks_reset_peek(tks);
+                if(!read_memory_displacement(p, tks, sign, &disp,
+                                             error_token)) return 0;
+                has_disp = 1;
+                tok = tks_read(tks);
+                goto memory_tail;
+            }
+            if(sign < 0) {
                 record_error_token(error_token, tok);
                 return 0;
             }
@@ -732,6 +765,7 @@ static nint finish_memory_operand(struct Parser *p, struct TokenStream *tks,
         }
     }
 
+memory_tail:
     if(!tok || tok->type != RSQB) {
         record_error_token(error_token, tok);
         return 0;
@@ -6507,19 +6541,22 @@ static nint parse_push_sized_immediate(struct Parser *p, struct InstructionArg *
                                        struct Operand *op,
                                        struct token **error_token) {
     struct InstructionArg imm_arg;
+    struct TokenStream tks;
     struct token *size_tok;
     struct token *next_tok;
     nint size;
     nint status;
 
-    size_tok = arg->_s;
+    tks_init(&tks, arg->_s, arg->_e);
+
+    size_tok = tks_read(&tks);
     if(!size_tok || size_tok->type != NAME) return 0;
 
     size = explicit_type_size(size_tok);
     if(!size) return 0;
 
-    next_tok = size_tok + 1;
-    if(next_tok > arg->_e) {
+    next_tok = tks_read(&tks);
+    if(!next_tok) {
         record_error_token(error_token, size_tok);
         return INSTRUCTION_FAILED;
     }
@@ -6530,7 +6567,7 @@ static nint parse_push_sized_immediate(struct Parser *p, struct InstructionArg *
     imm_arg._e = arg->_e;
     imm_arg.next = NULL;
     status = parse_operand(p, &imm_arg, op, error_token);
-    if(status <= 0) return status;
+    if(status <= 0) return INSTRUCTION_FAILED;
 
     if(op->kind != OPERAND_IMM) {
         record_error_token(error_token, next_tok);

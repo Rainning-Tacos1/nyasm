@@ -7,6 +7,8 @@ add_library(${PROJECT_NAME} STATIC
     "main.c"
 )
 
+target_compile_options(${PROJECT_NAME} PRIVATE -g -Wall)
+
 if(ARCH STREQUAL "32")
     message(STATUS "Building ${PROJECT_NAME} for 32-bit")
     target_compile_options(${PROJECT_NAME} PRIVATE -m32)
