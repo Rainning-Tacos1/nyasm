@@ -102,3 +102,6 @@ ASM_LANG _6502 = {
 Then add the target when compiling and linking
 
 More info in the CMakeLists.txt files
+
+## Use of AI
+AI (codex) did take part in the making of this project, more specifically all the assembly languages(instruction to opcode encoding)
